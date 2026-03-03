@@ -29,7 +29,7 @@ jobs:
         run: dotnet build MarpToPptx.slnx --configuration Release --no-restore
 
       - name: Test
-        run: dotnet test MarpToPptx.slnx --configuration Release --no-build
+        run: dotnet test --solution MarpToPptx.slnx --configuration Release --no-build
 
       - name: Pack CLI Tool
         run: dotnet pack src/MarpToPptx.Cli/MarpToPptx.Cli.csproj --configuration Release --no-build
