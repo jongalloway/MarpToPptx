@@ -1,14 +1,16 @@
-name: CI
+name: Publish
 
 on:
   push:
-    branches:
-      - main
-  pull_request:
+    tags:
+      - 'v*'
 
 jobs:
-  build-test-pack:
+  build-test-pack-publish:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
 
     steps:
       - name: Checkout
@@ -34,9 +36,11 @@ jobs:
       - name: Pack CLI Tool
         run: dotnet pack src/MarpToPptx.Cli/MarpToPptx.Cli.csproj --configuration Release --no-build
 
-      - name: Upload Tool Package
-        uses: actions/upload-artifact@v4
+      - name: NuGet Login
+        id: login
+        uses: NuGet/login@v1
         with:
-          name: marp2pptx-nupkg
-          path: artifacts/nupkg/*.nupkg
-          if-no-files-found: error
+          user: ${{ secrets.NUGET_USER }}
+
+      - name: Publish Package
+        run: dotnet nuget push artifacts/nupkg/*.nupkg --api-key ${{ steps.login.outputs.NUGET_API_KEY }} --source https://api.nuget.org/v3/index.json

@@ -43,6 +43,36 @@ dotnet tool run marp2pptx sample.md -o sample.pptx
 
 Public `dnx MarpToPptx ...` usage depends on publishing the package to a NuGet feed. That follow-up is tracked as a separate GitHub issue.
 
+## Releases
+
+NuGet publishing is handled by `.github/workflows/publish.yml` using nuget.org Trusted Publishing with GitHub OIDC.
+
+- Versioning is tag-based via `MinVer`.
+- Stable release tags should use the form `v1.2.3`.
+- The publish workflow builds, tests, packs, and then pushes the tool package from `artifacts/nupkg/`.
+
+Before the first publish, configure nuget.org Trusted Publishing for:
+
+- Owner: `jongalloway`
+- Repository: `MarpToPptx`
+- Workflow file: `publish.yml`
+
+The workflow also expects a repository secret named `NUGET_USER` containing the nuget.org profile name used for Trusted Publishing.
+
+To cut a release:
+
+```bash
+git tag v1.2.3
+git push origin v1.2.3
+```
+
+After the workflow finishes and NuGet indexing completes, install or run the published tool with:
+
+```bash
+dotnet tool install MarpToPptx --global
+dnx MarpToPptx sample.md -o sample.pptx
+```
+
 ## Repository Conventions
 
 - Solution format: `MarpToPptx.slnx`
