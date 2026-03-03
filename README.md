@@ -1,5 +1,10 @@
 # MarpToPptx
 
+[![Build](https://github.com/jongalloway/MarpToPptx/actions/workflows/ci.yml/badge.svg)](https://github.com/jongalloway/MarpToPptx/actions/workflows/ci.yml)
+[![NuGet Version](https://img.shields.io/nuget/v/MarpToPptx?logo=nuget)](https://www.nuget.org/packages/MarpToPptx/)
+[![NuGet Downloads](https://img.shields.io/nuget/dt/MarpToPptx?logo=nuget)](https://www.nuget.org/packages/MarpToPptx/)
+[![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
+
 MarpToPptx is a .NET 10 CLI and library for compiling Marp-flavored Markdown into editable PowerPoint presentations.
 
 ## Current Structure
@@ -11,13 +16,44 @@ MarpToPptx is a .NET 10 CLI and library for compiling Marp-flavored Markdown int
 
 ## Usage
 
+### Preferred: DNX
+
+`dnx` is the quickest way to run MarpToPptx without installing it as a persistent tool, but it requires .NET 10.
+
+```bash
+dnx MarpToPptx sample.md -o sample.pptx
+dnx MarpToPptx sample.md --template theme.pptx
+dnx MarpToPptx sample.md --theme-css theme.css
+```
+
+### Install As A .NET Tool
+
+If you prefer a persistent command, install the tool from NuGet:
+
+```bash
+dotnet tool install --global MarpToPptx
+marp2pptx sample.md -o sample.pptx
+marp2pptx sample.md --template theme.pptx
+marp2pptx sample.md --theme-css theme.css
+```
+
+To update later:
+
+```bash
+dotnet tool update --global MarpToPptx
+```
+
+### Run From Source
+
+If you are developing on the repo, you can still run the CLI project directly:
+
 ```bash
 dotnet run --project src/MarpToPptx.Cli -- input.md -o output.pptx
 dotnet run --project src/MarpToPptx.Cli -- input.md --template theme.pptx
 dotnet run --project src/MarpToPptx.Cli -- input.md --theme-css theme.css
 ```
 
-## Local Tool And Dnx
+## Local Packaging
 
 Build a local tool package:
 
@@ -41,8 +77,6 @@ dotnet tool install MarpToPptx --add-source ./artifacts/nupkg
 dotnet tool run marp2pptx sample.md -o sample.pptx
 ```
 
-Public `dnx MarpToPptx ...` usage depends on publishing the package to a NuGet feed. That follow-up is tracked as a separate GitHub issue.
-
 ## Releases
 
 NuGet publishing is handled by `.github/workflows/publish.yml` using nuget.org Trusted Publishing with GitHub OIDC.
@@ -50,14 +84,6 @@ NuGet publishing is handled by `.github/workflows/publish.yml` using nuget.org T
 - Versioning is tag-based via `MinVer`.
 - Stable release tags should use the form `v1.2.3`.
 - The publish workflow builds, tests, packs, and then pushes the tool package from `artifacts/nupkg/`.
-
-Before the first publish, configure nuget.org Trusted Publishing for:
-
-- Owner: `jongalloway`
-- Repository: `MarpToPptx`
-- Workflow file: `publish.yml`
-
-The workflow also expects a repository secret named `NUGET_USER` containing the nuget.org profile name used for Trusted Publishing.
 
 To cut a release:
 
@@ -69,7 +95,7 @@ git push origin v1.2.3
 After the workflow finishes and NuGet indexing completes, install or run the published tool with:
 
 ```bash
-dotnet tool install MarpToPptx --global
+dotnet tool install --global MarpToPptx
 dnx MarpToPptx sample.md -o sample.pptx
 ```
 
