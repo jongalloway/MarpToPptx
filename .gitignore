@@ -1,0 +1,42 @@
+# Build output
+[Bb]in/
+[Oo]bj/
+
+# Test and coverage output
+TestResults/
+*.coverage
+*.coveragexml
+coverage/
+
+# NuGet
+packages/
+*.nupkg
+*.snupkg
+
+# User-specific files
+*.user
+*.rsuser
+*.suo
+*.userprefs
+
+# IDE settings
+.vs/
+.vscode/
+
+# OS-generated files
+Thumbs.db
+Desktop.ini
+
+# Logs and temp files
+*.log
+*.tmp
+*.temp
+
+# Generated presentations and archives
+*.pptx
+*.pptm
+*.potx
+*.potm
+
+# Local tool and package caches
+artifacts/

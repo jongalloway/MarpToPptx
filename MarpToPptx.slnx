@@ -1,0 +1,10 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/MarpToPptx.Cli/MarpToPptx.Cli.csproj" />
+    <Project Path="src/MarpToPptx.Core/MarpToPptx.Core.csproj" />
+    <Project Path="src/MarpToPptx.Pptx/MarpToPptx.Pptx.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/MarpToPptx.Tests/MarpToPptx.Tests.csproj" />
+  </Folder>
+</Solution>

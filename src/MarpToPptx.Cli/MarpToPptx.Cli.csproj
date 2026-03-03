@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\MarpToPptx.Core\MarpToPptx.Core.csproj" />
+    <ProjectReference Include="..\MarpToPptx.Pptx\MarpToPptx.Pptx.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <AssemblyName>marp2pptx</AssemblyName>
+    <PackAsTool>true</PackAsTool>
+    <ToolCommandName>marp2pptx</ToolCommandName>
+    <TargetFramework>net10.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
