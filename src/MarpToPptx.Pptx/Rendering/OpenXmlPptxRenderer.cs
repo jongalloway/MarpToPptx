@@ -2,6 +2,8 @@ using DocumentFormat.OpenXml.Packaging;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
 using MarpToPptx.Core.Themes;
+using System.IO.Compression;
+using System.Xml.Linq;
 using A = DocumentFormat.OpenXml.Drawing;
 using IOPath = System.IO.Path;
 using P = DocumentFormat.OpenXml.Presentation;
@@ -13,6 +15,7 @@ public sealed class OpenXmlPptxRenderer
     private const long SlideWidthEmu = 12192000L;
     private const long SlideHeightEmu = 6858000L;
     private const int LayoutScale = 12700;
+    private const string DefaultTableStyleId = "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
 
     private readonly LayoutEngine _layoutEngine = new();
 
@@ -25,18 +28,24 @@ public sealed class OpenXmlPptxRenderer
             Directory.CreateDirectory(outputDirectory);
         }
 
-        using var document = OpenPresentation(outputPath, options.TemplatePath);
-        var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
-        var slideLayoutPart = EnsurePresentationScaffold(presentationPart);
-
-        ClearSlides(presentationPart);
-
-        foreach (var slideModel in deck.Slides)
+        using (var document = OpenPresentation(outputPath, options.TemplatePath))
         {
-            AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath));
+            var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
+            EnsureRelationshipId(document, presentationPart, "rId1");
+            var slideLayoutPart = EnsurePresentationScaffold(presentationPart);
+
+            ClearSlides(presentationPart);
+
+            foreach (var slideModel in deck.Slides)
+            {
+                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath));
+            }
+
+            EnsureDocumentProperties(document, deck);
+            presentationPart.Presentation!.Save();
         }
 
-        presentationPart.Presentation!.Save();
+        NormalizePackage(outputPath);
     }
 
     private static string? GetSourceDirectory(string? sourcePath)
@@ -68,6 +77,7 @@ public sealed class OpenXmlPptxRenderer
         var existingLayout = presentationPart.SlideMasterParts.FirstOrDefault()?.SlideLayoutParts.FirstOrDefault();
         if (existingLayout is not null)
         {
+            EnsurePresentationMetadataParts(presentationPart);
             presentationPart.Presentation.SlideIdList ??= new P.SlideIdList();
             presentationPart.Presentation.SlideSize ??= new P.SlideSize { Cx = (int)SlideWidthEmu, Cy = (int)SlideHeightEmu, Type = P.SlideSizeValues.Screen16x9 };
             presentationPart.Presentation.NotesSize ??= new P.NotesSize { Cx = 6858000, Cy = 9144000 };
@@ -75,7 +85,28 @@ public sealed class OpenXmlPptxRenderer
         }
 
         var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
-        var slideLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        var contentLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        contentLayoutPart.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(new P.ShapeTree(
+                CreateRootGroupShapeProperties(),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                CreatePlaceholderShape(2U, "Title 1", P.PlaceholderValues.Title),
+                CreatePlaceholderShape(
+                    3U,
+                    "Text Placeholder 2",
+                    P.PlaceholderValues.Body,
+                    1U,
+                    new Rect(66, 144, 828, 343)))),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.Text,
+        };
+
+        var slideLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId2");
         slideLayoutPart.SlideLayout = new P.SlideLayout(
             new P.CommonSlideData(new P.ShapeTree(
                 CreateRootGroupShapeProperties(),
@@ -97,7 +128,8 @@ public sealed class OpenXmlPptxRenderer
                     new A.Offset { X = 0L, Y = 0L },
                     new A.Extents { Cx = 0L, Cy = 0L },
                     new A.ChildOffset { X = 0L, Y = 0L },
-                    new A.ChildExtents { Cx = 0L, Cy = 0L })))),
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                CreatePlaceholderShape(2U, "Title Placeholder 1", P.PlaceholderValues.Title))),
             new P.ColorMap
             {
                 Background1 = A.ColorSchemeIndexValues.Light1,
@@ -116,14 +148,22 @@ public sealed class OpenXmlPptxRenderer
             new P.SlideLayoutIdList(),
             new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
 
-        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId5");
+        var themePart = presentationPart.AddNewPart<ThemePart>("rId6");
         themePart.Theme = CreateTheme();
+        slideMasterPart.AddPart(themePart, "rId3");
+        contentLayoutPart.AddPart(slideMasterPart, "rId1");
+        slideLayoutPart.AddPart(slideMasterPart, "rId1");
 
         var slideMasterRelId = presentationPart.GetIdOfPart(slideMasterPart);
-        var slideLayoutRelId = slideMasterPart.GetIdOfPart(slideLayoutPart);
-        slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideLayoutRelId });
+    var contentLayoutRelId = slideMasterPart.GetIdOfPart(contentLayoutPart);
+    var blankLayoutRelId = slideMasterPart.GetIdOfPart(slideLayoutPart);
+    slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483649U, RelationshipId = contentLayoutRelId });
+    slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483650U, RelationshipId = blankLayoutRelId });
         slideMasterPart.SlideMaster.Save();
+    contentLayoutPart.SlideLayout.Save();
         slideLayoutPart.SlideLayout.Save();
+
+        EnsurePresentationMetadataParts(presentationPart);
 
         presentationPart.Presentation.SlideMasterIdList = new P.SlideMasterIdList(new P.SlideMasterId { Id = 2147483648U, RelationshipId = slideMasterRelId });
         presentationPart.Presentation.SlideIdList = new P.SlideIdList();
@@ -132,6 +172,65 @@ public sealed class OpenXmlPptxRenderer
         presentationPart.Presentation.DefaultTextStyle = new P.DefaultTextStyle();
         presentationPart.Presentation.Save();
         return slideLayoutPart;
+    }
+
+    private static void EnsurePresentationMetadataParts(PresentationPart presentationPart)
+    {
+        ThemePart themePart;
+        if (presentationPart.ThemePart is not null)
+        {
+            themePart = presentationPart.ThemePart;
+            themePart.Theme ??= CreateTheme();
+        }
+        else
+        {
+            themePart = presentationPart.SlideMasterParts.FirstOrDefault()?.ThemePart is { } existingTheme
+                ? presentationPart.AddPart(existingTheme, "rId6")
+                : presentationPart.AddNewPart<ThemePart>("rId6");
+
+            themePart.Theme ??= CreateTheme();
+        }
+
+        foreach (var slideMasterPart in presentationPart.SlideMasterParts)
+        {
+            if (slideMasterPart.ThemePart is null)
+            {
+                slideMasterPart.AddPart(themePart, "rId3");
+            }
+
+            slideMasterPart.SlideMaster?.Save();
+        }
+
+        var presentationPropertiesPart = presentationPart.PresentationPropertiesPart ?? presentationPart.AddNewPart<PresentationPropertiesPart>("rId4");
+        if (presentationPropertiesPart.PresentationProperties is null)
+        {
+            presentationPropertiesPart.PresentationProperties = new P.PresentationProperties();
+        }
+
+        presentationPropertiesPart.PresentationProperties.Save();
+
+        var viewPropertiesPart = presentationPart.ViewPropertiesPart ?? presentationPart.AddNewPart<ViewPropertiesPart>("rId5");
+        WriteXmlPart(viewPropertiesPart, CreateViewPropertiesDocument());
+
+        var tableStylesPart = presentationPart.TableStylesPart ?? presentationPart.AddNewPart<TableStylesPart>("rId7");
+        if (tableStylesPart.TableStyleList is null)
+        {
+            tableStylesPart.TableStyleList = new A.TableStyleList { Default = DefaultTableStyleId };
+        }
+
+        tableStylesPart.TableStyleList.Save();
+    }
+
+    private static void EnsureDocumentProperties(PresentationDocument document, SlideDeck deck)
+    {
+        var now = DateTime.UtcNow;
+        var corePropertiesPart = document.CoreFilePropertiesPart ?? document.AddCoreFilePropertiesPart();
+        EnsureRelationshipId(document, corePropertiesPart, "rId2");
+        WriteXmlPart(corePropertiesPart, CreateCorePropertiesDocument(deck, now));
+
+        var appPropertiesPart = document.ExtendedFilePropertiesPart ?? document.AddExtendedFilePropertiesPart();
+        EnsureRelationshipId(document, appPropertiesPart, "rId3");
+        WriteXmlPart(appPropertiesPart, CreateExtendedPropertiesDocument(deck));
     }
 
     private static void ClearSlides(PresentationPart presentationPart)
@@ -157,8 +256,8 @@ public sealed class OpenXmlPptxRenderer
 
     private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory)
     {
-        var slidePart = presentationPart.AddNewPart<SlidePart>();
-        slidePart.AddPart(slideLayoutPart);
+        var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
+        slidePart.AddPart(slideLayoutPart, "rId1");
 
         var shapeTree = new P.ShapeTree(
             CreateRootGroupShapeProperties(),
@@ -442,10 +541,10 @@ public sealed class OpenXmlPptxRenderer
     private static A.Paragraph CreateParagraph(string text, TextStyle style, int? level, bool ordered, int orderNumber)
     {
         var paragraph = new A.Paragraph();
-        var paragraphProperties = new A.ParagraphProperties();
 
         if (level is not null)
         {
+            var paragraphProperties = new A.ParagraphProperties();
             paragraphProperties.Level = level.Value;
             if (ordered)
             {
@@ -455,20 +554,24 @@ public sealed class OpenXmlPptxRenderer
             {
                 paragraphProperties.Append(new A.CharacterBullet { Char = "•" });
             }
+
+            paragraph.Append(paragraphProperties);
         }
 
-        paragraph.Append(paragraphProperties);
-
-        var runProperties = new A.RunProperties
+        if (!string.IsNullOrEmpty(text))
         {
-            Language = "en-US",
-            FontSize = (int)Math.Round(style.FontSize * 100),
-            Bold = style.Bold,
-        };
-        runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
-        runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(style.Color) }));
+            var runProperties = new A.RunProperties
+            {
+                Language = "en-US",
+                FontSize = (int)Math.Round(style.FontSize * 100),
+                Bold = style.Bold,
+            };
+            runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(style.Color) }));
+            runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
 
-        paragraph.Append(new A.Run(runProperties, new A.Text(text)));
+            paragraph.Append(new A.Run(runProperties, new A.Text(text)));
+        }
+
         paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
         return paragraph;
     }
@@ -478,6 +581,39 @@ public sealed class OpenXmlPptxRenderer
             new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
             new P.NonVisualGroupShapeDrawingProperties(),
             new P.ApplicationNonVisualDrawingProperties());
+
+    private static P.Shape CreatePlaceholderShape(uint shapeId, string name, P.PlaceholderValues? placeholderType, uint? index = null, Rect? frame = null)
+    {
+        var placeholder = placeholderType is null
+            ? new P.PlaceholderShape()
+            : new P.PlaceholderShape { Type = placeholderType };
+
+        if (index is not null)
+        {
+            placeholder.Index = index;
+        }
+
+        var appProperties = new P.ApplicationNonVisualDrawingProperties(placeholder);
+
+        var shapeProperties = frame is Rect frameValue
+            ? new P.ShapeProperties(
+                new A.Transform2D(
+                    new A.Offset { X = ToEmu(frameValue.X), Y = ToEmu(frameValue.Y) },
+                    new A.Extents { Cx = ToEmu(frameValue.Width), Cy = ToEmu(frameValue.Height) }),
+                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })
+            : new P.ShapeProperties();
+
+        return new P.Shape(
+            new P.NonVisualShapeProperties(
+                new P.NonVisualDrawingProperties { Id = shapeId, Name = name },
+                new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                appProperties),
+            shapeProperties,
+            new P.TextBody(
+                new A.BodyProperties(),
+                new A.ListStyle(),
+                new A.Paragraph(new A.EndParagraphRunProperties())));
+    }
 
     private static A.Theme CreateTheme()
         => new()
@@ -503,14 +639,408 @@ public sealed class OpenXmlPptxRenderer
                     new A.MinorFont(new A.LatinFont { Typeface = "Aptos" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }))
                 { Name = "MarpToPptx" },
                 new A.FormatScheme(
-                    new A.FillStyleList(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.Accent1 }), new A.NoFill(), new A.GradientFill()),
-                    new A.LineStyleList(new A.Outline(), new A.Outline(), new A.Outline()),
-                    new A.EffectStyleList(new A.EffectStyle(new A.EffectList()), new A.EffectStyle(new A.EffectList()), new A.EffectStyle(new A.EffectList())),
-                    new A.BackgroundFillStyleList(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.Light1 }), new A.NoFill(), new A.GradientFill()))
+                    new A.FillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.GradientFill(
+                            new A.GradientStopList(
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 50000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 0 },
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 37000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 35000 },
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 15000 },
+                                        new A.SaturationModulation { Val = 350000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 100000 }),
+                            new A.LinearGradientFill { Angle = 16200000, Scaled = true }),
+                        new A.NoFill(),
+                        new A.PatternFill(),
+                        new A.GroupFill()),
+                    new A.LineStyleList(
+                        CreateThemeOutline(),
+                        CreateThemeOutline(),
+                        CreateThemeOutline()),
+                    new A.EffectStyleList(
+                        CreateThemeEffectStyle(),
+                        CreateThemeEffectStyle(),
+                        CreateThemeEffectStyle()),
+                    new A.BackgroundFillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.GradientFill(
+                            new A.GradientStopList(
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 50000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 0 },
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 50000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 50000 },
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 50000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 100000 }),
+                            new A.LinearGradientFill { Angle = 16200000, Scaled = true }),
+                        new A.GradientFill(
+                            new A.GradientStopList(
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 50000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 0 },
+                                new A.GradientStop(
+                                    new A.SchemeColor(
+                                        new A.Tint { Val = 50000 },
+                                        new A.SaturationModulation { Val = 300000 })
+                                    { Val = A.SchemeColorValues.PhColor })
+                                { Position = 100000 }),
+                            new A.LinearGradientFill { Angle = 16200000, Scaled = true }),
+                        new A.NoFill(),
+                        new A.PatternFill(),
+                        new A.GroupFill()))
                 { Name = "MarpToPptx" }),
             ObjectDefaults = new A.ObjectDefaults(),
             ExtraColorSchemeList = new A.ExtraColorSchemeList(),
         };
+
+    private static string GetPresentationTitle(SlideDeck deck)
+        => deck.Slides
+            .Select(GetSlideTitle)
+            .FirstOrDefault(static title => !string.IsNullOrWhiteSpace(title))
+            ?? (string.IsNullOrWhiteSpace(deck.SourcePath) ? "PowerPoint Presentation" : IOPath.GetFileNameWithoutExtension(deck.SourcePath));
+
+    private static string GetSlideTitle(MarpToPptx.Core.Models.Slide slide)
+        => slide.Elements.OfType<HeadingElement>().FirstOrDefault()?.Text?.Trim()
+            ?? "PowerPoint Presentation";
+
+    private static XDocument CreateExtendedPropertiesDocument(SlideDeck deck)
+    {
+        XNamespace ep = "http://schemas.openxmlformats.org/officeDocument/2006/extended-properties";
+        XNamespace vt = "http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes";
+
+        var slideTitles = deck.Slides.Select(GetSlideTitle).ToList();
+        var titlesOfParts = new List<string> { "Aptos", "Aptos Display", "MarpToPptx Theme" };
+        titlesOfParts.AddRange(slideTitles);
+
+        return new XDocument(
+            new XDeclaration("1.0", "UTF-8", "yes"),
+            new XElement(
+                ep + "Properties",
+                new XAttribute(XNamespace.Xmlns + "vt", vt),
+                new XElement(ep + "TotalTime", 0),
+                new XElement(ep + "Words", 0),
+                new XElement(ep + "Application", "Microsoft Office PowerPoint"),
+                new XElement(ep + "PresentationFormat", "On-screen Show (16:9)"),
+                new XElement(ep + "Paragraphs", 0),
+                new XElement(ep + "Slides", slideTitles.Count),
+                new XElement(ep + "Notes", 0),
+                new XElement(ep + "HiddenSlides", 0),
+                new XElement(ep + "MMClips", 0),
+                new XElement(ep + "ScaleCrop", "false"),
+                new XElement(
+                    ep + "HeadingPairs",
+                    new XElement(
+                        vt + "vector",
+                        new XAttribute("size", 6),
+                        new XAttribute("baseType", "variant"),
+                        CreateVariantString(vt, "Fonts Used"),
+                        CreateVariantInt(vt, 2),
+                        CreateVariantString(vt, "Theme"),
+                        CreateVariantInt(vt, 1),
+                        CreateVariantString(vt, "Slide Titles"),
+                        CreateVariantInt(vt, slideTitles.Count))),
+                new XElement(
+                    ep + "TitlesOfParts",
+                    new XElement(
+                        vt + "vector",
+                        new XAttribute("size", titlesOfParts.Count),
+                        new XAttribute("baseType", "lpstr"),
+                        titlesOfParts.Select(title => new XElement(vt + "lpstr", title)))),
+                new XElement(ep + "Company", "Created by MarpToPptx"),
+                new XElement(ep + "LinksUpToDate", "false"),
+                new XElement(ep + "SharedDoc", "false"),
+                new XElement(ep + "HyperlinksChanged", "false"),
+                new XElement(ep + "AppVersion", "16.0000")));
+    }
+
+    private static XDocument CreateCorePropertiesDocument(SlideDeck deck, DateTime now)
+    {
+        XNamespace cp = "http://schemas.openxmlformats.org/package/2006/metadata/core-properties";
+        XNamespace dc = "http://purl.org/dc/elements/1.1/";
+        XNamespace dcterms = "http://purl.org/dc/terms/";
+        XNamespace dcmitype = "http://purl.org/dc/dcmitype/";
+        XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
+
+        return new XDocument(
+            new XDeclaration("1.0", "UTF-8", "yes"),
+            new XElement(
+                cp + "coreProperties",
+                new XAttribute(XNamespace.Xmlns + "cp", cp),
+                new XAttribute(XNamespace.Xmlns + "dc", dc),
+                new XAttribute(XNamespace.Xmlns + "dcterms", dcterms),
+                new XAttribute(XNamespace.Xmlns + "dcmitype", dcmitype),
+                new XAttribute(XNamespace.Xmlns + "xsi", xsi),
+                new XElement(dc + "title", GetPresentationTitle(deck)),
+                new XElement(dc + "subject", "PowerPoint Presentation"),
+                new XElement(dc + "creator", "MarpToPptx"),
+                new XElement(cp + "lastModifiedBy", "MarpToPptx"),
+                new XElement(cp + "revision", "1"),
+                new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ")),
+                new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ"))));
+    }
+
+    private static XElement CreateVariantString(XNamespace variantNamespace, string value)
+        => new(variantNamespace + "variant", new XElement(variantNamespace + "lpstr", value));
+
+    private static XElement CreateVariantInt(XNamespace variantNamespace, int value)
+        => new(variantNamespace + "variant", new XElement(variantNamespace + "i4", value));
+
+    private static XDocument CreateViewPropertiesDocument()
+    {
+        XNamespace a = "http://schemas.openxmlformats.org/drawingml/2006/main";
+        XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        XNamespace r = "http://schemas.openxmlformats.org/officeDocument/2006/relationships";
+
+        return new XDocument(
+            new XDeclaration("1.0", "UTF-8", "yes"),
+            new XElement(
+                p + "viewPr",
+                new XAttribute(XNamespace.Xmlns + "a", a),
+                new XAttribute(XNamespace.Xmlns + "r", r),
+                new XElement(
+                    p + "normalViewPr",
+                    new XAttribute("horzBarState", "maximized"),
+                    new XElement(p + "restoredLeft", new XAttribute("sz", "15611")),
+                    new XElement(p + "restoredTop", new XAttribute("sz", "94610"))),
+                new XElement(
+                    p + "slideViewPr",
+                    new XElement(
+                        p + "cSldViewPr",
+                        new XAttribute("snapToGrid", "0"),
+                        new XAttribute("snapToObjects", "1"),
+                        new XElement(
+                            p + "cViewPr",
+                            new XAttribute("varScale", "1"),
+                            new XElement(
+                                p + "scale",
+                                new XElement(a + "sx", new XAttribute("n", "136"), new XAttribute("d", "100")),
+                                new XElement(a + "sy", new XAttribute("n", "136"), new XAttribute("d", "100"))),
+                            new XElement(p + "origin", new XAttribute("x", "216"), new XAttribute("y", "312"))),
+                        new XElement(p + "guideLst"))),
+                new XElement(
+                    p + "notesTextViewPr",
+                    new XElement(
+                        p + "cViewPr",
+                        new XElement(
+                            p + "scale",
+                            new XElement(a + "sx", new XAttribute("n", "1"), new XAttribute("d", "1")),
+                            new XElement(a + "sy", new XAttribute("n", "1"), new XAttribute("d", "1"))),
+                        new XElement(p + "origin", new XAttribute("x", "0"), new XAttribute("y", "0")))),
+                new XElement(p + "gridSpacing", new XAttribute("cx", "76200"), new XAttribute("cy", "76200"))));
+    }
+
+    private static void WriteXmlPart(OpenXmlPart part, XDocument document)
+    {
+        using var stream = part.GetStream(FileMode.Create, FileAccess.Write);
+        document.Save(stream);
+    }
+
+    private static void NormalizePackage(string outputPath)
+    {
+        using var archive = ZipFile.Open(outputPath, ZipArchiveMode.Update);
+        NormalizeContentTypes(archive);
+        NormalizeRelationships(archive);
+    }
+
+    private static void NormalizeContentTypes(ZipArchive archive)
+    {
+        var entry = archive.GetEntry("[Content_Types].xml");
+        if (entry is null)
+        {
+            return;
+        }
+
+        XNamespace ct = "http://schemas.openxmlformats.org/package/2006/content-types";
+        XDocument document;
+        using (var stream = entry.Open())
+        {
+            document = XDocument.Load(stream);
+        }
+
+        var root = document.Root;
+        if (root is null)
+        {
+            return;
+        }
+
+        foreach (var defaultElement in root.Elements(ct + "Default").Where(element => (string?)element.Attribute("Extension") == "xml").ToList())
+        {
+            defaultElement.Remove();
+        }
+
+        root.AddFirst(new XElement(ct + "Default", new XAttribute("Extension", "xml"), new XAttribute("ContentType", "application/xml")));
+
+        if (!root.Elements(ct + "Override").Any(element => (string?)element.Attribute("PartName") == "/ppt/presentation.xml"))
+        {
+            root.Add(new XElement(
+                ct + "Override",
+                new XAttribute("PartName", "/ppt/presentation.xml"),
+                new XAttribute("ContentType", "application/vnd.openxmlformats-officedocument.presentationml.presentation.main+xml")));
+        }
+
+        ReplaceArchiveEntry(archive, entry.FullName, document);
+    }
+
+    private static void NormalizeRelationships(ZipArchive archive)
+    {
+        foreach (var entry in archive.Entries.Where(static entry => entry.FullName.EndsWith(".rels", StringComparison.OrdinalIgnoreCase)).ToList())
+        {
+            XDocument document;
+            using (var stream = entry.Open())
+            {
+                document = XDocument.Load(stream);
+            }
+
+            var root = document.Root;
+            if (root is null)
+            {
+                continue;
+            }
+
+            var sourcePartPath = GetRelationshipSourcePartPath(entry.FullName);
+            var changed = false;
+            foreach (var relationship in root.Elements().Where(element => element.Name.LocalName == "Relationship"))
+            {
+                var target = relationship.Attribute("Target")?.Value;
+                var targetMode = relationship.Attribute("TargetMode")?.Value;
+                if (string.IsNullOrWhiteSpace(target) || string.Equals(targetMode, "External", StringComparison.OrdinalIgnoreCase) || !target.StartsWith("/", StringComparison.Ordinal))
+                {
+                    continue;
+                }
+
+                relationship.SetAttributeValue("Target", MakeRelativeTarget(sourcePartPath, target));
+                changed = true;
+            }
+
+            if (changed)
+            {
+                ReplaceArchiveEntry(archive, entry.FullName, document);
+            }
+        }
+    }
+
+    private static string GetRelationshipSourcePartPath(string relationshipPath)
+    {
+        if (string.Equals(relationshipPath, "_rels/.rels", StringComparison.OrdinalIgnoreCase))
+        {
+            return "/";
+        }
+
+        var marker = "/_rels/";
+        var markerIndex = relationshipPath.LastIndexOf(marker, StringComparison.OrdinalIgnoreCase);
+        if (markerIndex < 0)
+        {
+            return "/";
+        }
+
+        var directory = relationshipPath[..markerIndex];
+        var fileName = relationshipPath[(markerIndex + marker.Length)..];
+        return $"/{directory}/{fileName[..^5]}";
+    }
+
+    private static string MakeRelativeTarget(string sourcePartPath, string absoluteTarget)
+    {
+        if (sourcePartPath == "/")
+        {
+            return absoluteTarget.TrimStart('/');
+        }
+
+        var sourceDirectory = sourcePartPath[..(sourcePartPath.LastIndexOf('/') + 1)];
+        var baseUri = new Uri($"https://package{sourceDirectory}", UriKind.Absolute);
+        var targetUri = new Uri($"https://package{absoluteTarget}", UriKind.Absolute);
+        return Uri.UnescapeDataString(baseUri.MakeRelativeUri(targetUri).ToString());
+    }
+
+    private static void ReplaceArchiveEntry(ZipArchive archive, string entryName, XDocument document)
+    {
+        archive.GetEntry(entryName)?.Delete();
+        var replacement = archive.CreateEntry(entryName);
+        using var stream = replacement.Open();
+        document.Save(stream);
+    }
+
+    private static string GetNextRelationshipId(OpenXmlPartContainer container)
+    {
+        var usedIds = container.Parts
+            .Select(part => part.RelationshipId)
+            .Where(static id => id.StartsWith("rId", StringComparison.Ordinal))
+            .Select(static id => int.TryParse(id[3..], out var value) ? value : 0)
+            .Where(static value => value > 0)
+            .ToHashSet();
+
+        var next = 1;
+        while (usedIds.Contains(next))
+        {
+            next++;
+        }
+
+        return $"rId{next}";
+    }
+
+    private static void EnsureRelationshipId(OpenXmlPartContainer container, OpenXmlPart part, string relationshipId)
+    {
+        if (container.GetIdOfPart(part) == relationshipId)
+        {
+            return;
+        }
+
+        container.ChangeIdOfPart(part, relationshipId);
+    }
+
+    private static A.Outline CreateThemeOutline()
+        => new(
+            new A.SolidFill(
+                new A.SchemeColor(
+                    new A.Shade { Val = 95000 },
+                    new A.SaturationModulation { Val = 105000 })
+                { Val = A.SchemeColorValues.PhColor }),
+            new A.PresetDash { Val = A.PresetLineDashValues.Solid })
+        {
+            Width = 9525,
+            CapType = A.LineCapValues.Flat,
+            CompoundLineType = A.CompoundLineValues.Single,
+            Alignment = A.PenAlignmentValues.Center,
+        };
+
+    private static A.EffectStyle CreateThemeEffectStyle()
+        => new(
+            new A.EffectList(
+                new A.OuterShadow(
+                    new A.RgbColorModelHex(
+                        new A.Alpha { Val = 38000 })
+                    { Val = "000000" })
+                {
+                    BlurRadius = 40000L,
+                    Distance = 20000L,
+                    Direction = 5400000,
+                    RotateWithShape = false,
+                }));
 
     private static void AppendSlideId(PresentationPart presentationPart, SlidePart slidePart)
     {

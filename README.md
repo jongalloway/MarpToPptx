@@ -7,12 +7,19 @@
 
 MarpToPptx is a .NET 10 CLI and library for compiling Marp-flavored Markdown into editable PowerPoint presentations.
 
+For a precise description of how this repo defines and implements Marp-style Markdown, see `doc/marp-markdown.md`.
+
+For renderer and PowerPoint package requirements and compatibility reference material, see `doc/pptx-compatibility-notes.md`.
+
 ## Current Structure
 
 - `src/MarpToPptx.Core`: semantic slide model, Markdown parsing, theme parsing, layout planning
 - `src/MarpToPptx.Pptx`: Open XML PPTX rendering and template-aware presentation generation
 - `src/MarpToPptx.Cli`: `marp2pptx` command-line entrypoint
+- `scripts/`: PowerShell helpers for local generation, smoke tests, package inspection, and PowerPoint troubleshooting
 - `tests/MarpToPptx.Tests`: xUnit v3 tests running on Microsoft Testing Platform
+- `samples/`: Marp-style sample decks for smoke tests, feature coverage, theme parsing, and compatibility-gap repros
+- `.github/workflows/ci.yml`: Ubuntu build/test/pack plus an Ubuntu CI-safe PPTX smoke-test job
 
 ## Usage
 
