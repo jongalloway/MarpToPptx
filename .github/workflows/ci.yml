@@ -1,0 +1,40 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+jobs:
+  build-test-pack:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore MarpToPptx.slnx
+
+      - name: Build
+        run: dotnet build MarpToPptx.slnx --configuration Release --no-restore
+
+      - name: Test
+        run: dotnet test MarpToPptx.slnx --configuration Release --no-build
+
+      - name: Pack CLI Tool
+        run: dotnet pack src/MarpToPptx.Cli/MarpToPptx.Cli.csproj --configuration Release --no-build
+
+      - name: Upload Tool Package
+        uses: actions/upload-artifact@v4
+        with:
+          name: marp2pptx-nupkg
+          path: artifacts/nupkg/*.nupkg
+          if-no-files-found: error

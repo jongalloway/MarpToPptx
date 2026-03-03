@@ -17,6 +17,32 @@ dotnet run --project src/MarpToPptx.Cli -- input.md --template theme.pptx
 dotnet run --project src/MarpToPptx.Cli -- input.md --theme-css theme.css
 ```
 
+## Local Tool And Dnx
+
+Build a local tool package:
+
+```bash
+dotnet pack src/MarpToPptx.Cli -c Release
+```
+
+That produces a tool package under `artifacts/nupkg/` with package ID `MarpToPptx` and command name `marp2pptx`.
+
+Run it with `dnx` from the local package source:
+
+```bash
+dnx MarpToPptx --add-source ./artifacts/nupkg sample.md -o sample.pptx
+```
+
+You can also install it as a local tool from the package output:
+
+```bash
+dotnet new tool-manifest
+dotnet tool install MarpToPptx --add-source ./artifacts/nupkg
+dotnet tool run marp2pptx sample.md -o sample.pptx
+```
+
+Public `dnx MarpToPptx ...` usage depends on publishing the package to a NuGet feed. That follow-up is tracked as a separate GitHub issue.
+
 ## Repository Conventions
 
 - Solution format: `MarpToPptx.slnx`

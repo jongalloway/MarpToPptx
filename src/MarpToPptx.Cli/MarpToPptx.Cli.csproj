@@ -9,10 +9,22 @@
     <OutputType>Exe</OutputType>
     <AssemblyName>marp2pptx</AssemblyName>
     <PackAsTool>true</PackAsTool>
+    <PackageId>MarpToPptx</PackageId>
+    <PackageOutputPath>..\..\artifacts\nupkg</PackageOutputPath>
+    <Authors>Jon Galloway</Authors>
+    <Description>Compile Marp-flavored Markdown into editable PowerPoint presentations.</Description>
+    <PackageTags>marp;markdown;pptx;powerpoint;dotnet-tool</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/jongalloway/MarpToPptx</RepositoryUrl>
+    <PublishRepositoryUrl>true</PublishRepositoryUrl>
     <ToolCommandName>marp2pptx</ToolCommandName>
     <TargetFramework>net10.0</TargetFramework>
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
+  </ItemGroup>
 
 </Project>
