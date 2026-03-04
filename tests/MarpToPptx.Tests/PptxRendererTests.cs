@@ -1159,6 +1159,114 @@ public class PptxRendererTests
         renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = sourceDirectory });
     }
 
+    [Fact]
+    public void Renderer_CreatesNotesSlidePart_ForSlideWithNoteComment()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Title Slide
+
+            Some content.
+
+            <!-- This is a presenter note. -->
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        Assert.NotNull(slidePart.NotesSlidePart);
+        var notesTexts = slidePart.NotesSlidePart!.NotesSlide!
+            .Descendants<A.Text>()
+            .Select(t => t.Text)
+            .ToArray();
+        Assert.Contains("This is a presenter note.", notesTexts);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_CreatesNotesForMultipleSlides_AttachedToCorrectSlides()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide One
+
+            <!-- Note for slide one. -->
+
+            ---
+
+            # Slide Two
+
+            No notes here.
+
+            ---
+
+            # Slide Three
+
+            <!-- Note for slide three. -->
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(3, slideParts.Length);
+
+        // Slide 1: has notes
+        Assert.NotNull(slideParts[0].NotesSlidePart);
+        var slide1Notes = slideParts[0].NotesSlidePart!.NotesSlide!
+            .Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("Note for slide one.", slide1Notes);
+
+        // Slide 2: no notes
+        Assert.Null(slideParts[1].NotesSlidePart);
+
+        // Slide 3: has notes
+        Assert.NotNull(slideParts[2].NotesSlidePart);
+        var slide3Notes = slideParts[2].NotesSlidePart!.NotesSlide!
+            .Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("Note for slide three.", slide3Notes);
+
+        Assert.NotNull(document.PresentationPart!.NotesMasterPart);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_DoesNotCreateNotesSlidePart_WhenSlideHasNoNotes()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide Without Notes
+
+            Just some content.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        Assert.Null(slidePart.NotesSlidePart);
+        Assert.Null(document.PresentationPart.NotesMasterPart);
+    }
+
     private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
     {
         protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)

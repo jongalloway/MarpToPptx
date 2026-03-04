@@ -18,6 +18,8 @@ public sealed class Slide
     public List<ISlideElement> Elements { get; } = [];
 
     public SlideStyle Style { get; init; } = new();
+
+    public string? Notes { get; init; }
 }
 
 public sealed class SlideStyle

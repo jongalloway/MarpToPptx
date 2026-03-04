@@ -351,10 +351,112 @@ public sealed class OpenXmlPptxRenderer
 
         slidePart.Slide.Save();
         AppendSlideId(presentationPart, slidePart);
+
+        if (!string.IsNullOrWhiteSpace(slideModel.Notes))
+        {
+            AddNotesSlide(presentationPart, slidePart, slideModel.Notes!);
+        }
     }
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
         => theme.Headings.TryGetValue(level, out var style) ? style : theme.Headings[1];
+
+    private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, string notes)
+    {
+        var notesMasterPart = EnsureNotesMasterPart(presentationPart);
+        var notesSlidePart = slidePart.AddNewPart<NotesSlidePart>(GetNextRelationshipId(slidePart));
+        notesSlidePart.AddPart(notesMasterPart, "rId1");
+
+        var paragraphs = notes
+            .Replace("\r\n", "\n", StringComparison.Ordinal)
+            .Split('\n', StringSplitOptions.None)
+            .Select(static line => CreateNotesParagraph(line))
+            .ToArray();
+
+        var notesTextBody = new P.TextBody(new A.BodyProperties(), new A.ListStyle());
+        foreach (var paragraph in paragraphs)
+        {
+            notesTextBody.Append(paragraph.CloneNode(true));
+        }
+
+        notesSlidePart.NotesSlide = new P.NotesSlide(
+            new P.CommonSlideData(new P.ShapeTree(
+                CreateRootGroupShapeProperties(),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                new P.Shape(
+                    new P.NonVisualShapeProperties(
+                        new P.NonVisualDrawingProperties { Id = 2U, Name = "Slide Image 1" },
+                        new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true, NoRotation = true, NoChangeAspect = true }),
+                        new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = P.PlaceholderValues.SlideImage })),
+                    new P.ShapeProperties()),
+                new P.Shape(
+                    new P.NonVisualShapeProperties(
+                        new P.NonVisualDrawingProperties { Id = 3U, Name = "Notes Placeholder 2" },
+                        new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                        new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = P.PlaceholderValues.Body, Index = 1U })),
+                    new P.ShapeProperties(),
+                    notesTextBody))),
+            new P.ColorMapOverride(new A.MasterColorMapping()));
+
+        notesSlidePart.NotesSlide.Save();
+    }
+
+    private static NotesMasterPart EnsureNotesMasterPart(PresentationPart presentationPart)
+    {
+        if (presentationPart.NotesMasterPart is not null)
+        {
+            return presentationPart.NotesMasterPart;
+        }
+
+        var notesMasterPart = presentationPart.AddNewPart<NotesMasterPart>(GetNextRelationshipId(presentationPart));
+        notesMasterPart.NotesMaster = new P.NotesMaster(
+            new P.CommonSlideData(new P.ShapeTree(
+                CreateRootGroupShapeProperties(),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })))),
+            new P.ColorMap
+            {
+                Background1 = A.ColorSchemeIndexValues.Light1,
+                Text1 = A.ColorSchemeIndexValues.Dark1,
+                Background2 = A.ColorSchemeIndexValues.Light2,
+                Text2 = A.ColorSchemeIndexValues.Dark2,
+                Accent1 = A.ColorSchemeIndexValues.Accent1,
+                Accent2 = A.ColorSchemeIndexValues.Accent2,
+                Accent3 = A.ColorSchemeIndexValues.Accent3,
+                Accent4 = A.ColorSchemeIndexValues.Accent4,
+                Accent5 = A.ColorSchemeIndexValues.Accent5,
+                Accent6 = A.ColorSchemeIndexValues.Accent6,
+                Hyperlink = A.ColorSchemeIndexValues.Hyperlink,
+                FollowedHyperlink = A.ColorSchemeIndexValues.FollowedHyperlink,
+            });
+        notesMasterPart.NotesMaster.Save();
+
+        var relId = presentationPart.GetIdOfPart(notesMasterPart);
+        presentationPart.Presentation!.NotesMasterIdList ??= new P.NotesMasterIdList();
+        presentationPart.Presentation.NotesMasterIdList.Append(new P.NotesMasterId { Id = relId });
+
+        return notesMasterPart;
+    }
+
+    private static A.Paragraph CreateNotesParagraph(string line)
+    {
+        var paragraph = new A.Paragraph();
+        if (!string.IsNullOrEmpty(line))
+        {
+            var runProperties = new A.RunProperties { Language = "en-US" };
+            paragraph.Append(new A.Run(runProperties, new A.Text(line)));
+        }
+
+        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US" });
+        return paragraph;
+    }
 
     private static void AddBackground(SlideStyle style, SlideRenderContext context)
     {
