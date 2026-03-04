@@ -138,16 +138,20 @@ public sealed class MarpMarkdownParser
     private static void AppendHtmlBlockElements(HtmlBlock htmlBlock, ICollection<ISlideElement> elements)
     {
         var html = htmlBlock.Lines.ToString();
-        var match = VideoTagRegex.Match(html);
-        if (!match.Success)
+        var matches = VideoTagRegex.Matches(html);
+
+        if (matches.Count == 0)
         {
             return;
         }
 
-        var src = match.Groups[1].Success ? match.Groups[1].Value
-            : match.Groups[2].Success ? match.Groups[2].Value
-            : match.Groups[3].Value;
-        elements.Add(new VideoElement(src, string.Empty));
+        foreach (Match match in matches)
+        {
+            var src = match.Groups[1].Success ? match.Groups[1].Value
+                : match.Groups[2].Success ? match.Groups[2].Value
+                : match.Groups[3].Value;
+            elements.Add(new VideoElement(src, string.Empty));
+        }
     }
 
     private static void AppendParagraphElements(ParagraphBlock paragraph, ICollection<ISlideElement> elements)
