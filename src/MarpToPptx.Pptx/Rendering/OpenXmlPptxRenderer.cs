@@ -1068,7 +1068,7 @@ public sealed class OpenXmlPptxRenderer
             return "000000";
         }
 
-        var trimmed = value.Trim();
+        var trimmed = value.Trim().Trim('"', '\'');
         if (trimmed.StartsWith('#'))
         {
             trimmed = trimmed[1..];
@@ -1090,6 +1090,7 @@ public sealed class OpenXmlPptxRenderer
             ".gif" => "image/gif",
             ".bmp" => "image/bmp",
             ".tif" or ".tiff" => "image/tiff",
+            ".svg" => "image/svg+xml",
             _ => "image/png",
         };
 

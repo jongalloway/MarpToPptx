@@ -183,7 +183,19 @@ function Test-OpenXmlPackage {
 	if ($validationErrors.Count -gt 0) {
 		Write-Host "Open XML validation failed:" -ForegroundColor Red
 		foreach ($validationError in $validationErrors) {
-			Write-Host ("- {0} at {1}" -f $validationError.Description, $validationError.Path.XPath)
+			$pathText = if ($validationError.Path) {
+				if ($validationError.Path | Get-Member -Name XPath -ErrorAction SilentlyContinue) {
+					$validationError.Path.XPath
+				}
+				else {
+					$validationError.Path.ToString()
+				}
+			}
+			else {
+				"<unknown path>"
+			}
+
+			Write-Host ("- {0} at {1}" -f $validationError.Description, $pathText)
 		}
 
 		throw "Open XML validation found $($validationErrors.Count) error(s)."

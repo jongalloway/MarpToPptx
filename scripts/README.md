@@ -12,6 +12,15 @@ Generate a PPTX with the local CLI project instead of the published `dnx` tool.
 pwsh ./scripts/Generate-LocalPptx.ps1 -InputMarkdown samples/01-minimal.md -OutputPath artifacts/samples/01-minimal-scripted.pptx
 ```
 
+### `Generate-SamplePptxSet.ps1`
+
+Generate PPTX output for each sample deck in `samples/`, writing results to `artifacts/samples/`. The script skips `samples/README.md` and will auto-pick a companion CSS file such as `samples/03-theme.css` for `samples/03-theme-css.md`.
+
+```powershell
+pwsh ./scripts/Generate-SamplePptxSet.ps1
+pwsh ./scripts/Generate-SamplePptxSet.ps1 -Configuration Release -Force
+```
+
 ### `Expand-Pptx.ps1`
 
 Expand a `.pptx` package into a normal directory for inspection.

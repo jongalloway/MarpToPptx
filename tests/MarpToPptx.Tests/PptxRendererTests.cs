@@ -77,4 +77,51 @@ public class PptxRendererTests
         var slideRelationships = slideRelationshipsReader.ReadToEnd();
         Assert.Contains("../slideLayouts/slideLayout2.xml", slideRelationships);
     }
+
+    [Fact]
+    public void Renderer_AcceptsQuotedFrontMatterColorsAndSvgBackgrounds()
+    {
+        var tempRoot = Path.Combine(Path.GetTempPath(), "MarpToPptx.Tests", Guid.NewGuid().ToString("N"));
+        Directory.CreateDirectory(tempRoot);
+
+        var markdownPath = Path.Combine(tempRoot, "deck.md");
+        var svgPath = Path.Combine(tempRoot, "accent-wave.svg");
+        var outputPath = Path.Combine(tempRoot, "deck.pptx");
+
+        File.WriteAllText(svgPath, """
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+          <rect width="100" height="100" fill="#102A43" />
+          <path d="M0 70 C 20 40, 40 40, 60 70 S 100 100, 100 60 L100 100 L0 100 Z" fill="#F7C948" />
+        </svg>
+        """);
+
+        File.WriteAllText(markdownPath, """
+        ---
+        theme: gaia
+        backgroundColor: "#F7F3E8"
+        ---
+
+        # Quoted Color
+
+        ---
+
+        <!-- backgroundImage: url(accent-wave.svg) -->
+        # Svg Background
+        """);
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = tempRoot });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var validationErrors = new OpenXmlValidator().Validate(document).ToList();
+        Assert.Empty(validationErrors);
+
+        using var archive = ZipFile.OpenRead(outputPath);
+        using var contentTypesReader = new StreamReader(archive.GetEntry("[Content_Types].xml")!.Open());
+        var contentTypes = contentTypesReader.ReadToEnd();
+        Assert.Contains("image/svg+xml", contentTypes);
+    }
 }
