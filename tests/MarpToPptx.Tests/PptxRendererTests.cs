@@ -1539,5 +1539,394 @@ public class PptxRendererTests
         Assert.Empty(validationErrors);
     }
 
+    [Fact]
+    public void Renderer_AddsSlideNumberField_WhenPaginateIsTrue()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            paginate: true
+            ---
+
+            # Slide One
+
+            ---
+
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        // Both slides should contain a slide-number field.
+        foreach (var slidePart in slideParts)
+        {
+            var fields = slidePart.Slide!.Descendants<A.Field>().ToArray();
+            Assert.Contains(fields, f => f.Type?.Value == "slidenum");
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_AddsSlideNumberField_WithCorrectSlideNumbers()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            paginate: true
+            ---
+
+            # Slide One
+
+            ---
+
+            # Slide Two
+
+            ---
+
+            # Slide Three
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(3, slideParts.Length);
+
+        // Verify each slide's field contains the correct slide number as display text.
+        for (var i = 0; i < slideParts.Length; i++)
+        {
+            var field = slideParts[i].Slide!.Descendants<A.Field>()
+                .FirstOrDefault(f => f.Type?.Value == "slidenum");
+            Assert.NotNull(field);
+            Assert.Equal((i + 1).ToString(), field!.GetFirstChild<A.Text>()?.Text);
+        }
+    }
+
+    [Fact]
+    public void Renderer_AddsHeaderShape_WhenHeaderDirectiveIsSet()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            header: My Presentation Header
+            ---
+
+            # Slide
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("My Presentation Header", texts);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_AddsFooterShape_WhenFooterDirectiveIsSet()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            footer: © 2024 My Company
+            ---
+
+            # Slide
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("© 2024 My Company", texts);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_AddsFooterAndPageNumber_WhenBothAreSet()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            paginate: true
+            footer: Conference 2024
+            ---
+
+            # First Slide
+
+            ---
+
+            # Second Slide
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var slidePart in slideParts)
+        {
+            var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+            Assert.Contains("Conference 2024", texts);
+            var fields = slidePart.Slide!.Descendants<A.Field>().ToArray();
+            Assert.Contains(fields, f => f.Type?.Value == "slidenum");
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_DoesNotAddSlideNumber_WhenPaginateIsFalse()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide Without Pagination
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var fields = slidePart.Slide!.Descendants<A.Field>().ToArray();
+        Assert.DoesNotContain(fields, f => f.Type?.Value == "slidenum");
+    }
+
+    [Fact]
+    public void Renderer_EmbedsMp3Audio_WhenLocalFileExists()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Minimal valid ID3v2 MP3 header for testing.
+        var mp3Bytes = new byte[]
+        {
+            0x49, 0x44, 0x33, // ID3
+            0x03, 0x00,       // version 2.3
+            0x00,             // flags
+            0x00, 0x00, 0x00, 0x00, // size (4 bytes syncsafe)
+        };
+
+        workspace.WriteFile("music.mp3", mp3Bytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Audio Slide
+
+            ![Background music](music.mp3)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // A picture element should be present with an audio file reference.
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+
+        var audioFile = pictures[0].Descendants<A.AudioFromFile>().SingleOrDefault();
+        Assert.NotNull(audioFile);
+        Assert.NotNull(audioFile!.Link?.Value);
+
+        // The slide should contain an audio reference relationship pointing to an mp3 media part.
+        var audioRels = slidePart.DataPartReferenceRelationships
+            .OfType<AudioReferenceRelationship>()
+            .ToArray();
+        Assert.Single(audioRels);
+        Assert.Equal("audio/mp3", audioRels[0].DataPart.ContentType);
+
+        // No error text should appear.
+        Assert.DoesNotContain("Missing audio", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+
+        // Package should be valid.
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmbedsWavAudio_WhenLocalFileExists()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Minimal RIFF/WAVE header.
+        var wavBytes = new byte[]
+        {
+            0x52, 0x49, 0x46, 0x46, // RIFF
+            0x24, 0x00, 0x00, 0x00, // chunk size
+            0x57, 0x41, 0x56, 0x45, // WAVE
+            0x66, 0x6D, 0x74, 0x20, // fmt 
+            0x10, 0x00, 0x00, 0x00, // subchunk size = 16
+            0x01, 0x00,             // audio format = PCM
+            0x01, 0x00,             // num channels = 1
+            0x44, 0xAC, 0x00, 0x00, // sample rate = 44100
+            0x88, 0x58, 0x01, 0x00, // byte rate
+            0x02, 0x00,             // block align
+            0x10, 0x00,             // bits per sample = 16
+            0x64, 0x61, 0x74, 0x61, // data
+            0x00, 0x00, 0x00, 0x00, // data chunk size = 0
+        };
+
+        workspace.WriteFile("effect.wav", wavBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Audio Slide
+
+            ![Sound effect](effect.wav)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+
+        var audioFile = pictures[0].Descendants<A.AudioFromFile>().SingleOrDefault();
+        Assert.NotNull(audioFile);
+
+        var audioRels = slidePart.DataPartReferenceRelationships
+            .OfType<AudioReferenceRelationship>()
+            .ToArray();
+        Assert.Single(audioRels);
+        Assert.Equal("audio/wav", audioRels[0].DataPart.ContentType);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_WhenMp3FileIsMissing()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Missing audio](missing.mp3)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Missing audio") && t.Contains("missing.mp3"));
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_ForUnsupportedAudioFormat()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("audio.m4a", new byte[] { 0x00, 0x00, 0x00, 0x20, 0x66, 0x74, 0x79, 0x70 });
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![M4A audio](audio.m4a)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Unsupported audio format") && t.Contains("audio.m4a"));
+    }
+
+    [Fact]
+    public void Renderer_EmbedsMp3Audio_WhenSpecifiedViaHtmlAudioTag()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var mp3Bytes = new byte[]
+        {
+            0x49, 0x44, 0x33,
+            0x03, 0x00,
+            0x00,
+            0x00, 0x00, 0x00, 0x00,
+        };
+        workspace.WriteFile("bg.mp3", mp3Bytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Audio Slide
+
+            <audio src="bg.mp3" controls></audio>
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+        Assert.NotNull(pictures[0].Descendants<A.AudioFromFile>().SingleOrDefault());
+
+        var audioRels = slidePart.DataPartReferenceRelationships
+            .OfType<AudioReferenceRelationship>()
+            .ToArray();
+        Assert.Single(audioRels);
+        Assert.Equal("audio/mp3", audioRels[0].DataPart.ContentType);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
     private sealed record PlaceholderBounds(long X, long Y, long W, long H);
 }

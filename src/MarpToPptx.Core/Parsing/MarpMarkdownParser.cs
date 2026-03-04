@@ -15,6 +15,11 @@ public sealed class MarpMarkdownParser
         @"<video\b[^>]*?\bsrc\s*=\s*(?:""([^""]*)""|'([^']*)'|(\S+?)(?:\s|/?>))",
         RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
 
+    // Matches the opening or self-closing <audio> tag and captures the src attribute value.
+    private static readonly Regex AudioTagRegex = new(
+        @"<audio\b[^>]*?\bsrc\s*=\s*(?:""([^""]*)""|'([^']*)'|(\S+?)(?:\s|/?>))",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
     private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
         .Build();
@@ -43,6 +48,8 @@ public sealed class MarpMarkdownParser
                 ClassName = defaultStyle.ClassName,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                Header = defaultStyle.Header,
+                Footer = defaultStyle.Footer,
             };
         }
 
@@ -55,6 +62,8 @@ public sealed class MarpMarkdownParser
                 ClassName = className,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                Header = defaultStyle.Header,
+                Footer = defaultStyle.Footer,
             };
         }
 
@@ -67,6 +76,8 @@ public sealed class MarpMarkdownParser
                 ClassName = defaultStyle.ClassName,
                 BackgroundImage = backgroundImage,
                 BackgroundColor = defaultStyle.BackgroundColor,
+                Header = defaultStyle.Header,
+                Footer = defaultStyle.Footer,
             };
         }
 
@@ -79,6 +90,36 @@ public sealed class MarpMarkdownParser
                 ClassName = defaultStyle.ClassName,
                 BackgroundImage = defaultStyle.BackgroundImage,
                 BackgroundColor = backgroundColor,
+                Header = defaultStyle.Header,
+                Footer = defaultStyle.Footer,
+            };
+        }
+
+        if (frontMatter.TryGetValue("header", out var header))
+        {
+            defaultStyle = new SlideStyle
+            {
+                ThemeName = defaultStyle.ThemeName,
+                Paginate = defaultStyle.Paginate,
+                ClassName = defaultStyle.ClassName,
+                BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundColor = defaultStyle.BackgroundColor,
+                Header = header,
+                Footer = defaultStyle.Footer,
+            };
+        }
+
+        if (frontMatter.TryGetValue("footer", out var footer))
+        {
+            defaultStyle = new SlideStyle
+            {
+                ThemeName = defaultStyle.ThemeName,
+                Paginate = defaultStyle.Paginate,
+                ClassName = defaultStyle.ClassName,
+                BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundColor = defaultStyle.BackgroundColor,
+                Header = defaultStyle.Header,
+                Footer = footer,
             };
         }
 
@@ -138,19 +179,23 @@ public sealed class MarpMarkdownParser
     private static void AppendHtmlBlockElements(HtmlBlock htmlBlock, ICollection<ISlideElement> elements)
     {
         var html = htmlBlock.Lines.ToString();
-        var matches = VideoTagRegex.Matches(html);
 
-        if (matches.Count == 0)
-        {
-            return;
-        }
-
-        foreach (Match match in matches)
+        var videoMatches = VideoTagRegex.Matches(html);
+        foreach (Match match in videoMatches)
         {
             var src = match.Groups[1].Success ? match.Groups[1].Value
                 : match.Groups[2].Success ? match.Groups[2].Value
                 : match.Groups[3].Value;
             elements.Add(new VideoElement(src, string.Empty));
+        }
+
+        var audioMatches = AudioTagRegex.Matches(html);
+        foreach (Match match in audioMatches)
+        {
+            var src = match.Groups[1].Success ? match.Groups[1].Value
+                : match.Groups[2].Success ? match.Groups[2].Value
+                : match.Groups[3].Value;
+            elements.Add(new AudioElement(src, string.Empty));
         }
     }
 
@@ -296,6 +341,12 @@ public sealed class MarpMarkdownParser
                     {
                         yield return new VideoElement(url, altText);
                     }
+                    else if (url.EndsWith(".mp3", StringComparison.OrdinalIgnoreCase) ||
+                             url.EndsWith(".wav", StringComparison.OrdinalIgnoreCase) ||
+                             url.EndsWith(".m4a", StringComparison.OrdinalIgnoreCase))
+                    {
+                        yield return new AudioElement(url, altText);
+                    }
                     else
                     {
                         yield return new ImageElement(url, altText);
@@ -303,13 +354,22 @@ public sealed class MarpMarkdownParser
 
                     break;
                 case HtmlInline htmlInline:
-                    var htmlMatch = VideoTagRegex.Match(htmlInline.Tag);
-                    if (htmlMatch.Success)
+                    var videoMatch = VideoTagRegex.Match(htmlInline.Tag);
+                    if (videoMatch.Success)
                     {
-                        var src = htmlMatch.Groups[1].Success ? htmlMatch.Groups[1].Value
-                            : htmlMatch.Groups[2].Success ? htmlMatch.Groups[2].Value
-                            : htmlMatch.Groups[3].Value;
+                        var src = videoMatch.Groups[1].Success ? videoMatch.Groups[1].Value
+                            : videoMatch.Groups[2].Success ? videoMatch.Groups[2].Value
+                            : videoMatch.Groups[3].Value;
                         yield return new VideoElement(src, string.Empty);
+                    }
+
+                    var audioMatch = AudioTagRegex.Match(htmlInline.Tag);
+                    if (audioMatch.Success)
+                    {
+                        var src = audioMatch.Groups[1].Success ? audioMatch.Groups[1].Value
+                            : audioMatch.Groups[2].Success ? audioMatch.Groups[2].Value
+                            : audioMatch.Groups[3].Value;
+                        yield return new AudioElement(src, string.Empty);
                     }
 
                     break;

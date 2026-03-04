@@ -34,6 +34,10 @@ public sealed class SlideStyle
 
     public string? BackgroundColor { get; init; }
 
+    public string? Header { get; init; }
+
+    public string? Footer { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
@@ -73,6 +77,8 @@ public sealed record BulletListItem(IReadOnlyList<InlineSpan> Spans, int Depth =
 public sealed record ImageElement(string Source, string AltText) : ISlideElement;
 
 public sealed record VideoElement(string Source, string AltText) : ISlideElement;
+
+public sealed record AudioElement(string Source, string AltText) : ISlideElement;
 
 public sealed record CodeBlockElement(string Language, string Code) : ISlideElement;
 

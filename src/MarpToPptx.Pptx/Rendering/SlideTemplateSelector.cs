@@ -55,8 +55,10 @@ internal sealed class SlideTemplateSelector
             return SlideKind.Title;
         }
 
-        // Image-focused slide: images and videos constitute at least half of non-heading content.
-        var mediaCount = slide.Elements.OfType<ImageElement>().Count() + slide.Elements.OfType<VideoElement>().Count();
+        // Image-focused slide: images, videos, and audio elements constitute at least half of non-heading content.
+        var mediaCount = slide.Elements.OfType<ImageElement>().Count() +
+                         slide.Elements.OfType<VideoElement>().Count() +
+                         slide.Elements.OfType<AudioElement>().Count();
         var nonHeadingCount = slide.Elements.Count(e => e is not HeadingElement);
         if (nonHeadingCount > 0 && mediaCount > 0 &&
             (double)mediaCount / nonHeadingCount >= 0.5)
