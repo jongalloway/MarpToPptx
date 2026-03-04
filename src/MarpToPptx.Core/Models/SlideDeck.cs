@@ -49,6 +49,8 @@ public sealed record BulletListItem(string Text, int Depth = 0);
 
 public sealed record ImageElement(string Source, string AltText) : ISlideElement;
 
+public sealed record VideoElement(string Source, string AltText) : ISlideElement;
+
 public sealed record CodeBlockElement(string Language, string Code) : ISlideElement;
 
 public sealed record TableElement(IReadOnlyList<TableRowModel> Rows, IReadOnlyList<TableColumnAlignment?> ColumnAlignments) : ISlideElement

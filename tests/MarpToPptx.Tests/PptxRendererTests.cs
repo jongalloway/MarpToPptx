@@ -499,6 +499,222 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_EmbedsMp4Video_WhenLocalFileExists()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Minimal ftyp box to produce a recognizable but tiny MP4-like file.
+        var mp4Bytes = new byte[]
+        {
+            0x00, 0x00, 0x00, 0x14, // box size = 20
+            0x66, 0x74, 0x79, 0x70, // 'ftyp'
+            0x69, 0x73, 0x6F, 0x6D, // major brand = 'isom'
+            0x00, 0x00, 0x02, 0x00, // minor version
+            0x69, 0x73, 0x6F, 0x6D, // compatible brand = 'isom'
+        };
+
+        workspace.WriteFile("clip.mp4", mp4Bytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Video Slide
+
+            ![Demo clip](clip.mp4)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // The picture element should be present with a video file reference.
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+
+        var videoFile = pictures[0].Descendants<A.VideoFromFile>().SingleOrDefault();
+        Assert.NotNull(videoFile);
+        Assert.NotNull(videoFile!.Link?.Value);
+
+        // The slide should contain a video reference relationship pointing to an mp4 media part.
+        var videoRels = slidePart.DataPartReferenceRelationships
+            .OfType<VideoReferenceRelationship>()
+            .ToArray();
+        Assert.Single(videoRels);
+        Assert.Equal("video/mp4", videoRels[0].DataPart.ContentType);
+
+        // No error text should appear.
+        Assert.DoesNotContain("Missing video", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+
+        // Package structure should be valid.
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+
+        // Content-Types should declare the mp4 media type.
+        using var archive = ZipFile.OpenRead(outputPath);
+        using var contentTypesReader = new StreamReader(archive.GetEntry("[Content_Types].xml")!.Open());
+        var contentTypes = contentTypesReader.ReadToEnd();
+        Assert.Contains("video/mp4", contentTypes);
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_WhenMp4FileIsMissing()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Missing video](missing.mp4)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Missing video") && t.Contains("missing.mp4"));
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_ForUnsupportedVideoFormat()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("video.avi", new byte[] { 0x52, 0x49, 0x46, 0x46 });
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![AVI](video.avi)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Unsupported image format") && t.Contains("video.avi"));
+    }
+
+    [Fact]
+    public void Renderer_SelectsBlankLayout_ForVideoFocusedSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var mp4Bytes = new byte[]
+        {
+            0x00, 0x00, 0x00, 0x14,
+            0x66, 0x74, 0x79, 0x70,
+            0x69, 0x73, 0x6F, 0x6D,
+            0x00, 0x00, 0x02, 0x00,
+            0x69, 0x73, 0x6F, 0x6D,
+        };
+        workspace.WriteFile("clip.mp4", mp4Bytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Video Slide
+
+            ![Demo](clip.mp4)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // A slide with only a heading + video should select the blank layout (image-focused).
+        Assert.Equal("/ppt/slideLayouts/slideLayout2.xml", slidePart.SlideLayoutPart?.Uri.ToString());
+    }
+
+    [Fact]
+    public void Renderer_EmbedsMp4Video_WhenSpecifiedViaHtmlVideoTag()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var mp4Bytes = new byte[]
+        {
+            0x00, 0x00, 0x00, 0x14,
+            0x66, 0x74, 0x79, 0x70,
+            0x69, 0x73, 0x6F, 0x6D,
+            0x00, 0x00, 0x02, 0x00,
+            0x69, 0x73, 0x6F, 0x6D,
+        };
+        workspace.WriteFile("clip.mp4", mp4Bytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Video Slide
+
+            <video src="clip.mp4" controls></video>
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+        Assert.NotNull(pictures[0].Descendants<A.VideoFromFile>().SingleOrDefault());
+
+        var videoRels = slidePart.DataPartReferenceRelationships
+            .OfType<VideoReferenceRelationship>()
+            .ToArray();
+        Assert.Single(videoRels);
+        Assert.Equal("video/mp4", videoRels[0].DataPart.ContentType);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmbedsMp4Video_WhenSpecifiedViaSelfClosingHtmlVideoTag()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var mp4Bytes = new byte[]
+        {
+            0x00, 0x00, 0x00, 0x14,
+            0x66, 0x74, 0x79, 0x70,
+            0x69, 0x73, 0x6F, 0x6D,
+            0x00, 0x00, 0x02, 0x00,
+            0x69, 0x73, 0x6F, 0x6D,
+        };
+        workspace.WriteFile("clip.mp4", mp4Bytes);
+
+        // Self-closing <video /> becomes an HtmlBlock when surrounded by blank lines.
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            "# Video Slide\n\n<video src=\"clip.mp4\" />\n\nCaption text.");
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+        Assert.NotNull(pictures[0].Descendants<A.VideoFromFile>().SingleOrDefault());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_SelectsDifferentLayouts_ForDifferentSlideKinds()
     {
         using var workspace = TestWorkspace.Create();

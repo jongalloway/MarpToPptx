@@ -4,11 +4,17 @@ using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
 using MarpToPptx.Core.Models;
 using MarpToPptx.Core.Themes;
+using System.Text.RegularExpressions;
 
 namespace MarpToPptx.Core.Parsing;
 
 public sealed class MarpMarkdownParser
 {
+    // Matches the opening or self-closing <video> tag and captures the src attribute value.
+    private static readonly Regex VideoTagRegex = new(
+        @"<video\b[^>]*?\bsrc\s*=\s*(?:""([^""]*)""|'([^']*)'|(\S+?)(?:\s|/?>))",
+        RegexOptions.IgnoreCase | RegexOptions.Singleline | RegexOptions.Compiled);
+
     private readonly MarkdownPipeline _pipeline = new MarkdownPipelineBuilder()
         .UseAdvancedExtensions()
         .Build();
@@ -120,22 +126,44 @@ public sealed class MarpMarkdownParser
                 case Table table:
                     elements.Add(ParseTable(table));
                     break;
+                case HtmlBlock htmlBlock:
+                    AppendHtmlBlockElements(htmlBlock, elements);
+                    break;
             }
         }
 
         return elements;
     }
 
+    private static void AppendHtmlBlockElements(HtmlBlock htmlBlock, ICollection<ISlideElement> elements)
+    {
+        var html = htmlBlock.Lines.ToString();
+        var matches = VideoTagRegex.Matches(html);
+
+        if (matches.Count == 0)
+        {
+            return;
+        }
+
+        foreach (Match match in matches)
+        {
+            var src = match.Groups[1].Success ? match.Groups[1].Value
+                : match.Groups[2].Success ? match.Groups[2].Value
+                : match.Groups[3].Value;
+            elements.Add(new VideoElement(src, string.Empty));
+        }
+    }
+
     private static void AppendParagraphElements(ParagraphBlock paragraph, ICollection<ISlideElement> elements)
     {
-        var images = ExtractImages(paragraph.Inline).ToArray();
+        var media = ExtractMediaElements(paragraph.Inline).ToArray();
         var text = ExtractInlineText(paragraph.Inline).Trim();
 
-        if (images.Length > 0 && text.Length == 0)
+        if (media.Length > 0 && text.Length == 0)
         {
-            foreach (var image in images)
+            foreach (var item in media)
             {
-                elements.Add(image);
+                elements.Add(item);
             }
 
             return;
@@ -146,9 +174,9 @@ public sealed class MarpMarkdownParser
             elements.Add(new ParagraphElement(text));
         }
 
-        foreach (var image in images)
+        foreach (var item in media)
         {
-            elements.Add(image);
+            elements.Add(item);
         }
     }
 
@@ -224,7 +252,7 @@ public sealed class MarpMarkdownParser
         return new TableElement(rows, alignments);
     }
 
-    private static IEnumerable<ImageElement> ExtractImages(ContainerInline? inline)
+    private static IEnumerable<ISlideElement> ExtractMediaElements(ContainerInline? inline)
     {
         if (inline is null)
         {
@@ -236,14 +264,35 @@ public sealed class MarpMarkdownParser
             switch (child)
             {
                 case LinkInline link when link.IsImage:
+                    var url = link.Url ?? string.Empty;
                     var altText = ExtractInlineText(link).Trim();
-                    yield return new ImageElement(link.Url ?? string.Empty, altText);
+                    if (url.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
+                    {
+                        yield return new VideoElement(url, altText);
+                    }
+                    else
+                    {
+                        yield return new ImageElement(url, altText);
+                    }
+
+                    break;
+                case HtmlInline htmlInline:
+                    var htmlMatch = VideoTagRegex.Match(htmlInline.Tag);
+                    if (htmlMatch.Success)
+                    {
+                        var src = htmlMatch.Groups[1].Success ? htmlMatch.Groups[1].Value
+                            : htmlMatch.Groups[2].Success ? htmlMatch.Groups[2].Value
+                            : htmlMatch.Groups[3].Value;
+                        yield return new VideoElement(src, string.Empty);
+                    }
+
                     break;
                 case ContainerInline nested:
-                    foreach (var nestedImage in ExtractImages(nested))
+                    foreach (var nestedItem in ExtractMediaElements(nested))
                     {
-                        yield return nestedImage;
+                        yield return nestedItem;
                     }
+
                     break;
             }
         }
