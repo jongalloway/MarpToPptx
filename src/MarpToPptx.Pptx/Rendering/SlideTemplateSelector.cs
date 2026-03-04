@@ -17,7 +17,7 @@ internal enum SlideKind
     /// <summary>A standard content slide with headings and body elements.</summary>
     Content,
 
-    /// <summary>A slide where images make up the majority of the non-heading content.</summary>
+    /// <summary>A slide where images make up at least half of the non-heading content.</summary>
     ImageFocused,
 }
 

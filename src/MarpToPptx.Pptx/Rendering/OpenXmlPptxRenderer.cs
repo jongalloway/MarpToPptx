@@ -294,10 +294,12 @@ public sealed class OpenXmlPptxRenderer
         var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets);
         AddBackground(slideModel.Style, context);
 
-        // Read placeholder bounds from the selected layout. When both title and body
-        // placeholders carry explicit transforms, use them to position content so that
-        // the slide respects the template's intended layout structure. When only one
-        // placeholder is present (or neither), fall back to LayoutEngine positioning.
+        // Read placeholder bounds from the selected layout. When the title placeholder
+        // carries an explicit transform, use it for the first top-level heading so that
+        // the slide respects the template's intended title position. When there is
+        // exactly one non-heading element, and a usable body placeholder rect is
+        // available (see canUseBodyRect), place that single body element inside the
+        // body placeholder; otherwise, fall back to LayoutEngine positioning.
         var titleRect = SlideTemplateSelector.GetTitlePlaceholderRect(slideLayoutPart);
         var bodyRect = SlideTemplateSelector.GetBodyPlaceholderRect(slideLayoutPart);
         var nonHeadingCount = slideModel.Elements.Count(e => e is not HeadingElement);

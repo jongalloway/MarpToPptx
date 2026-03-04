@@ -121,7 +121,7 @@ public class PptxRendererTests
         var slideParts = presentationPart.SlideParts.ToArray();
         Assert.Equal(2, slideParts.Length);
         // Slide 1 (H1 + paragraph = Title kind) and slide 2 (H2 + bullets + image = Content kind)
-        // both use the content layout (type="tx"); image-focused selection requires images to dominate.
+        // both use the content layout (type="tx"); image-focused selection applies when images are at least 50% of non-heading elements.
         Assert.All(slideParts, slidePart => Assert.Equal("/ppt/slideLayouts/slideLayout1.xml", slidePart.SlideLayoutPart?.Uri.ToString()));
         Assert.NotNull(slideParts[0].Slide);
         Assert.NotNull(slideParts[1].Slide);
