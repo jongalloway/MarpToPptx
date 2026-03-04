@@ -377,11 +377,23 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddCodeBlock(SlideRenderContext context, Rect frame, CodeBlockElement code, TextStyle style)
     {
-        var paragraphs = code.Code
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Split('\n', StringSplitOptions.None)
-            .Select(line => CreateParagraph(line, style, null, false, 1))
-            .ToArray();
+        A.Paragraph[] paragraphs;
+
+        if (SyntaxHighlighter.IsSupported(code.Language))
+        {
+            var tokenizedLines = SyntaxHighlighter.Tokenize(code.Language, code.Code);
+            paragraphs = tokenizedLines
+                .Select(runs => CreateHighlightedParagraph(runs, style))
+                .ToArray();
+        }
+        else
+        {
+            paragraphs = code.Code
+                .Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n', StringSplitOptions.None)
+                .Select(line => CreateParagraph(line, style, null, false, 1))
+                .ToArray();
+        }
 
         context.ShapeTree.Append(CreateTextShape(
             context.NextShapeId(),
@@ -391,6 +403,46 @@ public sealed class OpenXmlPptxRenderer
             noFill: false,
             fillColor: NormalizeColor(style.BackgroundColor ?? "#0F172A"),
             lineColor: NormalizeColor(context.Theme.AccentColor)));
+    }
+
+    private static A.Paragraph CreateHighlightedParagraph(IReadOnlyList<TokenizedRun> runs, TextStyle style)
+    {
+        var paragraph = new A.Paragraph();
+
+        if (style.LineHeight.HasValue)
+        {
+            var paragraphProperties = new A.ParagraphProperties();
+            var lineSpacingValue = (int)Math.Round(style.LineHeight.Value * 100000);
+            paragraphProperties.Append(new A.LineSpacing(new A.SpacingPercent { Val = lineSpacingValue }));
+            paragraph.Append(paragraphProperties);
+        }
+
+        foreach (var run in runs)
+        {
+            if (run.Text.Length == 0)
+            {
+                continue;
+            }
+
+            var runColor = run.Color ?? NormalizeColor(style.Color);
+            var runProperties = new A.RunProperties
+            {
+                Language = "en-US",
+                FontSize = (int)Math.Round(style.FontSize * 100),
+                Bold = style.Bold,
+            };
+            if (style.LetterSpacing.HasValue)
+            {
+                runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
+            }
+
+            runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = runColor }));
+            runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
+            paragraph.Append(new A.Run(runProperties, new A.Text(run.Text)));
+        }
+
+        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+        return paragraph;
     }
 
     private static void AddTable(SlideRenderContext context, Rect frame, TableElement table, TextStyle style)

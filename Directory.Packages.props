@@ -2,11 +2,12 @@
   <PropertyGroup>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
-
   <ItemGroup>
     <PackageVersion Include="DocumentFormat.OpenXml" Version="3.4.1" />
     <PackageVersion Include="Markdig" Version="1.1.0" />
     <PackageVersion Include="MinVer" Version="7.0.0" />
+    <PackageVersion Include="TextMateSharp" Version="2.0.3" />
+    <PackageVersion Include="TextMateSharp.Grammars" Version="2.0.3" />
     <PackageVersion Include="xunit.v3.mtp-v2" Version="3.2.2" />
   </ItemGroup>
 </Project>
