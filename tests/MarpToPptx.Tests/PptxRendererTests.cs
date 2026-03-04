@@ -11,36 +11,101 @@ namespace MarpToPptx.Tests;
 public class PptxRendererTests
 {
     [Fact]
+    public void Renderer_MatchesGoldenPackageBaseline_ForMinimalDeck()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Title Slide
+
+            Intro paragraph.
+
+            ---
+
+            ## Second Slide
+
+            - Alpha
+            - Beta
+
+            ![Pixel](pixel.png)
+            """);
+
+        workspace.WriteFile(
+            "pixel.png",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII="));
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        PptxGoldenPackage.AssertMatchesFixture(outputPath, "minimal-deck.package.json");
+    }
+
+    [Fact]
+    public void Renderer_MatchesGoldenPackageBaseline_ForSvgBackgroundDeck()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile(
+            "accent-wave.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+              <rect width="100" height="100" fill="#102A43" />
+              <path d="M0 70 C 20 40, 40 40, 60 70 S 100 100, 100 60 L100 100 L0 100 Z" fill="#F7C948" />
+            </svg>
+            """);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: gaia
+            backgroundColor: "#F7F3E8"
+            ---
+
+            # Quoted Color
+
+            ---
+
+            <!-- backgroundImage: url(accent-wave.svg) -->
+            # Svg Background
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        PptxGoldenPackage.AssertMatchesFixture(outputPath, "svg-background.package.json");
+    }
+
+    [Fact]
     public void Renderer_CreatesPresentationWithSlidesTextAndImage()
     {
-        var tempRoot = Path.Combine(Path.GetTempPath(), "MarpToPptx.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempRoot);
+        using var workspace = TestWorkspace.Create();
 
-        var markdownPath = Path.Combine(tempRoot, "deck.md");
-        var imagePath = Path.Combine(tempRoot, "pixel.png");
-        var outputPath = Path.Combine(tempRoot, "deck.pptx");
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Title Slide
 
-        File.WriteAllBytes(imagePath, Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII="));
-        File.WriteAllText(markdownPath, """
-        # Title Slide
+            Intro paragraph.
 
-        Intro paragraph.
+            ---
 
-        ---
+            ## Second Slide
 
-        ## Second Slide
+            - Alpha
+            - Beta
 
-        - Alpha
-        - Beta
+            ![Pixel](pixel.png)
+            """);
 
-        ![Pixel](pixel.png)
-        """);
+        workspace.WriteFile(
+            "pixel.png",
+            Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII="));
 
-        var compiler = new MarpCompiler();
-        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
-
-        var renderer = new OpenXmlPptxRenderer();
-        renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = tempRoot });
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
         var presentationPart = document.PresentationPart;
@@ -84,39 +149,35 @@ public class PptxRendererTests
     [Fact]
     public void Renderer_AcceptsQuotedFrontMatterColorsAndSvgBackgrounds()
     {
-        var tempRoot = Path.Combine(Path.GetTempPath(), "MarpToPptx.Tests", Guid.NewGuid().ToString("N"));
-        Directory.CreateDirectory(tempRoot);
+        using var workspace = TestWorkspace.Create();
 
-        var markdownPath = Path.Combine(tempRoot, "deck.md");
-        var svgPath = Path.Combine(tempRoot, "accent-wave.svg");
-        var outputPath = Path.Combine(tempRoot, "deck.pptx");
+        workspace.WriteFile(
+            "accent-wave.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+              <rect width="100" height="100" fill="#102A43" />
+              <path d="M0 70 C 20 40, 40 40, 60 70 S 100 100, 100 60 L100 100 L0 100 Z" fill="#F7C948" />
+            </svg>
+            """);
 
-        File.WriteAllText(svgPath, """
-        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
-          <rect width="100" height="100" fill="#102A43" />
-          <path d="M0 70 C 20 40, 40 40, 60 70 S 100 100, 100 60 L100 100 L0 100 Z" fill="#F7C948" />
-        </svg>
-        """);
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: gaia
+            backgroundColor: "#F7F3E8"
+            ---
 
-        File.WriteAllText(markdownPath, """
-        ---
-        theme: gaia
-        backgroundColor: "#F7F3E8"
-        ---
+            # Quoted Color
 
-        # Quoted Color
+            ---
 
-        ---
+            <!-- backgroundImage: url(accent-wave.svg) -->
+            # Svg Background
+            """);
 
-        <!-- backgroundImage: url(accent-wave.svg) -->
-        # Svg Background
-        """);
-
-        var compiler = new MarpCompiler();
-        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
-
-        var renderer = new OpenXmlPptxRenderer();
-        renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = tempRoot });
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
@@ -126,5 +187,59 @@ public class PptxRendererTests
         using var contentTypesReader = new StreamReader(archive.GetEntry("[Content_Types].xml")!.Open());
         var contentTypes = contentTypesReader.ReadToEnd();
         Assert.Contains("image/svg+xml", contentTypes);
+    }
+
+    private static void RenderDeck(string markdownPath, string outputPath, string sourceDirectory)
+    {
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = sourceDirectory });
+    }
+
+    private sealed class TestWorkspace : IDisposable
+    {
+        private TestWorkspace(string rootPath)
+        {
+            RootPath = rootPath;
+        }
+
+        public string RootPath { get; }
+
+        public static TestWorkspace Create()
+        {
+            var rootPath = Path.Combine(Path.GetTempPath(), "MarpToPptx.Tests", Guid.NewGuid().ToString("N"));
+            Directory.CreateDirectory(rootPath);
+            return new TestWorkspace(rootPath);
+        }
+
+        public string GetPath(string relativePath)
+            => Path.Combine(RootPath, relativePath);
+
+        public string WriteMarkdown(string relativePath, string content)
+        {
+            var path = GetPath(relativePath);
+            File.WriteAllText(path, content);
+            return path;
+        }
+
+        public void WriteFile(string relativePath, string content)
+        {
+            File.WriteAllText(GetPath(relativePath), content);
+        }
+
+        public void WriteFile(string relativePath, byte[] content)
+        {
+            File.WriteAllBytes(GetPath(relativePath), content);
+        }
+
+        public void Dispose()
+        {
+            if (Directory.Exists(RootPath))
+            {
+                Directory.Delete(RootPath, recursive: true);
+            }
+        }
     }
 }

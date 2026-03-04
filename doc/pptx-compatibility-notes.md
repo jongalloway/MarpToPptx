@@ -180,6 +180,14 @@ dotnet test --project tests/MarpToPptx.Tests/MarpToPptx.Tests.csproj -c Release 
 
 The renderer tests cover both semantic content and key package-structure regressions.
 
+When package-shape behavior changes intentionally, regenerate the checked-in golden baselines with:
+
+```bash
+UPDATE_GOLDEN_PACKAGES=1 dotnet test --project tests/MarpToPptx.Tests/MarpToPptx.Tests.csproj -c Release --no-restore
+```
+
+The fixture files live under `tests/MarpToPptx.Tests/Fixtures/` and are limited to normalized package inventory plus relationship/content-type XML so they stay focused on stable compatibility invariants.
+
 ### 2. Generate a sample with the local project
 
 Use the local CLI project when validating renderer changes:
