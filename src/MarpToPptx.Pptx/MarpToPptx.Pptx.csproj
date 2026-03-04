@@ -6,6 +6,8 @@
 
   <ItemGroup>
     <PackageReference Include="DocumentFormat.OpenXml" />
+    <PackageReference Include="TextMateSharp" />
+    <PackageReference Include="TextMateSharp.Grammars" />
   </ItemGroup>
 
   <PropertyGroup>
