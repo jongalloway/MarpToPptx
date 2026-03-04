@@ -20,7 +20,7 @@ try {
 
     if ($SaveCopyAs) {
         $saveCopyPath = [System.IO.Path]::GetFullPath($SaveCopyAs)
-        $saveDirectory = Split-Path -Parent $SaveCopyAs
+        $saveDirectory = Split-Path -Parent $saveCopyPath
         if ($saveDirectory) {
             New-Item -ItemType Directory -Path $saveDirectory -Force | Out-Null
         }

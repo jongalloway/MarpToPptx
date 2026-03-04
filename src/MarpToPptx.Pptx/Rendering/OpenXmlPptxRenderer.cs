@@ -2,6 +2,7 @@ using DocumentFormat.OpenXml.Packaging;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
 using MarpToPptx.Core.Themes;
+using System.Globalization;
 using System.IO.Compression;
 using System.Xml.Linq;
 using A = DocumentFormat.OpenXml.Drawing;
@@ -31,7 +32,10 @@ public sealed class OpenXmlPptxRenderer
         using (var document = OpenPresentation(outputPath, options.TemplatePath))
         {
             var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
-            EnsureRelationshipId(document, presentationPart, "rId1");
+            if (string.IsNullOrEmpty(options.TemplatePath))
+            {
+                EnsureRelationshipId(document, presentationPart, "rId1");
+            }
             var slideLayoutPart = EnsurePresentationScaffold(presentationPart);
 
             ClearSlides(presentationPart);
@@ -41,7 +45,7 @@ public sealed class OpenXmlPptxRenderer
                 AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath));
             }
 
-            EnsureDocumentProperties(document, deck);
+            EnsureDocumentProperties(document, deck, options.TemplatePath);
             presentationPart.Presentation!.Save();
         }
 
@@ -221,15 +225,21 @@ public sealed class OpenXmlPptxRenderer
         tableStylesPart.TableStyleList.Save();
     }
 
-    private static void EnsureDocumentProperties(PresentationDocument document, SlideDeck deck)
+    private static void EnsureDocumentProperties(PresentationDocument document, SlideDeck deck, string? templatePath)
     {
         var now = DateTime.UtcNow;
         var corePropertiesPart = document.CoreFilePropertiesPart ?? document.AddCoreFilePropertiesPart();
-        EnsureRelationshipId(document, corePropertiesPart, "rId2");
+        if (string.IsNullOrEmpty(templatePath))
+        {
+            EnsureRelationshipId(document, corePropertiesPart, "rId2");
+        }
         WriteXmlPart(corePropertiesPart, CreateCorePropertiesDocument(deck, now));
 
         var appPropertiesPart = document.ExtendedFilePropertiesPart ?? document.AddExtendedFilePropertiesPart();
-        EnsureRelationshipId(document, appPropertiesPart, "rId3");
+        if (string.IsNullOrEmpty(templatePath))
+        {
+            EnsureRelationshipId(document, appPropertiesPart, "rId3");
+        }
         WriteXmlPart(appPropertiesPart, CreateExtendedPropertiesDocument(deck));
     }
 
@@ -801,8 +811,8 @@ public sealed class OpenXmlPptxRenderer
                 new XElement(dc + "creator", "MarpToPptx"),
                 new XElement(cp + "lastModifiedBy", "MarpToPptx"),
                 new XElement(cp + "revision", "1"),
-                new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ")),
-                new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ"))));
+                new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)),
+                new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))));
     }
 
     private static XElement CreateVariantString(XNamespace variantNamespace, string value)
