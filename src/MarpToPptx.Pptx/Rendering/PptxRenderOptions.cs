@@ -7,10 +7,11 @@ public sealed class PptxRenderOptions
     public string? SourceDirectory { get; init; }
 
     /// <summary>
-    /// When <c>true</c> (the default), HTTP and HTTPS image URLs are fetched at render time.
-    /// Set to <c>false</c> to treat all remote references as missing assets.
+    /// When <c>true</c>, HTTP and HTTPS image URLs are fetched at render time.
+    /// The default is <c>false</c>, which treats all remote references as missing assets
+    /// and avoids outbound HTTP(S) requests unless explicitly enabled.
     /// </summary>
-    public bool AllowRemoteAssets { get; init; } = true;
+    public bool AllowRemoteAssets { get; init; } = false;
 
     /// <summary>
     /// Optional <see cref="HttpMessageHandler"/> used when fetching remote assets.

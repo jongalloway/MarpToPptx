@@ -273,6 +273,7 @@ public class PptxRendererTests
         renderer.Render(deck, outputPath, new PptxRenderOptions
         {
             SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = true,
             RemoteAssetHandler = handler,
         });
 
@@ -305,6 +306,7 @@ public class PptxRendererTests
         renderer.Render(deck, outputPath, new PptxRenderOptions
         {
             SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = true,
             RemoteAssetHandler = handler,
         });
 
@@ -485,6 +487,7 @@ public class PptxRendererTests
         renderer.Render(deck, outputPath, new PptxRenderOptions
         {
             SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = true,
             RemoteAssetHandler = handler,
         });
 

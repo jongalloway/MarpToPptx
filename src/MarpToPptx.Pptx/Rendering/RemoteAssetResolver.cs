@@ -10,7 +10,7 @@ internal sealed class RemoteAssetResolver : IDisposable
 
     private readonly HttpClient _client;
     private readonly bool _ownsClient;
-    private readonly Dictionary<string, string> _cache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, string> _cache = new(StringComparer.Ordinal);
     private readonly List<string> _tempFiles = [];
 
     public RemoteAssetResolver(HttpMessageHandler? handler = null)
@@ -42,7 +42,7 @@ internal sealed class RemoteAssetResolver : IDisposable
 
         try
         {
-            using var response = _client.GetAsync(url).ConfigureAwait(false).GetAwaiter().GetResult();
+            using var response = _client.GetAsync(url, HttpCompletionOption.ResponseHeadersRead).ConfigureAwait(false).GetAwaiter().GetResult();
             if (!response.IsSuccessStatusCode)
             {
                 errorMessage = $"HTTP {(int)response.StatusCode} {response.ReasonPhrase}";
@@ -50,8 +50,8 @@ internal sealed class RemoteAssetResolver : IDisposable
             }
 
             var contentType = response.Content.Headers.ContentType?.MediaType;
-            var extension = GetExtensionFromUrl(url)
-                ?? GetExtensionFromContentType(contentType)
+            var extension = GetExtensionFromContentType(contentType)
+                ?? GetExtensionFromUrl(url)
                 ?? ".bin";
 
             var tempPath = Path.Combine(Path.GetTempPath(), $"marp2pptx_{Guid.NewGuid():N}{extension}");
