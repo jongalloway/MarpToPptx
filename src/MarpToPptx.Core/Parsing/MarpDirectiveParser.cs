@@ -39,6 +39,12 @@ public static partial class MarpDirectiveParser
                     case "backgroundcolor":
                         style = Clone(style, backgroundColor: value);
                         break;
+                    case "header":
+                        style = Clone(style, header: value);
+                        break;
+                    case "footer":
+                        style = Clone(style, footer: value);
+                        break;
                 }
             }
             else
@@ -63,7 +69,9 @@ public static partial class MarpDirectiveParser
         bool? paginate = null,
         string? className = null,
         string? backgroundImage = null,
-        string? backgroundColor = null)
+        string? backgroundColor = null,
+        string? header = null,
+        string? footer = null)
     {
         var clone = new SlideStyle
         {
@@ -72,6 +80,8 @@ public static partial class MarpDirectiveParser
             ClassName = className ?? source.ClassName,
             BackgroundImage = backgroundImage ?? source.BackgroundImage,
             BackgroundColor = backgroundColor ?? source.BackgroundColor,
+            Header = header ?? source.Header,
+            Footer = footer ?? source.Footer,
         };
 
         foreach (var pair in source.Directives)

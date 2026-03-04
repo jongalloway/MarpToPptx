@@ -24,6 +24,7 @@ public sealed class LayoutEngine
                 BulletListElement list => CreateParagraphFrame(string.Join("\n", list.Items.Select(item => item.Text)), theme.Body.FontSize, contentX, contentWidth, ref y, 1.2),
                 ImageElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 VideoElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
+                AudioElement => CreateFixedFrame(contentX, contentWidth, ref y, 80),
                 CodeBlockElement => CreateFixedFrame(contentX, contentWidth, ref y, 160),
                 TableElement table => CreateFixedFrame(contentX, contentWidth, ref y, Math.Max(120, table.Rows.Count * 26 + 20)),
                 _ => CreateFixedFrame(contentX, contentWidth, ref y, 80),

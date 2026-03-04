@@ -45,11 +45,13 @@ public sealed class OpenXmlPptxRenderer
 
             ClearSlides(presentationPart);
 
+            var slideNumber = 1;
             foreach (var slideModel in deck.Slides)
             {
                 var slideKind = SlideTemplateSelector.Classify(slideModel);
                 var slideLayoutPart = templateSelector.SelectLayout(slideKind);
-                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets);
+                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, slideNumber);
+                slideNumber++;
             }
 
             EnsureDocumentProperties(document, deck, options.TemplatePath);
@@ -273,7 +275,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets)
+    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, int slideNumber)
     {
         var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
         slidePart.AddPart(slideLayoutPart, "rId1");
@@ -340,6 +342,9 @@ public sealed class OpenXmlPptxRenderer
                 case VideoElement video:
                     AddVideo(context, frame, video.Source, video.AltText);
                     break;
+                case AudioElement audio:
+                    AddAudio(context, frame, audio.Source, audio.AltText);
+                    break;
                 case CodeBlockElement code:
                     AddCodeBlock(context, frame, code, theme.Code);
                     break;
@@ -348,6 +353,8 @@ public sealed class OpenXmlPptxRenderer
                     break;
             }
         }
+
+        AddHeaderFooterAndPageNumber(context, slideModel.Style, theme, slideNumber);
 
         slidePart.Slide.Save();
         AppendSlideId(presentationPart, slidePart);
@@ -846,6 +853,124 @@ public sealed class OpenXmlPptxRenderer
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         context.ShapeTree.Append(picture);
+    }
+
+    private static void AddAudio(SlideRenderContext context, Rect frame, string source, string altText)
+    {
+        var resolved = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
+        if (resolved is null || !File.Exists(resolved))
+        {
+            var errorText = resolveError is not null
+                ? $"Missing audio: {source} ({resolveError})"
+                : string.IsNullOrWhiteSpace(source) ? "Missing audio" : $"Missing audio: {source}";
+            AddTextShape(context, frame, errorText, context.Theme.Body);
+            return;
+        }
+
+        var ext = IOPath.GetExtension(resolved).ToLowerInvariant();
+        MediaDataPartType? mediaType = ext switch
+        {
+            ".mp3" => MediaDataPartType.Mp3,
+            ".wav" => MediaDataPartType.Wav,
+            _ => null,
+        };
+
+        if (mediaType is null)
+        {
+            AddTextShape(context, frame, $"Unsupported audio format: {source}", context.Theme.Body);
+            return;
+        }
+
+        var mediaDataPart = context.SlidePart.OpenXmlPackage.CreateMediaDataPart(mediaType.Value);
+        using (var audioStream = File.OpenRead(resolved))
+        {
+            mediaDataPart.FeedData(audioStream);
+        }
+
+        var audioRel = context.SlidePart.AddAudioReferenceRelationship(mediaDataPart);
+
+        // Position a small audio icon shape in the center of the frame.
+        var iconSize = 60.0;
+        var iconX = frame.X + ((frame.Width - iconSize) / 2);
+        var iconY = frame.Y + ((frame.Height - iconSize) / 2);
+
+        var picture = new P.Picture(
+            new P.NonVisualPictureProperties(
+                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = IOPath.GetFileName(resolved), Description = altText },
+                new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
+                new P.ApplicationNonVisualDrawingProperties(new A.AudioFromFile { Link = audioRel.Id })),
+            new P.BlipFill(
+                new A.Blip(),
+                new A.Stretch(new A.FillRectangle())),
+            new P.ShapeProperties(
+                new A.Transform2D(
+                    new A.Offset { X = ToEmu(iconX), Y = ToEmu(iconY) },
+                    new A.Extents { Cx = ToEmu(iconSize), Cy = ToEmu(iconSize) }),
+                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
+
+        context.ShapeTree.Append(picture);
+    }
+
+    private static void AddHeaderFooterAndPageNumber(SlideRenderContext context, SlideStyle style, ThemeDefinition theme, int slideNumber)
+    {
+        // Slide dimensions in points: width ≈ 960pt, height ≈ 540pt.
+        const double slideWidth = SlideWidthEmu / (double)LayoutScale;
+        const double slideHeight = SlideHeightEmu / (double)LayoutScale;
+        const double marginX = 30.0;
+        const double footerY = slideHeight - 20.0;
+        const double footerHeight = 18.0;
+        const double headerY = 4.0;
+        const double headerHeight = 18.0;
+        const double pageNumWidth = 60.0;
+
+        var footerStyle = new TextStyle(10, theme.Body.Color, theme.Body.FontFamily, false);
+
+        if (!string.IsNullOrWhiteSpace(style.Header))
+        {
+            var headerWidth = slideWidth - (marginX * 2);
+            AddTextShape(context, new Rect(marginX, headerY, headerWidth, headerHeight), style.Header!, footerStyle);
+        }
+
+        if (!string.IsNullOrWhiteSpace(style.Footer))
+        {
+            var footerWidth = style.Paginate == true
+                ? slideWidth - (marginX * 2) - pageNumWidth - 8.0
+                : slideWidth - (marginX * 2);
+            AddTextShape(context, new Rect(marginX, footerY, footerWidth, footerHeight), style.Footer!, footerStyle);
+        }
+
+        if (style.Paginate == true)
+        {
+            var pageNumX = slideWidth - marginX - pageNumWidth;
+            var fieldId = Guid.NewGuid().ToString("B").ToUpperInvariant();
+            var fieldRunProperties = new A.RunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
+            fieldRunProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(footerStyle.Color) }));
+            fieldRunProperties.Append(new A.LatinFont { Typeface = footerStyle.FontFamily });
+
+            var field = new A.Field(
+                fieldRunProperties,
+                new A.Text(slideNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)))
+            {
+                Id = fieldId,
+                Type = "slidenum",
+            };
+
+            var endRunProperties = new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
+            endRunProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(footerStyle.Color) }));
+            endRunProperties.Append(new A.LatinFont { Typeface = footerStyle.FontFamily });
+
+            var paragraphProperties = new A.ParagraphProperties { Alignment = A.TextAlignmentTypeValues.Right };
+            var paragraph = new A.Paragraph(paragraphProperties, field, endRunProperties);
+
+            context.ShapeTree.Append(CreateTextShape(
+                context.NextShapeId(),
+                "Slide Number",
+                new Rect(pageNumX, footerY, pageNumWidth, footerHeight),
+                [paragraph],
+                noFill: true,
+                fillColor: null,
+                lineColor: null));
+        }
     }
 
     private static (double X, double Y, double Width, double Height) CalculateImagePlacement(Rect frame, string imagePath, bool useFullBleed)

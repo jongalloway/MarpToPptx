@@ -626,4 +626,101 @@ public class ParserTests
         Assert.Contains(bodyRow.Cells[0], s => s.Bold);
         Assert.Contains(bodyRow.Cells[1], s => s.Italic);
     }
+
+    [Fact]
+    public void Parser_ParsesHeaderAndFooter_FromFrontMatter()
+    {
+        const string markdown = """
+        ---
+        header: My Header
+        footer: My Footer
+        ---
+
+        # Slide
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("My Header", deck.Slides[0].Style.Header);
+        Assert.Equal("My Footer", deck.Slides[0].Style.Footer);
+    }
+
+    [Fact]
+    public void Parser_ParsesHeaderAndFooter_FromSlideDirective()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- header: Slide Two Header -->
+        <!-- footer: Slide Two Footer -->
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.Header);
+        Assert.Null(deck.Slides[0].Style.Footer);
+        Assert.Equal("Slide Two Header", deck.Slides[1].Style.Header);
+        Assert.Equal("Slide Two Footer", deck.Slides[1].Style.Footer);
+    }
+
+    [Fact]
+    public void Parser_ParsesAudioElement_FromImageSyntaxWithMp3Extension()
+    {
+        const string markdown = """
+        # Slide
+
+        ![Background music](intro.mp3)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var audio = slide.Elements.OfType<AudioElement>().SingleOrDefault();
+        Assert.NotNull(audio);
+        Assert.Equal("intro.mp3", audio!.Source);
+        Assert.Equal("Background music", audio.AltText);
+    }
+
+    [Fact]
+    public void Parser_ParsesAudioElement_FromImageSyntaxWithWavExtension()
+    {
+        const string markdown = """
+        # Slide
+
+        ![Sound effect](effect.wav)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var audio = slide.Elements.OfType<AudioElement>().SingleOrDefault();
+        Assert.NotNull(audio);
+        Assert.Equal("effect.wav", audio!.Source);
+    }
+
+    [Fact]
+    public void Parser_ParsesAudioElement_FromHtmlAudioBlock()
+    {
+        const string markdown = """
+        # Slide
+
+        <audio src="background.mp3" controls></audio>
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var audio = Assert.IsType<AudioElement>(slide.Elements[1]);
+        Assert.Equal("background.mp3", audio.Source);
+    }
 }
