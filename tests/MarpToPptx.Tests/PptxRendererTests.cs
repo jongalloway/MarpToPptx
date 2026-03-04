@@ -603,7 +603,10 @@ public class PptxRendererTests
         // Template with title layout that has explicit title (x=50,y=80 w=860,h=120) and
         // body (x=50,y=230 w=860,h=200) placeholder transforms (in layout units = EMU/12700).
         var templatePath = workspace.GetPath("template.pptx");
-        CreateTemplateWithExplicitPlaceholders(templatePath, titleX: 50, titleY: 80, titleW: 860, titleH: 120, bodyX: 50, bodyY: 230, bodyW: 860, bodyH: 200);
+        CreateTemplateWithExplicitPlaceholders(
+            templatePath,
+            titleBounds: new PlaceholderBounds(X: 50, Y: 80, W: 860, H: 120),
+            bodyBounds: new PlaceholderBounds(X: 50, Y: 230, W: 860, H: 200));
 
         // A title slide: H1 + one paragraph (both placeholders will fire).
         var markdownPath = workspace.WriteMarkdown(
@@ -805,14 +808,13 @@ public class PptxRendererTests
     /// explicit transforms on both the title and body (subtitle) placeholders.
     /// </summary>
     private static void CreateTemplateWithExplicitPlaceholders(
-        string path, long titleX, long titleY, long titleW, long titleH,
-        long bodyX, long bodyY, long bodyW, long bodyH)
+        string path, PlaceholderBounds titleBounds, PlaceholderBounds bodyBounds)
     {
         using var doc = PresentationDocument.Create(path, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
         var presentationPart = doc.AddPresentationPart();
         var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
 
-        static P.Shape MakePlaceholder(uint id, string name, P.PlaceholderValues phType, long x, long y, long w, long h)
+        static P.Shape MakePlaceholder(uint id, string name, P.PlaceholderValues phType, PlaceholderBounds bounds)
             => new(
                 new P.NonVisualShapeProperties(
                     new P.NonVisualDrawingProperties { Id = id, Name = name },
@@ -820,8 +822,8 @@ public class PptxRendererTests
                     new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = phType })),
                 new P.ShapeProperties(
                     new A.Transform2D(
-                        new A.Offset { X = x * 12700L, Y = y * 12700L },
-                        new A.Extents { Cx = w * 12700L, Cy = h * 12700L }),
+                        new A.Offset { X = bounds.X * 12700L, Y = bounds.Y * 12700L },
+                        new A.Extents { Cx = bounds.W * 12700L, Cy = bounds.H * 12700L }),
                     new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }),
                 new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
 
@@ -837,8 +839,8 @@ public class PptxRendererTests
                     new A.Extents { Cx = 0L, Cy = 0L },
                     new A.ChildOffset { X = 0L, Y = 0L },
                     new A.ChildExtents { Cx = 0L, Cy = 0L })),
-                MakePlaceholder(2U, "Title Placeholder", P.PlaceholderValues.Title, titleX, titleY, titleW, titleH),
-                MakePlaceholder(3U, "Body Placeholder", P.PlaceholderValues.SubTitle, bodyX, bodyY, bodyW, bodyH))),
+                MakePlaceholder(2U, "Title Placeholder", P.PlaceholderValues.Title, titleBounds),
+                MakePlaceholder(3U, "Body Placeholder", P.PlaceholderValues.SubTitle, bodyBounds))),
             new P.ColorMapOverride(new A.MasterColorMapping()))
         { Type = P.SlideLayoutValues.Title };
         titleLayoutPart.AddPart(slideMasterPart, "rId1");
@@ -991,4 +993,6 @@ public class PptxRendererTests
             }
         }
     }
+
+    private sealed record PlaceholderBounds(long X, long Y, long W, long H);
 }
