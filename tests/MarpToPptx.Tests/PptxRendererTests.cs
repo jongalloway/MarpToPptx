@@ -189,6 +189,57 @@ public class PptxRendererTests
         Assert.Contains("image/svg+xml", contentTypes);
     }
 
+    [Fact]
+    public void Renderer_CreatesNativePptxTable_ForMarkdownTable()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Table Slide
+
+            | Name  | Score | Rank |
+            |-------|------:|:----:|
+            | Alice | 95    | 1    |
+            | Bob   | 87    | 2    |
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var graphicFrames = slidePart.Slide!.Descendants<P.GraphicFrame>().ToArray();
+        Assert.NotEmpty(graphicFrames);
+
+        var table = graphicFrames[0].Descendants<A.Table>().Single();
+        var rows = table.Elements<A.TableRow>().ToArray();
+        Assert.Equal(3, rows.Length);
+
+        var headerCells = rows[0].Elements<A.TableCell>().ToArray();
+        Assert.Equal(3, headerCells.Length);
+        Assert.Contains("Name", headerCells[0].Descendants<A.Text>().Select(t => t.Text));
+
+        var headerRunProps = headerCells[0].Descendants<A.RunProperties>().First();
+        Assert.Equal(true, headerRunProps.Bold?.Value);
+
+        var scoreColProps = rows[1].Elements<A.TableCell>().ToArray()[1]
+            .Descendants<A.ParagraphProperties>().FirstOrDefault();
+        Assert.Equal(A.TextAlignmentTypeValues.Right, scoreColProps?.Alignment?.Value);
+
+        var rankColProps = rows[1].Elements<A.TableCell>().ToArray()[2]
+            .Descendants<A.ParagraphProperties>().FirstOrDefault();
+        Assert.Equal(A.TextAlignmentTypeValues.Center, rankColProps?.Alignment?.Value);
+
+        var tableProperties = table.Elements<A.TableProperties>().Single();
+        Assert.Equal(true, tableProperties.FirstRow?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
     private static void RenderDeck(string markdownPath, string outputPath, string sourceDirectory)
     {
         var compiler = new MarpCompiler();

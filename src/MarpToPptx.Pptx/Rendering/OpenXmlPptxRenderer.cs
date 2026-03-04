@@ -406,8 +406,100 @@ public sealed class OpenXmlPptxRenderer
             return;
         }
 
-        var tableText = string.Join("\n", table.Rows.Select(row => string.Join(" | ", row.Cells)));
-        AddTextShape(context, frame, tableText, style);
+        var hasHeader = table.Rows.Any(row => row.IsHeader);
+        var colWidth = ToEmu(frame.Width) / columnCount;
+        var rowHeight = ToEmu(Math.Round(style.FontSize * 1.8));
+
+        var tableProperties = new A.TableProperties { FirstRow = hasHeader, BandRow = true };
+        tableProperties.Append(new A.TableStyleId(DefaultTableStyleId));
+
+        var tableGrid = new A.TableGrid();
+        for (var i = 0; i < columnCount; i++)
+        {
+            tableGrid.Append(new A.GridColumn { Width = colWidth });
+        }
+
+        var aTable = new A.Table();
+        aTable.Append(tableProperties);
+        aTable.Append(tableGrid);
+
+        foreach (var row in table.Rows)
+        {
+            var aRow = new A.TableRow { Height = rowHeight };
+            for (var col = 0; col < columnCount; col++)
+            {
+                var cellText = col < row.Cells.Count ? row.Cells[col] : string.Empty;
+                var alignment = col < table.ColumnAlignments.Count ? table.ColumnAlignments[col] : null;
+                aRow.Append(CreateTableCell(cellText, style, row.IsHeader, alignment));
+            }
+
+            aTable.Append(aRow);
+        }
+
+        var graphicData = new A.GraphicData(aTable) { Uri = "http://schemas.openxmlformats.org/drawingml/2006/table" };
+        var graphicFrame = new P.GraphicFrame(
+            new P.NonVisualGraphicFrameProperties(
+                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = "Table" },
+                new P.NonVisualGraphicFrameDrawingProperties(new A.GraphicFrameLocks { NoGrouping = true }),
+                new P.ApplicationNonVisualDrawingProperties()),
+            new P.Transform(
+                new A.Offset { X = ToEmu(frame.X), Y = ToEmu(frame.Y) },
+                new A.Extents { Cx = ToEmu(frame.Width), Cy = ToEmu(frame.Height) }),
+            new A.Graphic(graphicData));
+
+        context.ShapeTree.Append(graphicFrame);
+    }
+
+    private static A.TableCell CreateTableCell(string text, TextStyle style, bool isHeader, TableColumnAlignment? alignment)
+    {
+        var runProperties = new A.RunProperties
+        {
+            Language = "en-US",
+            FontSize = (int)Math.Round(style.FontSize * 100),
+            Bold = isHeader || style.Bold,
+        };
+        if (style.LetterSpacing.HasValue)
+        {
+            runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
+        }
+
+        runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(style.Color) }));
+        runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
+
+        var paragraph = new A.Paragraph();
+        var paragraphProperties = new A.ParagraphProperties();
+        if (alignment.HasValue)
+        {
+            paragraphProperties.Alignment = alignment.Value switch
+            {
+                TableColumnAlignment.Center => A.TextAlignmentTypeValues.Center,
+                TableColumnAlignment.Right => A.TextAlignmentTypeValues.Right,
+                _ => A.TextAlignmentTypeValues.Left,
+            };
+        }
+
+        if (style.LineHeight.HasValue)
+        {
+            var lineSpacingValue = (int)Math.Round(style.LineHeight.Value * 100000);
+            paragraphProperties.Append(new A.LineSpacing(new A.SpacingPercent { Val = lineSpacingValue }));
+        }
+
+        if (alignment.HasValue || style.LineHeight.HasValue)
+        {
+            paragraph.Append(paragraphProperties);
+        }
+
+        var displayText = ApplyTextTransform(text, style.TextTransform);
+        paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
+        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+
+        var textBody = new A.TextBody(new A.BodyProperties(), new A.ListStyle());
+        textBody.Append(paragraph);
+
+        var cell = new A.TableCell();
+        cell.Append(textBody);
+        cell.Append(new A.TableCellProperties());
+        return cell;
     }
 
     private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, bool useFullBleed = false)

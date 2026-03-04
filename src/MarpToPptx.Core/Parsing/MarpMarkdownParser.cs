@@ -211,7 +211,17 @@ public sealed class MarpMarkdownParser
             rows.Add(new TableRowModel(cells, row.IsHeader));
         }
 
-        return new TableElement(rows);
+        var alignments = table.ColumnDefinitions
+            .Select(col => col.Alignment switch
+            {
+                TableColumnAlign.Left => (TableColumnAlignment?)TableColumnAlignment.Left,
+                TableColumnAlign.Center => TableColumnAlignment.Center,
+                TableColumnAlign.Right => TableColumnAlignment.Right,
+                _ => null,
+            })
+            .ToArray();
+
+        return new TableElement(rows, alignments);
     }
 
     private static IEnumerable<ImageElement> ExtractImages(ContainerInline? inline)
