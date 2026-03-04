@@ -51,6 +51,8 @@ public sealed record ImageElement(string Source, string AltText) : ISlideElement
 
 public sealed record CodeBlockElement(string Language, string Code) : ISlideElement;
 
-public sealed record TableElement(IReadOnlyList<TableRowModel> Rows) : ISlideElement;
+public sealed record TableElement(IReadOnlyList<TableRowModel> Rows, IReadOnlyList<TableColumnAlignment?> ColumnAlignments) : ISlideElement;
 
 public sealed record TableRowModel(IReadOnlyList<string> Cells, bool IsHeader = false);
+
+public enum TableColumnAlignment { Left, Center, Right }
