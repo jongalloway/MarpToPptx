@@ -434,4 +434,196 @@ public class ParserTests
         Assert.Null(deck.Slides[1].Notes);
         Assert.Equal("Note for slide three.", deck.Slides[2].Notes);
     }
+
+    [Fact]
+    public void Parser_ExtractsBoldSpan_FromInlineBoldText()
+    {
+        const string markdown = """
+        # Heading
+
+        Normal **bold** text.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+
+        var boldSpan = paragraph.Spans.FirstOrDefault(s => s.Bold);
+        Assert.NotNull(boldSpan);
+        Assert.Equal("bold", boldSpan!.Text);
+    }
+
+    [Fact]
+    public void Parser_ExtractsItalicSpan_FromInlineItalicText()
+    {
+        const string markdown = """
+        # Heading
+
+        Normal *italic* text.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+
+        var italicSpan = paragraph.Spans.FirstOrDefault(s => s.Italic);
+        Assert.NotNull(italicSpan);
+        Assert.Equal("italic", italicSpan!.Text);
+    }
+
+    [Fact]
+    public void Parser_ExtractsStrikethroughSpan_FromInlineStrikethroughText()
+    {
+        const string markdown = """
+        # Heading
+
+        Normal ~~struck~~ text.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+
+        var struckSpan = paragraph.Spans.FirstOrDefault(s => s.Strikethrough);
+        Assert.NotNull(struckSpan);
+        Assert.Equal("struck", struckSpan!.Text);
+    }
+
+    [Fact]
+    public void Parser_ExtractsCodeSpan_FromInlineCode()
+    {
+        const string markdown = """
+        # Heading
+
+        Use `printf()` here.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+
+        var codeSpan = paragraph.Spans.FirstOrDefault(s => s.Code);
+        Assert.NotNull(codeSpan);
+        Assert.Equal("printf()", codeSpan!.Text);
+    }
+
+    [Fact]
+    public void Parser_ExtractsHyperlinkUrl_FromInlineLink()
+    {
+        const string markdown = """
+        # Heading
+
+        Visit [the site](https://example.com) for details.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+
+        var linkSpan = paragraph.Spans.FirstOrDefault(s => s.HyperlinkUrl is not null);
+        Assert.NotNull(linkSpan);
+        Assert.Equal("the site", linkSpan!.Text);
+        Assert.Equal("https://example.com", linkSpan.HyperlinkUrl);
+    }
+
+    [Fact]
+    public void Parser_ExtractsNestedInlineFormatting_BoldItalic()
+    {
+        const string markdown = """
+        # Heading
+
+        ***bold and italic***
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+
+        var span = paragraph.Spans.FirstOrDefault(s => s.Bold && s.Italic);
+        Assert.NotNull(span);
+        Assert.Equal("bold and italic", span!.Text);
+    }
+
+    [Fact]
+    public void Parser_PreservesTextPropertyForBackwardCompat()
+    {
+        const string markdown = """
+        # My **Title**
+
+        Plain and **bold** text.
+
+        - Item with *italic*
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var heading = Assert.IsType<HeadingElement>(slide.Elements[0]);
+        Assert.Equal("My Title", heading.Text);
+
+        var paragraph = Assert.IsType<ParagraphElement>(slide.Elements[1]);
+        Assert.Equal("Plain and bold text.", paragraph.Text);
+
+        var list = Assert.IsType<BulletListElement>(slide.Elements[2]);
+        Assert.Equal("Item with italic", list.Items[0].Text);
+    }
+
+    [Fact]
+    public void Parser_ExtractsInlineFormattingInBulletListItems()
+    {
+        const string markdown = """
+        # Heading
+
+        - Plain item
+        - **Bold item**
+        - *Italic item*
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var list = Assert.IsType<BulletListElement>(slide.Elements[1]);
+
+        Assert.Equal(3, list.Items.Count);
+        Assert.False(list.Items[0].Spans.Any(s => s.Bold || s.Italic));
+        Assert.Contains(list.Items[1].Spans, s => s.Bold);
+        Assert.Contains(list.Items[2].Spans, s => s.Italic);
+    }
+
+    [Fact]
+    public void Parser_ExtractsInlineFormattingInTableCells()
+    {
+        const string markdown = """
+        # Table
+
+        | Feature       | Status   |
+        |---------------|----------|
+        | **Bold cell** | *Italic* |
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var table = Assert.IsType<TableElement>(slide.Elements[1]);
+
+        // Header row (row index 0) has plain text.
+        var bodyRow = table.Rows[1];
+        Assert.Contains(bodyRow.Cells[0], s => s.Bold);
+        Assert.Contains(bodyRow.Cells[1], s => s.Italic);
+    }
 }

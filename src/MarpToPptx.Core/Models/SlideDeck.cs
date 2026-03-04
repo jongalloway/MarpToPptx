@@ -41,13 +41,34 @@ public interface ISlideElement
 {
 }
 
-public sealed record HeadingElement(int Level, string Text) : ISlideElement;
+/// <summary>
+/// Represents a run of text with optional inline formatting and an optional hyperlink.
+/// A span with <see cref="Text"/> equal to <c>"\n"</c> acts as a paragraph-break marker.
+/// </summary>
+public sealed record InlineSpan(
+    string Text,
+    bool Bold = false,
+    bool Italic = false,
+    bool Code = false,
+    bool Strikethrough = false,
+    string? HyperlinkUrl = null);
 
-public sealed record ParagraphElement(string Text) : ISlideElement;
+public sealed record HeadingElement(int Level, IReadOnlyList<InlineSpan> Spans) : ISlideElement
+{
+    public string Text => string.Concat(Spans.Select(s => s.Text));
+}
+
+public sealed record ParagraphElement(IReadOnlyList<InlineSpan> Spans) : ISlideElement
+{
+    public string Text => string.Concat(Spans.Select(s => s.Text));
+}
 
 public sealed record BulletListElement(IReadOnlyList<BulletListItem> Items, bool Ordered) : ISlideElement;
 
-public sealed record BulletListItem(string Text, int Depth = 0);
+public sealed record BulletListItem(IReadOnlyList<InlineSpan> Spans, int Depth = 0)
+{
+    public string Text => string.Concat(Spans.Select(s => s.Text));
+}
 
 public sealed record ImageElement(string Source, string AltText) : ISlideElement;
 
@@ -60,6 +81,6 @@ public sealed record TableElement(IReadOnlyList<TableRowModel> Rows, IReadOnlyLi
     public TableElement(IReadOnlyList<TableRowModel> Rows) : this(Rows, []) { }
 }
 
-public sealed record TableRowModel(IReadOnlyList<string> Cells, bool IsHeader = false);
+public sealed record TableRowModel(IReadOnlyList<IReadOnlyList<InlineSpan>> Cells, bool IsHeader = false);
 
 public enum TableColumnAlignment { Left, Center, Right }
