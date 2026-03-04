@@ -18,6 +18,7 @@ For integrating `MarpToPptx` into a VS Code authoring workflow in a content repo
 - `src/MarpToPptx.Core`: semantic slide model, Markdown parsing, theme parsing, layout planning
 - `src/MarpToPptx.Pptx`: Open XML PPTX rendering and template-aware presentation generation
 - `src/MarpToPptx.Cli`: `marp2pptx` command-line entrypoint
+- `src/MarpToPptx.OpenXmlValidator`: small .NET validation helper used by smoke tests and CI
 - `scripts/`: PowerShell helpers for local generation, smoke tests, package inspection, and PowerPoint troubleshooting
 - `tests/MarpToPptx.Tests`: xUnit v3 tests running on Microsoft Testing Platform
 - `samples/`: Marp-style sample decks for smoke tests, feature coverage, theme parsing, and compatibility-gap repros
