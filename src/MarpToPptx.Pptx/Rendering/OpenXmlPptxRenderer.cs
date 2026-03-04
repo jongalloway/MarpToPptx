@@ -458,22 +458,39 @@ public sealed class OpenXmlPptxRenderer
             FontSize = (int)Math.Round(style.FontSize * 100),
             Bold = isHeader || style.Bold,
         };
+        if (style.LetterSpacing.HasValue)
+        {
+            runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
+        }
+
         runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(style.Color) }));
         runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
 
         var paragraph = new A.Paragraph();
+        var paragraphProperties = new A.ParagraphProperties();
         if (alignment.HasValue)
         {
-            var alignValue = alignment.Value switch
+            paragraphProperties.Alignment = alignment.Value switch
             {
                 TableColumnAlignment.Center => A.TextAlignmentTypeValues.Center,
                 TableColumnAlignment.Right => A.TextAlignmentTypeValues.Right,
                 _ => A.TextAlignmentTypeValues.Left,
             };
-            paragraph.Append(new A.ParagraphProperties { Alignment = alignValue });
         }
 
-        paragraph.Append(new A.Run(runProperties, new A.Text(text)));
+        if (style.LineHeight.HasValue)
+        {
+            var lineSpacingValue = (int)Math.Round(style.LineHeight.Value * 100000);
+            paragraphProperties.Append(new A.LineSpacing(new A.SpacingPercent { Val = lineSpacingValue }));
+        }
+
+        if (alignment.HasValue || style.LineHeight.HasValue)
+        {
+            paragraph.Append(paragraphProperties);
+        }
+
+        var displayText = ApplyTextTransform(text, style.TextTransform);
+        paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
         paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
 
         var textBody = new A.TextBody(new A.BodyProperties(), new A.ListStyle());

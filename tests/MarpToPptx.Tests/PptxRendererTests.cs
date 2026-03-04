@@ -222,6 +222,17 @@ public class PptxRendererTests
         Assert.Equal(3, headerCells.Length);
         Assert.Contains("Name", headerCells[0].Descendants<A.Text>().Select(t => t.Text));
 
+        var headerRunProps = headerCells[0].Descendants<A.RunProperties>().First();
+        Assert.Equal(true, headerRunProps.Bold?.Value);
+
+        var scoreColProps = rows[1].Elements<A.TableCell>().ToArray()[1]
+            .Descendants<A.ParagraphProperties>().FirstOrDefault();
+        Assert.Equal(A.TextAlignmentTypeValues.Right, scoreColProps?.Alignment?.Value);
+
+        var rankColProps = rows[1].Elements<A.TableCell>().ToArray()[2]
+            .Descendants<A.ParagraphProperties>().FirstOrDefault();
+        Assert.Equal(A.TextAlignmentTypeValues.Center, rankColProps?.Alignment?.Value);
+
         var tableProperties = table.Elements<A.TableProperties>().Single();
         Assert.Equal(true, tableProperties.FirstRow?.Value);
 
