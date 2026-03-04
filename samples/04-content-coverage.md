@@ -27,6 +27,24 @@ The image above should be embedded from a local SVG file.
 }
 ```
 
+Known languages should render with syntax-highlighted runs in the generated PPTX.
+
+---
+
+## Video
+
+![Demo clip](assets/nasa.mp4)
+
+The local MP4 should embed as a PowerPoint video rather than falling back to missing-media text.
+
+---
+
+## Audio
+
+![Background music](assets/six-seven.mp3)
+
+The local MP3 should embed as a PowerPoint audio object.
+
 ---
 
 ## Mixed Lists
@@ -40,10 +58,11 @@ The image above should be embedded from a local SVG file.
 
 ---
 
-## Table Fallback
+## Native Table Rendering
 
 | Feature | Expected Behavior |
 | --- | --- |
 | Table parsing | Create a `TableElement` |
-| Current rendering | Editable text fallback |
-| Future goal | Native PPTX tables |
+| Current rendering | Native PPTX table |
+| Header row | Bold text with first-row table styling |
+| Alignment | Markdown column alignment should carry through |

@@ -536,6 +536,8 @@ public class PptxRendererTests
         var videoFile = pictures[0].Descendants<A.VideoFromFile>().SingleOrDefault();
         Assert.NotNull(videoFile);
         Assert.NotNull(videoFile!.Link?.Value);
+        Assert.NotNull(pictures[0].Descendants<A.Blip>().SingleOrDefault()?.Embed?.Value);
+        Assert.Contains("p14:media", pictures[0].InnerXml);
 
         // The slide should contain a video reference relationship pointing to an mp4 media part.
         var videoRels = slidePart.DataPartReferenceRelationships
@@ -543,6 +545,12 @@ public class PptxRendererTests
             .ToArray();
         Assert.Single(videoRels);
         Assert.Equal("video/mp4", videoRels[0].DataPart.ContentType);
+
+        var mediaRels = slidePart.DataPartReferenceRelationships
+            .OfType<MediaReferenceRelationship>()
+            .ToArray();
+        Assert.Single(mediaRels);
+        Assert.Equal("video/mp4", mediaRels[0].DataPart.ContentType);
 
         // No error text should appear.
         Assert.DoesNotContain("Missing video", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
@@ -669,12 +677,20 @@ public class PptxRendererTests
         var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
         Assert.Single(pictures);
         Assert.NotNull(pictures[0].Descendants<A.VideoFromFile>().SingleOrDefault());
+        Assert.NotNull(pictures[0].Descendants<A.Blip>().SingleOrDefault()?.Embed?.Value);
+        Assert.Contains("p14:media", pictures[0].InnerXml);
 
         var videoRels = slidePart.DataPartReferenceRelationships
             .OfType<VideoReferenceRelationship>()
             .ToArray();
         Assert.Single(videoRels);
         Assert.Equal("video/mp4", videoRels[0].DataPart.ContentType);
+
+        var mediaRels = slidePart.DataPartReferenceRelationships
+            .OfType<MediaReferenceRelationship>()
+            .ToArray();
+        Assert.Single(mediaRels);
+        Assert.Equal("video/mp4", mediaRels[0].DataPart.ContentType);
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
@@ -709,6 +725,8 @@ public class PptxRendererTests
         var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
         Assert.Single(pictures);
         Assert.NotNull(pictures[0].Descendants<A.VideoFromFile>().SingleOrDefault());
+        Assert.NotNull(pictures[0].Descendants<A.Blip>().SingleOrDefault()?.Embed?.Value);
+        Assert.Contains("p14:media", pictures[0].InnerXml);
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
@@ -1776,6 +1794,8 @@ public class PptxRendererTests
         var audioFile = pictures[0].Descendants<A.AudioFromFile>().SingleOrDefault();
         Assert.NotNull(audioFile);
         Assert.NotNull(audioFile!.Link?.Value);
+        Assert.NotNull(pictures[0].Descendants<A.Blip>().SingleOrDefault()?.Embed?.Value);
+        Assert.Contains("p14:media", pictures[0].InnerXml);
 
         // The slide should contain an audio reference relationship pointing to an mp3 media part.
         var audioRels = slidePart.DataPartReferenceRelationships
@@ -1783,6 +1803,12 @@ public class PptxRendererTests
             .ToArray();
         Assert.Single(audioRels);
         Assert.Equal("audio/mp3", audioRels[0].DataPart.ContentType);
+
+        var mediaRels = slidePart.DataPartReferenceRelationships
+            .OfType<MediaReferenceRelationship>()
+            .ToArray();
+        Assert.Single(mediaRels);
+        Assert.Equal("audio/mp3", mediaRels[0].DataPart.ContentType);
 
         // No error text should appear.
         Assert.DoesNotContain("Missing audio", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));

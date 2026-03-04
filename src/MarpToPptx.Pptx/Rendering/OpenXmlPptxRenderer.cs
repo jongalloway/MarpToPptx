@@ -1,4 +1,5 @@
 using DocumentFormat.OpenXml.Packaging;
+using DocumentFormat.OpenXml.Office2010.PowerPoint;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
 using MarpToPptx.Core.Themes;
@@ -17,6 +18,8 @@ public sealed class OpenXmlPptxRenderer
     private const long SlideHeightEmu = 6858000L;
     private const int LayoutScale = 12700;
     private const string DefaultTableStyleId = "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
+    private static readonly byte[] MediaPlaceholderImage = Convert.FromBase64String(
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
 
     private readonly LayoutEngine _layoutEngine = new();
 
@@ -170,12 +173,12 @@ public sealed class OpenXmlPptxRenderer
         slideLayoutPart.AddPart(slideMasterPart, "rId1");
 
         var slideMasterRelId = presentationPart.GetIdOfPart(slideMasterPart);
-    var contentLayoutRelId = slideMasterPart.GetIdOfPart(contentLayoutPart);
-    var blankLayoutRelId = slideMasterPart.GetIdOfPart(slideLayoutPart);
-    slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483649U, RelationshipId = contentLayoutRelId });
-    slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483650U, RelationshipId = blankLayoutRelId });
+        var contentLayoutRelId = slideMasterPart.GetIdOfPart(contentLayoutPart);
+        var blankLayoutRelId = slideMasterPart.GetIdOfPart(slideLayoutPart);
+        slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483649U, RelationshipId = contentLayoutRelId });
+        slideMasterPart.SlideMaster.SlideLayoutIdList!.Append(new P.SlideLayoutId { Id = 2147483650U, RelationshipId = blankLayoutRelId });
         slideMasterPart.SlideMaster.Save();
-    contentLayoutPart.SlideLayout.Save();
+        contentLayoutPart.SlideLayout.Save();
         slideLayoutPart.SlideLayout.Save();
 
         EnsurePresentationMetadataParts(presentationPart);
@@ -837,14 +840,16 @@ public sealed class OpenXmlPptxRenderer
         }
 
         var videoRel = context.SlidePart.AddVideoReferenceRelationship(mediaDataPart);
+        var mediaRel = context.SlidePart.AddMediaReferenceRelationship(mediaDataPart);
+        var placeholderImageRelId = AddMediaPlaceholderImage(context.SlidePart);
 
         var picture = new P.Picture(
             new P.NonVisualPictureProperties(
-                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = IOPath.GetFileName(resolved), Description = altText },
+                CreateMediaDrawingProperties(context.NextShapeId(), IOPath.GetFileName(resolved), altText),
                 new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
-                new P.ApplicationNonVisualDrawingProperties(new A.VideoFromFile { Link = videoRel.Id })),
+                CreateMediaApplicationProperties(new A.VideoFromFile { Link = videoRel.Id }, mediaRel.Id)),
             new P.BlipFill(
-                new A.Blip(),
+                new A.Blip { Embed = placeholderImageRelId },
                 new A.Stretch(new A.FillRectangle())),
             new P.ShapeProperties(
                 new A.Transform2D(
@@ -888,6 +893,8 @@ public sealed class OpenXmlPptxRenderer
         }
 
         var audioRel = context.SlidePart.AddAudioReferenceRelationship(mediaDataPart);
+        var mediaRel = context.SlidePart.AddMediaReferenceRelationship(mediaDataPart);
+        var placeholderImageRelId = AddMediaPlaceholderImage(context.SlidePart);
 
         // Position a small audio icon shape in the center of the frame.
         var iconSize = 60.0;
@@ -896,11 +903,11 @@ public sealed class OpenXmlPptxRenderer
 
         var picture = new P.Picture(
             new P.NonVisualPictureProperties(
-                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = IOPath.GetFileName(resolved), Description = altText },
+                CreateMediaDrawingProperties(context.NextShapeId(), IOPath.GetFileName(resolved), altText),
                 new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
-                new P.ApplicationNonVisualDrawingProperties(new A.AudioFromFile { Link = audioRel.Id })),
+                CreateMediaApplicationProperties(new A.AudioFromFile { Link = audioRel.Id }, mediaRel.Id)),
             new P.BlipFill(
-                new A.Blip(),
+                new A.Blip { Embed = placeholderImageRelId },
                 new A.Stretch(new A.FillRectangle())),
             new P.ShapeProperties(
                 new A.Transform2D(
@@ -909,6 +916,44 @@ public sealed class OpenXmlPptxRenderer
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         context.ShapeTree.Append(picture);
+    }
+
+    private static P.NonVisualDrawingProperties CreateMediaDrawingProperties(uint shapeId, string name, string altText)
+    {
+        var drawingProperties = new P.NonVisualDrawingProperties
+        {
+            Id = shapeId,
+            Name = name,
+            Description = altText,
+        };
+
+        // PowerPoint uses this action marker to open the embedded media on click.
+        drawingProperties.Append(new A.HyperlinkOnClick { Id = string.Empty, Action = "ppaction://media" });
+        return drawingProperties;
+    }
+
+    private static P.ApplicationNonVisualDrawingProperties CreateMediaApplicationProperties(DocumentFormat.OpenXml.OpenXmlElement mediaFileElement, string mediaEmbedRelationshipId)
+    {
+        var extension = new P.ApplicationNonVisualDrawingPropertiesExtension
+        {
+            Uri = "{DAA4B4D4-6D71-4841-9C94-3DE7FCFB9230}",
+        };
+
+        var media = new Media { Embed = mediaEmbedRelationshipId };
+        media.AddNamespaceDeclaration("p14", "http://schemas.microsoft.com/office/powerpoint/2010/main");
+        extension.Append(media);
+
+        return new P.ApplicationNonVisualDrawingProperties(
+            mediaFileElement,
+            new P.ApplicationNonVisualDrawingPropertiesExtensionList(extension));
+    }
+
+    private static string AddMediaPlaceholderImage(SlidePart slidePart)
+    {
+        var imagePart = slidePart.AddImagePart(ImagePartType.Png);
+        using var imageStream = new MemoryStream(MediaPlaceholderImage, writable: false);
+        imagePart.FeedData(imageStream);
+        return slidePart.GetIdOfPart(imagePart);
     }
 
     private static void AddHeaderFooterAndPageNumber(SlideRenderContext context, SlideStyle style, ThemeDefinition theme, int slideNumber)

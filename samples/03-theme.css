@@ -5,23 +5,34 @@
   font-size: 30px;
   color: #1F2933;
   background-color: #FCFBF7;
+  background-image: url("assets/accent-wave.svg");
+  background-size: cover;
+  background-position: center;
   padding: 44px 60px;
+  line-height: 1.45;
+  letter-spacing: 0.4px;
 }
 
 h1 {
   font-family: "Aptos Display", sans-serif;
   font-size: 62px;
   color: #7C2D12;
+  font-weight: 400;
+  line-height: 1.15;
+  letter-spacing: 1.6px;
+  text-transform: uppercase;
 }
 
 h2 {
   font-size: 40px;
   color: #9A3412;
+  font-weight: 700;
 }
 
 h3 {
   font-size: 30px;
   color: #B45309;
+  font-weight: 400;
 }
 
 pre,
@@ -30,4 +41,6 @@ code {
   font-size: 20px;
   color: #F8FAFC;
   background: #0F172A;
+  line-height: 1.5;
+  letter-spacing: 0px;
 }

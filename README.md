@@ -154,9 +154,9 @@ dnx MarpToPptx sample.md -o sample.pptx
 - Marp-style front matter and directive parsing
 - Slide splitting on `---`
 - Semantic slide model independent from PPTX
-- Basic theme extraction for font families, font sizes, colors, and padding
-- PPTX generation for headings, paragraphs, bullet lists, images, and code blocks
-- Table content fallback rendered as editable text while native PPTX table generation remains a product requirement
+- Theme extraction for fonts, colors, padding, background images, and core typography settings
+- PPTX generation for headings, paragraphs, bullet lists, images, code blocks, native tables, and header/footer text
+- Local audio and video embedding for supported media formats
 - Template-copy workflow for reusing an existing `.pptx` theme/master
 
 ## Steering Decisions
@@ -170,6 +170,6 @@ dnx MarpToPptx sample.md -o sample.pptx
 - Improve CSS coverage for more Marp theme features
 - Refine layout heuristics for denser or highly designed decks
 - Expand template integration to map multiple layouts intelligently
-- Add native PPTX table generation and richer table styling
-- Add code block syntax highlighting
+- Improve native PPTX table styling and layout fidelity
+- Expand code block highlighting coverage and theme fidelity
 - Support remote assets and additional image formats
