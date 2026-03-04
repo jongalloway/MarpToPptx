@@ -192,6 +192,11 @@ public sealed class MarpMarkdownParser
                 {
                     case ParagraphBlock paragraph:
                         var childSpans = TrimSpans(ExtractInlineSpans(paragraph.Inline));
+                        if (spanFragments.Count > 0 && childSpans.Count > 0)
+                        {
+                            spanFragments.Add(new InlineSpan(" "));
+                        }
+
                         spanFragments.AddRange(childSpans);
                         break;
                     case FencedCodeBlock code:
@@ -237,6 +242,11 @@ public sealed class MarpMarkdownParser
                     if (block is ParagraphBlock paragraph)
                     {
                         var spans = TrimSpans(ExtractInlineSpans(paragraph.Inline));
+                        if (cellSpans.Count > 0 && spans.Count > 0)
+                        {
+                            cellSpans.Add(new InlineSpan(" "));
+                        }
+
                         cellSpans.AddRange(spans);
                     }
                     else
@@ -344,7 +354,7 @@ public sealed class MarpMarkdownParser
                     spans.Add(new InlineSpan("\n"));
                     break;
                 case CodeInline codeInline:
-                    spans.Add(new InlineSpan(codeInline.Content, bold, italic, Code: true, strikethrough, hyperlinkUrl));
+                    spans.Add(new InlineSpan(codeInline.Content, bold, italic, Code: true, Strikethrough: strikethrough, HyperlinkUrl: hyperlinkUrl));
                     break;
                 case EmphasisInline emphasis:
                 {

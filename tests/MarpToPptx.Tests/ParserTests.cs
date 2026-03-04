@@ -599,7 +599,7 @@ public class ParserTests
         var list = Assert.IsType<BulletListElement>(slide.Elements[1]);
 
         Assert.Equal(3, list.Items.Count);
-        Assert.False(list.Items[0].Spans.Any(s => s.Bold || s.Italic));
+        Assert.DoesNotContain(list.Items[0].Spans, s => s.Bold || s.Italic);
         Assert.Contains(list.Items[1].Spans, s => s.Bold);
         Assert.Contains(list.Items[2].Spans, s => s.Italic);
     }

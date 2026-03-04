@@ -657,7 +657,7 @@ public sealed class OpenXmlPptxRenderer
             var aRow = new A.TableRow { Height = rowHeight };
             for (var col = 0; col < columnCount; col++)
             {
-                var cellSpans = col < row.Cells.Count ? row.Cells[col] : (IReadOnlyList<InlineSpan>)[];
+                var cellSpans = col < row.Cells.Count ? row.Cells[col] : Array.Empty<InlineSpan>();
                 var alignment = col < table.ColumnAlignments.Count ? table.ColumnAlignments[col] : null;
                 aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.Code));
             }
@@ -706,6 +706,12 @@ public sealed class OpenXmlPptxRenderer
 
         foreach (var span in spans.Where(s => s.Text.Length > 0))
         {
+            if (span.Text == "\n")
+            {
+                paragraph.Append(new A.Break());
+                continue;
+            }
+
             var fontFamily = span.Code && codeStyle is not null ? codeStyle.FontFamily : style.FontFamily;
             var color = span.Code && codeStyle is not null ? NormalizeColor(codeStyle.Color) : NormalizeColor(style.Color);
             var runProperties = new A.RunProperties
@@ -732,9 +738,9 @@ public sealed class OpenXmlPptxRenderer
             runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = color }));
             runProperties.Append(new A.LatinFont { Typeface = fontFamily });
 
-            if (span.HyperlinkUrl is not null)
+            if (span.HyperlinkUrl is not null && Uri.TryCreate(span.HyperlinkUrl, UriKind.Absolute, out var tableCellHlinkUri))
             {
-                var hlinkRel = slidePart.AddHyperlinkRelationship(new Uri(span.HyperlinkUrl), true);
+                var hlinkRel = slidePart.AddHyperlinkRelationship(tableCellHlinkUri, true);
                 runProperties.Append(new A.HyperlinkOnClick { Id = hlinkRel.Id });
             }
 
@@ -1044,6 +1050,12 @@ public sealed class OpenXmlPptxRenderer
 
         foreach (var span in spans.Where(s => s.Text.Length > 0))
         {
+            if (span.Text == "\n")
+            {
+                paragraph.Append(new A.Break());
+                continue;
+            }
+
             var isCode = span.Code && codeStyle is not null;
             var fontFamily = isCode ? codeStyle!.FontFamily : style.FontFamily;
             var color = isCode ? NormalizeColor(codeStyle!.Color) : NormalizeColor(style.Color);
@@ -1072,9 +1084,10 @@ public sealed class OpenXmlPptxRenderer
             runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = color }));
             runProperties.Append(new A.LatinFont { Typeface = fontFamily });
 
-            if (span.HyperlinkUrl is not null && slidePart is not null)
+            if (span.HyperlinkUrl is not null && slidePart is not null &&
+                Uri.TryCreate(span.HyperlinkUrl, UriKind.Absolute, out var hlinkUri))
             {
-                var hlinkRel = slidePart.AddHyperlinkRelationship(new Uri(span.HyperlinkUrl), true);
+                var hlinkRel = slidePart.AddHyperlinkRelationship(hlinkUri, true);
                 runProperties.Append(new A.HyperlinkOnClick { Id = hlinkRel.Id });
             }
 
