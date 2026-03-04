@@ -57,20 +57,38 @@ function Get-PackageAssemblyPath {
 		throw "Unable to find package '$PackageId' in project.assets.json."
 	}
 
-	$targetEntry = $AssetsData["targets"]["net10.0"][$libraryEntry.Key]
-	if ($null -eq $targetEntry) {
-		throw "Unable to find target entry for package '$PackageId' in project.assets.json."
+	$packageFiles = @($libraryEntry.Value["files"])
+	$preferredFrameworks = @()
+	$runtimeVersionMajor = [System.Environment]::Version.Major
+
+	if ($runtimeVersionMajor -ge 10) {
+		$preferredFrameworks += "net10.0"
 	}
 
-	$runtimeEntry = $targetEntry["runtime"].GetEnumerator() |
-		Where-Object { $_.Key -like "*/$FileName" } |
-		Select-Object -First 1
-
-	if ($null -eq $runtimeEntry) {
-		throw "Unable to find runtime assembly '$FileName' for package '$PackageId' in project.assets.json."
+	if ($runtimeVersionMajor -ge 8) {
+		$preferredFrameworks += "net8.0"
 	}
 
-	return Join-Path (Join-Path $NuGetPackagesRoot $libraryEntry.Value["path"]) $runtimeEntry.Key
+	if ($runtimeVersionMajor -ge 6) {
+		$preferredFrameworks += "net6.0"
+	}
+
+	$preferredFrameworks += "netstandard2.0"
+
+	$relativeAssemblyPath = $null
+	foreach ($framework in $preferredFrameworks | Select-Object -Unique) {
+		$candidatePath = "lib/$framework/$FileName"
+		if ($packageFiles -contains $candidatePath) {
+			$relativeAssemblyPath = $candidatePath
+			break
+		}
+	}
+
+	if ($null -eq $relativeAssemblyPath) {
+		throw "Unable to find a PowerShell-compatible runtime assembly '$FileName' for package '$PackageId'."
+	}
+
+	return Join-Path (Join-Path $NuGetPackagesRoot $libraryEntry.Value["path"]) $relativeAssemblyPath
 }
 
 function Import-OpenXmlValidationAssemblies {
@@ -137,9 +155,22 @@ function Test-OpenXmlPackage {
 	$document = $null
 	$presentationDocumentType = Get-OpenXmlType -TypeName "DocumentFormat.OpenXml.Packaging.PresentationDocument"
 	$openXmlValidatorType = Get-OpenXmlType -TypeName "DocumentFormat.OpenXml.Validation.OpenXmlValidator"
+	$openMethod = $presentationDocumentType.GetMethods() |
+		Where-Object {
+			$parameters = $_.GetParameters()
+			$_.Name -eq "Open" -and
+			$parameters.Count -eq 2 -and
+			$parameters[0].ParameterType -eq [string] -and
+			$parameters[1].ParameterType -eq [bool]
+		} |
+		Select-Object -First 1
+
+	if ($null -eq $openMethod) {
+		throw "Unable to find PresentationDocument.Open(string, bool)."
+	}
 
 	try {
-		$document = $presentationDocumentType.GetMethod("Open", @([string], [bool])).Invoke($null, @($PptxPath, $false))
+		$document = $openMethod.Invoke($null, @($PptxPath, $false))
 		$validator = [System.Activator]::CreateInstance($openXmlValidatorType)
 		$validationErrors = @($validator.Validate($document))
 	}
