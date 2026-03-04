@@ -14,8 +14,9 @@ public sealed record TokenizedRun(string Text, string? Color);
 /// <summary>
 /// Provides language-aware syntax highlighting for code blocks using TextMateSharp.
 /// Supported language identifiers: csharp, javascript, typescript, json, html, css,
-/// xml, powershell, python, sql (and common aliases such as cs, js, ts, py, ps1).
-/// Unsupported languages produce a single plain run per line.
+/// xml, powershell, python, sql, yaml, shellscript (and common aliases such as cs,
+/// js, ts, py, ps1, yml, sh, bash). Unsupported languages produce a single plain run
+/// per line.
 /// </summary>
 public static class SyntaxHighlighter
 {
@@ -87,10 +88,7 @@ public static class SyntaxHighlighter
 
         foreach (var line in lines)
         {
-            ITokenizeLineResult lineResult = ruleStack is null
-                ? grammar.TokenizeLine(new LineText(line))
-                : grammar.TokenizeLine(new LineText(line), ruleStack, TimeSpan.FromSeconds(5));
-
+            var lineResult = grammar.TokenizeLine(new LineText(line), ruleStack, TimeSpan.FromSeconds(5));
             ruleStack = lineResult.RuleStack;
             result.Add(BuildRuns(line, lineResult.Tokens, theme));
         }

@@ -3,6 +3,7 @@ using MarpToPptx.Core;
 using MarpToPptx.Pptx.Rendering;
 using MarpToPptx.Pptx.Validation;
 using A = DocumentFormat.OpenXml.Drawing;
+using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Tests;
 
@@ -161,15 +162,28 @@ public class SyntaxHighlighterTests
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.First();
 
-        // Should have multiple runs (at least keywords and whitespace with different colors)
-        var allRuns = slidePart.Slide!.Descendants<A.Run>().ToArray();
-        Assert.NotEmpty(allRuns);
+        // Find the code-block shape by its name ("Code (csharp)")
+        var codeShape = slidePart.Slide!
+            .Descendants<P.Shape>()
+            .FirstOrDefault(s => s.NonVisualShapeProperties?
+                .NonVisualDrawingProperties?.Name?.Value?.StartsWith("Code (", StringComparison.Ordinal) == true);
+        Assert.NotNull(codeShape);
 
-        // At least some runs should have explicit color fill (syntax highlighting)
-        var coloredRuns = allRuns
-            .Where(r => r.Descendants<A.RgbColorModelHex>().Any())
-            .ToArray();
-        Assert.NotEmpty(coloredRuns);
+        // The first content paragraph of the highlighted code block should have >1 run
+        // (because keywords, whitespace, and identifiers get distinct colored runs)
+        var firstCodeParagraph = codeShape.Descendants<A.Paragraph>()
+            .FirstOrDefault(p => p.Descendants<A.Run>().Count() > 1);
+        Assert.NotNull(firstCodeParagraph);
+
+        // There must be at least 2 distinct RgbColorModelHex values within that paragraph,
+        // proving that syntax highlighting produced different token colors
+        var distinctColors = firstCodeParagraph!
+            .Descendants<A.RgbColorModelHex>()
+            .Select(rgb => rgb.Val?.Value)
+            .Where(v => v is not null)
+            .Distinct()
+            .ToList();
+        Assert.True(distinctColors.Count >= 2, $"Expected at least 2 distinct token colors in highlighted code paragraph, got {distinctColors.Count}: [{string.Join(", ", distinctColors)}]");
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
