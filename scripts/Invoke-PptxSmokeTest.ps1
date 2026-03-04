@@ -16,29 +16,133 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+$script:OpenXmlAssemblies = @()
+
+function Get-OpenXmlType {
+	param(
+		[Parameter(Mandatory = $true)]
+		[string]$TypeName
+	)
+
+	foreach ($assembly in $script:OpenXmlAssemblies) {
+		$type = $assembly.GetType($TypeName, $false)
+		if ($null -ne $type) {
+			return $type
+		}
+	}
+
+	throw "Unable to find type [$TypeName] in the loaded Open XML assemblies."
+}
+
+function Get-PackageAssemblyPath {
+	param(
+		[Parameter(Mandatory = $true)]
+		[hashtable]$AssetsData,
+
+		[Parameter(Mandatory = $true)]
+		[string]$PackageId,
+
+		[Parameter(Mandatory = $true)]
+		[string]$FileName,
+
+		[Parameter(Mandatory = $true)]
+		[string]$NuGetPackagesRoot
+	)
+
+	$libraryEntry = $AssetsData["libraries"].GetEnumerator() |
+		Where-Object { $_.Key -like "$PackageId/*" } |
+		Select-Object -First 1
+
+	if ($null -eq $libraryEntry) {
+		throw "Unable to find package '$PackageId' in project.assets.json."
+	}
+
+	$packageFiles = @($libraryEntry.Value["files"])
+	$preferredFrameworks = @()
+	$runtimeVersionMajor = [System.Environment]::Version.Major
+
+	if ($runtimeVersionMajor -ge 10) {
+		$preferredFrameworks += "net10.0"
+	}
+
+	if ($runtimeVersionMajor -ge 8) {
+		$preferredFrameworks += "net8.0"
+	}
+
+	if ($runtimeVersionMajor -ge 6) {
+		$preferredFrameworks += "net6.0"
+	}
+
+	$preferredFrameworks += "netstandard2.0"
+
+	$relativeAssemblyPath = $null
+	foreach ($framework in $preferredFrameworks | Select-Object -Unique) {
+		$candidatePath = "lib/$framework/$FileName"
+		if ($packageFiles -contains $candidatePath) {
+			$relativeAssemblyPath = $candidatePath
+			break
+		}
+	}
+
+	if ($null -eq $relativeAssemblyPath) {
+		throw "Unable to find a PowerShell-compatible runtime assembly '$FileName' for package '$PackageId'."
+	}
+
+	return Join-Path (Join-Path $NuGetPackagesRoot $libraryEntry.Value["path"]) $relativeAssemblyPath
+}
+
 function Import-OpenXmlValidationAssemblies {
 	param(
 		[Parameter(Mandatory = $true)]
 		[string]$CliOutputDirectory
 	)
 
-	$assemblyPaths = @(
-		"System.IO.Packaging.dll",
-		"DocumentFormat.OpenXml.Framework.dll",
-		"DocumentFormat.OpenXml.dll"
-	) | ForEach-Object {
-		Join-Path $CliOutputDirectory $_
+	$cliProjectDirectory = Split-Path -Parent (Split-Path -Parent (Split-Path -Parent $CliOutputDirectory))
+	$assetsFilePath = Join-Path (Join-Path $cliProjectDirectory "obj") "project.assets.json"
+	if (-not (Test-Path $assetsFilePath)) {
+		throw "Unable to locate project.assets.json at '$assetsFilePath'."
 	}
+
+	$nuGetPackagesRoot = if ($env:NUGET_PACKAGES) {
+		$env:NUGET_PACKAGES
+	}
+	elseif ($HOME) {
+		Join-Path $HOME ".nuget/packages"
+	}
+	else {
+		throw "Unable to determine the NuGet global-packages directory."
+	}
+
+	$assetsData = Get-Content -Path $assetsFilePath -Raw | ConvertFrom-Json -AsHashtable
+	$assemblyPaths = @(
+		(Get-PackageAssemblyPath -AssetsData $assetsData -PackageId "System.IO.Packaging" -FileName "System.IO.Packaging.dll" -NuGetPackagesRoot $nuGetPackagesRoot),
+		(Get-PackageAssemblyPath -AssetsData $assetsData -PackageId "DocumentFormat.OpenXml.Framework" -FileName "DocumentFormat.OpenXml.Framework.dll" -NuGetPackagesRoot $nuGetPackagesRoot),
+		(Get-PackageAssemblyPath -AssetsData $assetsData -PackageId "DocumentFormat.OpenXml" -FileName "DocumentFormat.OpenXml.dll" -NuGetPackagesRoot $nuGetPackagesRoot)
+	)
+
+	$loadedAssemblies = @()
 
 	foreach ($assemblyPath in $assemblyPaths) {
 		if (-not (Test-Path $assemblyPath)) {
 			throw "Required validation assembly was not found: $assemblyPath"
 		}
 
-		if (-not ([AppDomain]::CurrentDomain.GetAssemblies() | Where-Object { $_.Location -eq $assemblyPath })) {
-			Add-Type -Path $assemblyPath
+		$assemblyName = [System.Reflection.AssemblyName]::GetAssemblyName($assemblyPath)
+		$assembly = [AppDomain]::CurrentDomain.GetAssemblies() |
+			Where-Object { $_.FullName -eq $assemblyName.FullName } |
+			Select-Object -First 1
+		if ($null -eq $assembly) {
+			$tempDirectory = Join-Path ([System.IO.Path]::GetTempPath()) ("MarpToPptx-openxml-{0}" -f ([System.Guid]::NewGuid().ToString("N")))
+			New-Item -ItemType Directory -Path $tempDirectory -Force | Out-Null
+			$tempAssemblyPath = Join-Path $tempDirectory ([System.IO.Path]::GetFileName($assemblyPath))
+			Copy-Item -Path $assemblyPath -Destination $tempAssemblyPath -Force
+			$assembly = [System.Reflection.Assembly]::LoadFrom($tempAssemblyPath)
 		}
+
+		$loadedAssemblies += $assembly
 	}
+
+	$script:OpenXmlAssemblies = $loadedAssemblies
 }
 
 function Test-OpenXmlPackage {
@@ -49,10 +153,25 @@ function Test-OpenXmlPackage {
 
 	$validationErrors = @()
 	$document = $null
+	$presentationDocumentType = Get-OpenXmlType -TypeName "DocumentFormat.OpenXml.Packaging.PresentationDocument"
+	$openXmlValidatorType = Get-OpenXmlType -TypeName "DocumentFormat.OpenXml.Validation.OpenXmlValidator"
+	$openMethod = $presentationDocumentType.GetMethods() |
+		Where-Object {
+			$parameters = $_.GetParameters()
+			$_.Name -eq "Open" -and
+			$parameters.Count -eq 2 -and
+			$parameters[0].ParameterType -eq [string] -and
+			$parameters[1].ParameterType -eq [bool]
+		} |
+		Select-Object -First 1
+
+	if ($null -eq $openMethod) {
+		throw "Unable to find PresentationDocument.Open(string, bool)."
+	}
 
 	try {
-		$document = [DocumentFormat.OpenXml.Packaging.PresentationDocument]::Open($PptxPath, $false)
-		$validator = [DocumentFormat.OpenXml.Validation.OpenXmlValidator]::new()
+		$document = $openMethod.Invoke($null, @($PptxPath, $false))
+		$validator = [System.Activator]::CreateInstance($openXmlValidatorType)
 		$validationErrors = @($validator.Validate($document))
 	}
 	finally {
