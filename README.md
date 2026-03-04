@@ -11,6 +11,8 @@ For a precise description of how this repo defines and implements Marp-style Mar
 
 For renderer and PowerPoint package requirements and compatibility reference material, see `doc/pptx-compatibility-notes.md`.
 
+For integrating `MarpToPptx` into a VS Code authoring workflow in a content repository, see `doc/vscode-workflow.md`.
+
 ## Current Structure
 
 - `src/MarpToPptx.Core`: semantic slide model, Markdown parsing, theme parsing, layout planning
@@ -49,6 +51,36 @@ To update later:
 ```bash
 dotnet tool update --global MarpToPptx
 ```
+
+### VS Code Task
+
+Add a `.vscode/tasks.json` to your content repository to export the currently open file:
+
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Export to PPTX",
+      "type": "shell",
+      "command": "dnx",
+      "args": [
+        "MarpToPptx",
+        "${file}",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}.pptx"
+      ],
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}
+```
+
+Run it from **Terminal → Run Task** while the Markdown file is open. The `.pptx` is written next to the source file.
+
+For template-based export, theme CSS, version pinning, team sharing, and the full edit / preview / export loop with the Marp for VS Code extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
 
 ### Run From Source
 
