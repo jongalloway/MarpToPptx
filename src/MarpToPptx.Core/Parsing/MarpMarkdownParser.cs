@@ -202,7 +202,6 @@ public sealed class MarpMarkdownParser
                         {
                             yield return nestedItem;
                         }
-
                         break;
                 }
             }
