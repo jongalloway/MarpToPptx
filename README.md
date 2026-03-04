@@ -11,6 +11,8 @@ For a precise description of how this repo defines and implements Marp-style Mar
 
 For renderer and PowerPoint package requirements and compatibility reference material, see `doc/pptx-compatibility-notes.md`.
 
+For the `DocumentFormat.OpenXml` `3.4.1` presentation-impact audit and related follow-up notes, see `doc/openxml-3.4.1-audit.md`.
+
 For integrating `MarpToPptx` into a VS Code authoring workflow in a content repository, see `doc/vscode-workflow.md`.
 
 ## Current Structure
