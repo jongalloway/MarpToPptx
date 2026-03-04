@@ -11,6 +11,8 @@ For a precise description of how this repo defines and implements Marp-style Mar
 
 For renderer and PowerPoint package requirements and compatibility reference material, see `doc/pptx-compatibility-notes.md`.
 
+For integrating `MarpToPptx` into a VS Code authoring workflow in a content repository, see `doc/vscode-workflow.md`.
+
 ## Current Structure
 
 - `src/MarpToPptx.Core`: semantic slide model, Markdown parsing, theme parsing, layout planning
