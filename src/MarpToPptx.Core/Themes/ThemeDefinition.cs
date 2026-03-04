@@ -16,6 +16,12 @@ public sealed record ThemeDefinition
 
     public string AccentColor { get; init; } = "#0F766E";
 
+    public string? BackgroundImage { get; init; } = null;
+
+    public string? BackgroundSize { get; init; } = null;
+
+    public string? BackgroundPosition { get; init; } = null;
+
     public Spacing SlidePadding { get; init; } = new(48, 60, 48, 60);
 
     public TextStyle Body { get; init; } = new(24, "#1F2937", "Aptos", false);
@@ -33,7 +39,7 @@ public sealed record ThemeDefinition
     };
 }
 
-public sealed record TextStyle(double FontSize, string Color, string FontFamily, bool Bold, string? BackgroundColor = null);
+public sealed record TextStyle(double FontSize, string Color, string FontFamily, bool Bold, string? BackgroundColor = null, double? LineHeight = null, double? LetterSpacing = null, string? TextTransform = null);
 
 public sealed record Spacing(double Top, double Right, double Bottom, double Left)
 {
