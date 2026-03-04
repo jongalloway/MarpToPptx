@@ -240,6 +240,262 @@ public class PptxRendererTests
         Assert.Empty(validationErrors);
     }
 
+    [Fact]
+    public void Renderer_ResolvesRemoteImage_WhenHttpHandlerReturnsImage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new System.Net.Http.ByteArrayContent(pngBytes),
+            };
+            response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            return response;
+        });
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide With Remote Image
+
+            ![Remote](https://example.com/photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = true,
+            RemoteAssetHandler = handler,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        Assert.DoesNotContain("Missing image", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_WhenRemoteImageReturnsHttpError()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var handler = new StubHttpMessageHandler(_ =>
+            new HttpResponseMessage(System.Net.HttpStatusCode.NotFound));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Broken](https://example.com/missing.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = true,
+            RemoteAssetHandler = handler,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Missing image") && t.Contains("https://example.com/missing.png"));
+        Assert.Contains(texts, t => t.Contains("404") || t.Contains("Not Found"));
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_WhenRemoteAssetsDisabled()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Remote](https://example.com/photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = false,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Missing image") && t.Contains("https://example.com/photo.png"));
+    }
+
+    [Fact]
+    public void Renderer_AcceptsBmpImage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Minimal valid 16x16 BMP with a BITMAPINFOHEADER
+        var bmpBytes = new byte[]
+        {
+            0x42, 0x4D,             // BM signature
+            0x36, 0x03, 0x00, 0x00, // file size = 822 (doesn't matter for test)
+            0x00, 0x00, 0x00, 0x00, // reserved
+            0x36, 0x00, 0x00, 0x00, // pixel data offset = 54
+            0x28, 0x00, 0x00, 0x00, // BITMAPINFOHEADER size = 40
+            0x10, 0x00, 0x00, 0x00, // width = 16
+            0x10, 0x00, 0x00, 0x00, // height = 16
+            0x01, 0x00,             // color planes = 1
+            0x18, 0x00,             // bits per pixel = 24
+            0x00, 0x00, 0x00, 0x00, // compression = none
+            0x00, 0x03, 0x00, 0x00, // image size (can be 0 for uncompressed)
+            0x13, 0x0B, 0x00, 0x00, // x pixels per meter
+            0x13, 0x0B, 0x00, 0x00, // y pixels per meter
+            0x00, 0x00, 0x00, 0x00, // colors in color table
+            0x00, 0x00, 0x00, 0x00, // important color count
+        };
+
+        workspace.WriteFile("image.bmp", bmpBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # BMP Slide
+
+            ![Bitmap](image.bmp)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        Assert.DoesNotContain("Missing image", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+        Assert.DoesNotContain("Unsupported image format", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+    }
+
+    [Fact]
+    public void Renderer_AcceptsWebpImage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Minimal VP8X extended WebP with 16x16 canvas
+        // Structure: RIFF header (12) + VP8X chunk (20 bytes: 4 tag + 4 size + 4 flags + 3 cw + 3 ch + 2 padding)
+        var webpBytes = new byte[]
+        {
+            0x52, 0x49, 0x46, 0x46, // RIFF
+            0x1E, 0x00, 0x00, 0x00, // file size = 30 (just enough)
+            0x57, 0x45, 0x42, 0x50, // WEBP
+            0x56, 0x50, 0x38, 0x58, // VP8X
+            0x0A, 0x00, 0x00, 0x00, // chunk size = 10
+            0x00, 0x00, 0x00, 0x00, // flags
+            0x0F, 0x00, 0x00,       // canvas_width_minus_one = 15 → width = 16
+            0x0F, 0x00, 0x00,       // canvas_height_minus_one = 15 → height = 16
+        };
+
+        workspace.WriteFile("image.webp", webpBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # WebP Slide
+
+            ![Webp](image.webp)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        Assert.DoesNotContain("Missing image", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+        Assert.DoesNotContain("Unsupported image format", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+    }
+
+    [Fact]
+    public void Renderer_ShowsActionableError_ForUnsupportedImageFormat()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("icon.ico", new byte[] { 0x00, 0x00, 0x01, 0x00, 0x00, 0x00 });
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Icon](icon.ico)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains(texts, t => t.Contains("Unsupported image format"));
+    }
+
+    [Fact]
+    public void Renderer_ResolvesRemoteImage_WhenUrlHasNoFileExtension()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+
+        var handler = new StubHttpMessageHandler(req =>
+        {
+            var response = new HttpResponseMessage(System.Net.HttpStatusCode.OK)
+            {
+                Content = new System.Net.Http.ByteArrayContent(pngBytes),
+            };
+            response.Content.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+            return response;
+        });
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Remote No Ext](https://cdn.example.com/images/thumbnail)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+            AllowRemoteAssets = true,
+            RemoteAssetHandler = handler,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+    }
+
     private static void RenderDeck(string markdownPath, string outputPath, string sourceDirectory)
     {
         var compiler = new MarpCompiler();
@@ -247,6 +503,12 @@ public class PptxRendererTests
 
         var renderer = new OpenXmlPptxRenderer();
         renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = sourceDirectory });
+    }
+
+    private sealed class StubHttpMessageHandler(Func<HttpRequestMessage, HttpResponseMessage> handler) : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+            => Task.FromResult(handler(request));
     }
 
     private sealed class TestWorkspace : IDisposable

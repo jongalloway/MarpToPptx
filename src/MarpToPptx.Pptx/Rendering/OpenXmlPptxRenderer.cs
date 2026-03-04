@@ -29,6 +29,10 @@ public sealed class OpenXmlPptxRenderer
             Directory.CreateDirectory(outputDirectory);
         }
 
+        using var remoteAssets = options.AllowRemoteAssets
+            ? new RemoteAssetResolver(options.RemoteAssetHandler)
+            : null;
+
         using (var document = OpenPresentation(outputPath, options.TemplatePath))
         {
             var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
@@ -42,7 +46,7 @@ public sealed class OpenXmlPptxRenderer
 
             foreach (var slideModel in deck.Slides)
             {
-                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath));
+                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets);
             }
 
             EnsureDocumentProperties(document, deck, options.TemplatePath);
@@ -264,7 +268,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory)
+    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets)
     {
         var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
         slidePart.AddPart(slideLayoutPart, "rId1");
@@ -282,7 +286,7 @@ public sealed class OpenXmlPptxRenderer
             new P.ColorMapOverride(new A.MasterColorMapping()));
 
         slidePart.Slide = slide;
-        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme);
+        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets);
         AddBackground(slideModel.Style, context);
 
         var plan = _layoutEngine.LayoutSlide(slideModel, theme);
@@ -556,14 +560,23 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, bool useFullBleed = false)
     {
-        var resolved = ResolvePath(context.SourceDirectory, source);
+        var resolved = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
         if (resolved is null || !File.Exists(resolved))
         {
-            AddTextShape(context, frame, string.IsNullOrWhiteSpace(source) ? "Missing image" : $"Missing image: {source}", context.Theme.Body);
+            var errorText = resolveError is not null
+                ? $"Missing image: {source} ({resolveError})"
+                : string.IsNullOrWhiteSpace(source) ? "Missing image" : $"Missing image: {source}";
+            AddTextShape(context, frame, errorText, context.Theme.Body);
             return;
         }
 
         var contentType = GetImageContentType(resolved);
+        if (contentType is null)
+        {
+            AddTextShape(context, frame, $"Unsupported image format: {source}", context.Theme.Body);
+            return;
+        }
+
         var imagePart = context.SlidePart.AddImagePart(contentType);
         using (var imageStream = File.OpenRead(resolved))
         {
@@ -622,8 +635,10 @@ public sealed class OpenXmlPptxRenderer
         return (frame.X + ((frame.Width - fittedWidth) / 2), frame.Y, fittedWidth, frame.Height);
     }
 
-    private static string? ResolvePath(string? sourceDirectory, string source)
+    private static string? ResolvePath(string? sourceDirectory, string source, RemoteAssetResolver? remoteAssets, out string? errorMessage)
     {
+        errorMessage = null;
+
         if (string.IsNullOrWhiteSpace(source))
         {
             return null;
@@ -631,6 +646,16 @@ public sealed class OpenXmlPptxRenderer
 
         if (Uri.TryCreate(source, UriKind.Absolute, out var uri) && !uri.IsFile)
         {
+            if (uri.Scheme is "http" or "https" && remoteAssets is not null)
+            {
+                return remoteAssets.Resolve(source, out errorMessage);
+            }
+
+            if (uri.Scheme is "http" or "https")
+            {
+                errorMessage = "remote assets are disabled";
+            }
+
             return null;
         }
 
@@ -1251,8 +1276,10 @@ public sealed class OpenXmlPptxRenderer
         return trimmed.Length >= 6 ? trimmed[..6].ToUpperInvariant() : "000000";
     }
 
-    private static string GetImageContentType(string path)
-        => IOPath.GetExtension(path).ToLowerInvariant() switch
+    private static string? GetImageContentType(string path)
+    {
+        var ext = IOPath.GetExtension(path).ToLowerInvariant();
+        var typeFromExtension = ext switch
         {
             ".png" => "image/png",
             ".jpg" or ".jpeg" => "image/jpeg",
@@ -1260,10 +1287,29 @@ public sealed class OpenXmlPptxRenderer
             ".bmp" => "image/bmp",
             ".tif" or ".tiff" => "image/tiff",
             ".svg" => "image/svg+xml",
-            _ => "image/png",
+            ".webp" => "image/webp",
+            _ => null,
         };
 
-    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme)
+        if (typeFromExtension is not null)
+        {
+            return typeFromExtension;
+        }
+
+        // Fall back to magic-byte detection for files without a recognized extension
+        // (e.g. remote images downloaded to a .bin temp file).
+        try
+        {
+            using var stream = File.OpenRead(path);
+            return ImageMetadataReader.TryDetectContentType(stream);
+        }
+        catch
+        {
+            return null;
+        }
+    }
+
+    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets)
     {
         private uint _shapeId = 1;
 
@@ -1274,6 +1320,8 @@ public sealed class OpenXmlPptxRenderer
         public string? SourceDirectory { get; } = sourceDirectory;
 
         public ThemeDefinition Theme { get; } = theme;
+
+        public RemoteAssetResolver? RemoteAssets { get; } = remoteAssets;
 
         public uint NextShapeId() => ++_shapeId;
     }
