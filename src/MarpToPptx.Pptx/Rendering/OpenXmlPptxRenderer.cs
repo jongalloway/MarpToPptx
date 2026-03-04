@@ -326,10 +326,10 @@ public sealed class OpenXmlPptxRenderer
             switch (placed.Element)
             {
                 case HeadingElement heading:
-                    AddTextShape(context, frame, heading.Text, ResolveHeadingStyle(theme, heading.Level), isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
+                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(theme, heading.Level), theme.Code, isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
                     break;
                 case ParagraphElement paragraph:
-                    AddTextShape(context, frame, paragraph.Text, theme.Body);
+                    AddTextShape(context, frame, paragraph.Spans, theme.Body, theme.Code);
                     break;
                 case BulletListElement list:
                     AddBulletList(context, frame, list, theme.Body);
@@ -519,10 +519,27 @@ public sealed class OpenXmlPptxRenderer
             lineColor: null));
     }
 
+    private static void AddTextShape(SlideRenderContext context, Rect frame, IReadOnlyList<InlineSpan> spans, TextStyle style, TextStyle? codeStyle, bool isTitle = false)
+    {
+        var paragraphGroups = SplitSpansIntoParagraphs(spans);
+        var paragraphs = paragraphGroups
+            .Select(group => CreateParagraphFromSpans(group, style, codeStyle, context.SlidePart, null, false, 1))
+            .ToArray();
+
+        context.ShapeTree.Append(CreateTextShape(
+            context.NextShapeId(),
+            isTitle ? "Title" : "Text",
+            frame,
+            paragraphs,
+            noFill: true,
+            fillColor: null,
+            lineColor: null));
+    }
+
     private static void AddBulletList(SlideRenderContext context, Rect frame, BulletListElement list, TextStyle style)
     {
         var paragraphs = list.Items
-            .Select((item, index) => CreateParagraph(item.Text, style, item.Depth, list.Ordered, index + 1))
+            .Select((item, index) => CreateParagraphFromSpans(item.Spans, style, context.Theme.Code, context.SlidePart, item.Depth, list.Ordered, index + 1))
             .ToArray();
 
         context.ShapeTree.Append(CreateTextShape(
@@ -640,9 +657,9 @@ public sealed class OpenXmlPptxRenderer
             var aRow = new A.TableRow { Height = rowHeight };
             for (var col = 0; col < columnCount; col++)
             {
-                var cellText = col < row.Cells.Count ? row.Cells[col] : string.Empty;
+                var cellSpans = col < row.Cells.Count ? row.Cells[col] : Array.Empty<InlineSpan>();
                 var alignment = col < table.ColumnAlignments.Count ? table.ColumnAlignments[col] : null;
-                aRow.Append(CreateTableCell(cellText, style, row.IsHeader, alignment));
+                aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.Code));
             }
 
             aTable.Append(aRow);
@@ -662,22 +679,8 @@ public sealed class OpenXmlPptxRenderer
         context.ShapeTree.Append(graphicFrame);
     }
 
-    private static A.TableCell CreateTableCell(string text, TextStyle style, bool isHeader, TableColumnAlignment? alignment)
+    private static A.TableCell CreateTableCell(IReadOnlyList<InlineSpan> spans, TextStyle style, bool isHeader, TableColumnAlignment? alignment, SlidePart slidePart, TextStyle? codeStyle)
     {
-        var runProperties = new A.RunProperties
-        {
-            Language = "en-US",
-            FontSize = (int)Math.Round(style.FontSize * 100),
-            Bold = isHeader || style.Bold,
-        };
-        if (style.LetterSpacing.HasValue)
-        {
-            runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
-        }
-
-        runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(style.Color) }));
-        runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
-
         var paragraph = new A.Paragraph();
         var paragraphProperties = new A.ParagraphProperties();
         if (alignment.HasValue)
@@ -701,8 +704,50 @@ public sealed class OpenXmlPptxRenderer
             paragraph.Append(paragraphProperties);
         }
 
-        var displayText = ApplyTextTransform(text, style.TextTransform);
-        paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
+        foreach (var span in spans.Where(s => s.Text.Length > 0))
+        {
+            if (span.Text == "\n")
+            {
+                paragraph.Append(new A.Break());
+                continue;
+            }
+
+            var fontFamily = span.Code && codeStyle is not null ? codeStyle.FontFamily : style.FontFamily;
+            var color = span.Code && codeStyle is not null ? NormalizeColor(codeStyle.Color) : NormalizeColor(style.Color);
+            var runProperties = new A.RunProperties
+            {
+                Language = "en-US",
+                FontSize = (int)Math.Round(style.FontSize * 100),
+                Bold = isHeader || span.Bold || style.Bold,
+            };
+            if (span.Italic)
+            {
+                runProperties.Italic = true;
+            }
+
+            if (span.Strikethrough)
+            {
+                runProperties.Strike = A.TextStrikeValues.SingleStrike;
+            }
+
+            if (style.LetterSpacing.HasValue)
+            {
+                runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
+            }
+
+            runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = color }));
+            runProperties.Append(new A.LatinFont { Typeface = fontFamily });
+
+            if (span.HyperlinkUrl is not null && Uri.TryCreate(span.HyperlinkUrl, UriKind.Absolute, out var tableCellHlinkUri))
+            {
+                var hlinkRel = slidePart.AddHyperlinkRelationship(tableCellHlinkUri, true);
+                runProperties.Append(new A.HyperlinkOnClick { Id = hlinkRel.Id });
+            }
+
+            var displayText = ApplyTextTransform(span.Text, style.TextTransform);
+            paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
+        }
+
         paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
 
         var textBody = new A.TextBody(new A.BodyProperties(), new A.ListStyle());
@@ -967,6 +1012,117 @@ public sealed class OpenXmlPptxRenderer
 
         paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
         return paragraph;
+    }
+
+    private static A.Paragraph CreateParagraphFromSpans(
+        IReadOnlyList<InlineSpan> spans,
+        TextStyle style,
+        TextStyle? codeStyle,
+        SlidePart? slidePart,
+        int? level,
+        bool ordered,
+        int orderNumber)
+    {
+        var paragraph = new A.Paragraph();
+
+        if (level is not null)
+        {
+            var paragraphProperties = new A.ParagraphProperties();
+            paragraphProperties.Level = level.Value;
+            if (ordered)
+            {
+                paragraphProperties.Append(new A.AutoNumberedBullet { Type = A.TextAutoNumberSchemeValues.ArabicPeriod, StartAt = orderNumber });
+            }
+            else
+            {
+                paragraphProperties.Append(new A.CharacterBullet { Char = "•" });
+            }
+
+            paragraph.Append(paragraphProperties);
+        }
+        else if (style.LineHeight.HasValue)
+        {
+            var paragraphProperties = new A.ParagraphProperties();
+            var lineSpacingValue = (int)Math.Round(style.LineHeight.Value * 100000);
+            paragraphProperties.Append(new A.LineSpacing(new A.SpacingPercent { Val = lineSpacingValue }));
+            paragraph.Append(paragraphProperties);
+        }
+
+        foreach (var span in spans.Where(s => s.Text.Length > 0))
+        {
+            if (span.Text == "\n")
+            {
+                paragraph.Append(new A.Break());
+                continue;
+            }
+
+            var isCode = span.Code && codeStyle is not null;
+            var fontFamily = isCode ? codeStyle!.FontFamily : style.FontFamily;
+            var color = isCode ? NormalizeColor(codeStyle!.Color) : NormalizeColor(style.Color);
+
+            var runProperties = new A.RunProperties
+            {
+                Language = "en-US",
+                FontSize = (int)Math.Round(style.FontSize * 100),
+                Bold = span.Bold || style.Bold,
+            };
+            if (span.Italic)
+            {
+                runProperties.Italic = true;
+            }
+
+            if (span.Strikethrough)
+            {
+                runProperties.Strike = A.TextStrikeValues.SingleStrike;
+            }
+
+            if (style.LetterSpacing.HasValue)
+            {
+                runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
+            }
+
+            runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = color }));
+            runProperties.Append(new A.LatinFont { Typeface = fontFamily });
+
+            if (span.HyperlinkUrl is not null && slidePart is not null &&
+                Uri.TryCreate(span.HyperlinkUrl, UriKind.Absolute, out var hlinkUri))
+            {
+                var hlinkRel = slidePart.AddHyperlinkRelationship(hlinkUri, true);
+                runProperties.Append(new A.HyperlinkOnClick { Id = hlinkRel.Id });
+            }
+
+            var displayText = ApplyTextTransform(span.Text, style.TextTransform);
+            paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
+        }
+
+        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+        return paragraph;
+    }
+
+    /// <summary>
+    /// Splits a flat span list into paragraph groups, using spans whose <c>Text</c> equals
+    /// <c>"\n"</c> as paragraph-break markers.
+    /// </summary>
+    private static IReadOnlyList<IReadOnlyList<InlineSpan>> SplitSpansIntoParagraphs(IReadOnlyList<InlineSpan> spans)
+    {
+        var result = new List<List<InlineSpan>>();
+        var current = new List<InlineSpan>();
+
+        foreach (var span in spans)
+        {
+            if (span.Text == "\n")
+            {
+                result.Add(current);
+                current = new List<InlineSpan>();
+            }
+            else
+            {
+                current.Add(span);
+            }
+        }
+
+        result.Add(current);
+        return result;
     }
 
     private static string ApplyTextTransform(string text, string? textTransform)

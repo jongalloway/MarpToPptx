@@ -109,7 +109,7 @@ public sealed class MarpMarkdownParser
             switch (block)
             {
                 case HeadingBlock heading:
-                    elements.Add(new HeadingElement(heading.Level, ExtractInlineText(heading.Inline).Trim()));
+                    elements.Add(new HeadingElement(heading.Level, TrimSpans(ExtractInlineSpans(heading.Inline))));
                     break;
                 case ParagraphBlock paragraph:
                     AppendParagraphElements(paragraph, elements);
@@ -157,9 +157,10 @@ public sealed class MarpMarkdownParser
     private static void AppendParagraphElements(ParagraphBlock paragraph, ICollection<ISlideElement> elements)
     {
         var media = ExtractMediaElements(paragraph.Inline).ToArray();
-        var text = ExtractInlineText(paragraph.Inline).Trim();
+        var spans = TrimSpans(ExtractInlineSpans(paragraph.Inline));
+        var hasText = spans.Any(s => s.Text.Length > 0);
 
-        if (media.Length > 0 && text.Length == 0)
+        if (media.Length > 0 && !hasText)
         {
             foreach (var item in media)
             {
@@ -169,9 +170,9 @@ public sealed class MarpMarkdownParser
             return;
         }
 
-        if (text.Length > 0)
+        if (hasText)
         {
-            elements.Add(new ParagraphElement(text));
+            elements.Add(new ParagraphElement(spans));
         }
 
         foreach (var item in media)
@@ -184,16 +185,22 @@ public sealed class MarpMarkdownParser
     {
         foreach (var item in list.OfType<ListItemBlock>())
         {
-            var fragments = new List<string>();
+            var spanFragments = new List<InlineSpan>();
             foreach (var child in item)
             {
                 switch (child)
                 {
                     case ParagraphBlock paragraph:
-                        fragments.Add(ExtractInlineText(paragraph.Inline).Trim());
+                        var childSpans = TrimSpans(ExtractInlineSpans(paragraph.Inline));
+                        if (spanFragments.Count > 0 && childSpans.Count > 0)
+                        {
+                            spanFragments.Add(new InlineSpan(" "));
+                        }
+
+                        spanFragments.AddRange(childSpans);
                         break;
                     case FencedCodeBlock code:
-                        fragments.Add(code.Lines.ToString() ?? string.Empty);
+                        spanFragments.Add(new InlineSpan(code.Lines.ToString() ?? string.Empty, Code: true));
                         break;
                     case ListBlock nested:
                         foreach (var nestedItem in FlattenListItems(nested, depth + 1))
@@ -204,9 +211,9 @@ public sealed class MarpMarkdownParser
                 }
             }
 
-            if (fragments.Count > 0)
+            if (spanFragments.Any(s => s.Text.Length > 0))
             {
-                yield return new BulletListItem(string.Join(" ", fragments.Where(fragment => fragment.Length > 0)), depth);
+                yield return new BulletListItem(spanFragments, depth);
             }
         }
     }
@@ -221,7 +228,7 @@ public sealed class MarpMarkdownParser
                 continue;
             }
 
-            var cells = new List<string>();
+            var cells = new List<IReadOnlyList<InlineSpan>>();
             foreach (var cellObj in row)
             {
                 if (cellObj is not TableCell cell)
@@ -229,11 +236,30 @@ public sealed class MarpMarkdownParser
                     continue;
                 }
 
-                cells.Add(string.Join(" ", cell.Select(block => block switch
+                var cellSpans = new List<InlineSpan>();
+                foreach (var block in cell)
                 {
-                    ParagraphBlock paragraph => ExtractInlineText(paragraph.Inline).Trim(),
-                    _ => block.ToString() ?? string.Empty,
-                }).Where(text => !string.IsNullOrWhiteSpace(text))));
+                    if (block is ParagraphBlock paragraph)
+                    {
+                        var spans = TrimSpans(ExtractInlineSpans(paragraph.Inline));
+                        if (cellSpans.Count > 0 && spans.Count > 0)
+                        {
+                            cellSpans.Add(new InlineSpan(" "));
+                        }
+
+                        cellSpans.AddRange(spans);
+                    }
+                    else
+                    {
+                        var text = block.ToString() ?? string.Empty;
+                        if (!string.IsNullOrWhiteSpace(text))
+                        {
+                            cellSpans.Add(new InlineSpan(text));
+                        }
+                    }
+                }
+
+                cells.Add(cellSpans);
             }
 
             rows.Add(new TableRowModel(cells, row.IsHeader));
@@ -296,6 +322,86 @@ public sealed class MarpMarkdownParser
                     break;
             }
         }
+    }
+
+    /// <summary>
+    /// Extracts a list of <see cref="InlineSpan"/> from a Markdig inline tree, preserving
+    /// bold, italic, inline-code, strikethrough formatting and non-image hyperlink URLs.
+    /// A <see cref="LineBreakInline"/> node is emitted as a span with <c>Text = "\n"</c>.
+    /// </summary>
+    private static IReadOnlyList<InlineSpan> ExtractInlineSpans(
+        ContainerInline? inline,
+        bool bold = false,
+        bool italic = false,
+        bool strikethrough = false,
+        bool code = false,
+        string? hyperlinkUrl = null)
+    {
+        if (inline is null)
+        {
+            return [];
+        }
+
+        var spans = new List<InlineSpan>();
+        foreach (var child in inline)
+        {
+            switch (child)
+            {
+                case LiteralInline literal:
+                    spans.Add(new InlineSpan(literal.Content.ToString(), bold, italic, code, strikethrough, hyperlinkUrl));
+                    break;
+                case LineBreakInline:
+                    spans.Add(new InlineSpan("\n"));
+                    break;
+                case CodeInline codeInline:
+                    spans.Add(new InlineSpan(codeInline.Content, bold, italic, Code: true, Strikethrough: strikethrough, HyperlinkUrl: hyperlinkUrl));
+                    break;
+                case EmphasisInline emphasis:
+                {
+                    var isBold = (emphasis.DelimiterChar is '*' or '_') && emphasis.DelimiterCount >= 2;
+                    var isItalic = (emphasis.DelimiterChar is '*' or '_') && emphasis.DelimiterCount == 1;
+                    var isStrikethrough = emphasis.DelimiterChar == '~';
+                    spans.AddRange(ExtractInlineSpans(
+                        emphasis,
+                        bold || isBold,
+                        italic || isItalic,
+                        strikethrough || isStrikethrough,
+                        code,
+                        hyperlinkUrl));
+                    break;
+                }
+
+                case LinkInline link when !link.IsImage:
+                    spans.AddRange(ExtractInlineSpans(link, bold, italic, strikethrough, code, link.Url));
+                    break;
+                case ContainerInline nested:
+                    spans.AddRange(ExtractInlineSpans(nested, bold, italic, strikethrough, code, hyperlinkUrl));
+                    break;
+            }
+        }
+
+        return spans;
+    }
+
+    /// <summary>
+    /// Trims leading and trailing whitespace-only spans (including newline markers)
+    /// from the span list, matching the trim behavior of the previous plain-text extraction.
+    /// </summary>
+    private static IReadOnlyList<InlineSpan> TrimSpans(IReadOnlyList<InlineSpan> spans)
+    {
+        var list = spans.ToList();
+
+        while (list.Count > 0 && string.IsNullOrWhiteSpace(list[0].Text))
+        {
+            list.RemoveAt(0);
+        }
+
+        while (list.Count > 0 && string.IsNullOrWhiteSpace(list[^1].Text))
+        {
+            list.RemoveAt(list.Count - 1);
+        }
+
+        return list;
     }
 
     private static string ExtractInlineText(ContainerInline? inline)

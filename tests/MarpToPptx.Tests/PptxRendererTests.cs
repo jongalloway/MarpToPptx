@@ -1318,5 +1318,226 @@ public class PptxRendererTests
         }
     }
 
+    [Fact]
+    public void Renderer_EmitsBoldRun_ForInlineBoldText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            Normal and **bold** text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var runs = slidePart.Slide!.Descendants<A.Run>().ToArray();
+        var boldRun = runs.FirstOrDefault(r => r.RunProperties?.Bold?.Value == true && r.Text?.Text == "bold");
+        Assert.NotNull(boldRun);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmitsItalicRun_ForInlineItalicText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            Normal and *italic* text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var runs = slidePart.Slide!.Descendants<A.Run>().ToArray();
+        var italicRun = runs.FirstOrDefault(r => r.RunProperties?.Italic?.Value == true && r.Text?.Text == "italic");
+        Assert.NotNull(italicRun);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmitsStrikethroughRun_ForInlineStrikethroughText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            Normal and ~~struck~~ text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var runs = slidePart.Slide!.Descendants<A.Run>().ToArray();
+        var strikeRun = runs.FirstOrDefault(r =>
+            r.RunProperties?.Strike?.Value == A.TextStrikeValues.SingleStrike &&
+            r.Text?.Text == "struck");
+        Assert.NotNull(strikeRun);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmitsMonospaceFontRun_ForInlineCode()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            Use `printf()` to print.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // The inline code run should use the code font (not the body font).
+        var codeRun = slidePart.Slide!.Descendants<A.Run>()
+            .FirstOrDefault(r => r.Text?.Text == "printf()");
+        Assert.NotNull(codeRun);
+
+        // The code run font should differ from plain text runs (monospace).
+        var codeFont = codeRun!.RunProperties?.Descendants<A.LatinFont>().FirstOrDefault()?.Typeface;
+        Assert.NotNull(codeFont);
+
+        // Body-text runs on the same slide should use a different (proportional) font.
+        var bodyRun = slidePart.Slide!.Descendants<A.Run>()
+            .FirstOrDefault(r => r.Text?.Text?.Contains("print") == true && r.Text.Text != "printf()");
+        if (bodyRun is not null)
+        {
+            var bodyFont = bodyRun.RunProperties?.Descendants<A.LatinFont>().FirstOrDefault()?.Typeface;
+            Assert.NotEqual(codeFont, bodyFont);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmitsHyperlinkRelationship_ForInlineLink()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            Visit [the site](https://example.com) for details.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // A HyperlinkOnClick element should be present in the run properties.
+        var hlinkClicks = slidePart.Slide!.Descendants<A.HyperlinkOnClick>().ToArray();
+        Assert.NotEmpty(hlinkClicks);
+
+        // The relationship target should be the external URL.
+        var relId = hlinkClicks[0].Id?.Value;
+        Assert.NotNull(relId);
+        var rel = slidePart.HyperlinkRelationships.FirstOrDefault(r => r.Id == relId);
+        Assert.NotNull(rel);
+        Assert.Equal("https://example.com", rel!.Uri.OriginalString);
+
+        // The link text should be present in the slide.
+        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("the site", texts);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_PreservesInlineFormattingInBulletList()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            - Plain item
+            - **Bold item**
+            - *Italic item*
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var allRuns = slidePart.Slide!.Descendants<A.Run>().ToArray();
+        Assert.Contains(allRuns, r => r.RunProperties?.Bold?.Value == true && r.Text?.Text?.Contains("Bold item") == true);
+        Assert.Contains(allRuns, r => r.RunProperties?.Italic?.Value == true && r.Text?.Text?.Contains("Italic item") == true);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_PreservesInlineFormattingInTableCells()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Table
+
+            | Feature       | Status      |
+            |---------------|-------------|
+            | **Bold cell** | *Italic*    |
+            | Plain cell    | Normal text |
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var allRuns = slidePart.Slide!.Descendants<A.Run>().ToArray();
+        Assert.Contains(allRuns, r => r.RunProperties?.Bold?.Value == true && r.Text?.Text == "Bold cell");
+        Assert.Contains(allRuns, r => r.RunProperties?.Italic?.Value == true && r.Text?.Text == "Italic");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
     private sealed record PlaceholderBounds(long X, long Y, long W, long H);
 }
