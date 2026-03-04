@@ -14,6 +14,9 @@ public static partial class MarpThemeParser
         var codeStyle = theme.Code;
         var headingStyles = theme.Headings.ToDictionary(static pair => pair.Key, static pair => pair.Value);
         var background = theme.BackgroundColor;
+        var backgroundImage = theme.BackgroundImage;
+        var backgroundSize = theme.BackgroundSize;
+        var backgroundPosition = theme.BackgroundPosition;
         var textColor = theme.TextColor;
         var fontFamily = theme.FontFamily;
         var monospace = theme.MonospaceFontFamily;
@@ -35,12 +38,28 @@ public static partial class MarpThemeParser
                         textColor = declarations.TryGetValue("color", out var bodyColor) ? bodyColor : textColor;
                         background = declarations.TryGetValue("background", out var bg) ? ExtractColor(bg) : background;
                         background = declarations.TryGetValue("background-color", out var bgColor) ? bgColor : background;
+                        backgroundImage = declarations.TryGetValue("background-image", out var bgImage) ? ExtractUrl(bgImage) : backgroundImage;
+                        if (declarations.TryGetValue("background", out var bgShorthand))
+                        {
+                            var urlFromShorthand = ExtractUrl(bgShorthand);
+                            if (urlFromShorthand is not null)
+                            {
+                                backgroundImage = urlFromShorthand;
+                            }
+                        }
+
+                        backgroundSize = declarations.TryGetValue("background-size", out var bgSize) ? bgSize.Trim() : backgroundSize;
+                        backgroundPosition = declarations.TryGetValue("background-position", out var bgPos) ? bgPos.Trim() : backgroundPosition;
                         slidePadding = declarations.TryGetValue("padding", out var padding) ? ParseSpacing(padding) : slidePadding;
                         bodyStyle = bodyStyle with
                         {
                             Color = textColor,
                             FontFamily = fontFamily,
                             FontSize = declarations.TryGetValue("font-size", out var size) ? ParseFontSize(size, bodyStyle.FontSize) : bodyStyle.FontSize,
+                            Bold = declarations.TryGetValue("font-weight", out var bodyWeight) ? ParseFontWeight(bodyWeight) ?? bodyStyle.Bold : bodyStyle.Bold,
+                            LineHeight = declarations.TryGetValue("line-height", out var bodyLineHeight) ? ParseLineHeight(bodyLineHeight) : bodyStyle.LineHeight,
+                            LetterSpacing = declarations.TryGetValue("letter-spacing", out var bodyLetterSpacing) ? ParseFontSize(bodyLetterSpacing, 0) : bodyStyle.LetterSpacing,
+                            TextTransform = declarations.TryGetValue("text-transform", out var bodyTextTransform) ? bodyTextTransform.Trim().ToLowerInvariant() : bodyStyle.TextTransform,
                         };
                         break;
                     case "pre":
@@ -51,8 +70,19 @@ public static partial class MarpThemeParser
                             FontFamily = monospace,
                             FontSize = declarations.TryGetValue("font-size", out var codeSize) ? ParseFontSize(codeSize, codeStyle.FontSize) : codeStyle.FontSize,
                             Color = declarations.TryGetValue("color", out var codeColor) ? codeColor : codeStyle.Color,
-                            BackgroundColor = declarations.TryGetValue("background", out var codeBg) ? ExtractColor(codeBg) : codeStyle.BackgroundColor,
+                            BackgroundColor = declarations.TryGetValue("background-color", out var codeBgColor) ? codeBgColor : codeStyle.BackgroundColor,
+                            LineHeight = declarations.TryGetValue("line-height", out var codeLineHeight) ? ParseLineHeight(codeLineHeight) : codeStyle.LineHeight,
+                            LetterSpacing = declarations.TryGetValue("letter-spacing", out var codeLetterSpacing) ? ParseFontSize(codeLetterSpacing, 0) : codeStyle.LetterSpacing,
                         };
+                        if (declarations.TryGetValue("background", out var codeBg))
+                        {
+                            var extractedColor = ExtractColor(codeBg);
+                            if (!string.IsNullOrWhiteSpace(extractedColor))
+                            {
+                                codeStyle = codeStyle with { BackgroundColor = extractedColor };
+                            }
+                        }
+
                         break;
                     default:
                         if (selector.StartsWith("h", StringComparison.OrdinalIgnoreCase) && selector.Length == 2 && char.IsDigit(selector[1]))
@@ -64,6 +94,10 @@ public static partial class MarpThemeParser
                                 FontFamily = declarations.TryGetValue("font-family", out var headingFont) ? NormalizeFontFamily(headingFont) : current.FontFamily,
                                 FontSize = declarations.TryGetValue("font-size", out var headingSize) ? ParseFontSize(headingSize, current.FontSize) : current.FontSize,
                                 Color = declarations.TryGetValue("color", out var headingColor) ? headingColor : current.Color,
+                                Bold = declarations.TryGetValue("font-weight", out var headingWeight) ? ParseFontWeight(headingWeight) ?? current.Bold : current.Bold,
+                                LineHeight = declarations.TryGetValue("line-height", out var headingLineHeight) ? ParseLineHeight(headingLineHeight) : current.LineHeight,
+                                LetterSpacing = declarations.TryGetValue("letter-spacing", out var headingLetterSpacing) ? ParseFontSize(headingLetterSpacing, 0) : current.LetterSpacing,
+                                TextTransform = declarations.TryGetValue("text-transform", out var headingTextTransform) ? headingTextTransform.Trim().ToLowerInvariant() : current.TextTransform,
                             };
                         }
                         break;
@@ -78,6 +112,9 @@ public static partial class MarpThemeParser
             MonospaceFontFamily = monospace,
             TextColor = textColor,
             BackgroundColor = background,
+            BackgroundImage = backgroundImage,
+            BackgroundSize = backgroundSize,
+            BackgroundPosition = backgroundPosition,
             AccentColor = theme.AccentColor,
             SlidePadding = slidePadding,
             Body = bodyStyle,
@@ -147,9 +184,68 @@ public static partial class MarpThemeParser
         return colorMatch.Success ? colorMatch.Value : value;
     }
 
+    private static string? ExtractUrl(string value)
+    {
+        var urlMatch = UrlRegex().Match(value);
+        if (!urlMatch.Success)
+        {
+            return null;
+        }
+
+        return urlMatch.Groups[1].Value.Trim('"', '\'');
+    }
+
+    private static bool? ParseFontWeight(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized == "bold" || normalized == "bolder")
+        {
+            return true;
+        }
+
+        if (normalized == "normal" || normalized == "lighter")
+        {
+            return false;
+        }
+
+        if (int.TryParse(normalized, out var weight))
+        {
+            return weight >= 600;
+        }
+
+        return null;
+    }
+
+    private static double? ParseLineHeight(string value)
+    {
+        var normalized = value.Trim().ToLowerInvariant();
+        if (normalized == "normal")
+        {
+            return null;
+        }
+
+        if (normalized.EndsWith('%'))
+        {
+            if (double.TryParse(normalized[..^1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pct))
+            {
+                return pct / 100.0;
+            }
+        }
+
+        if (!double.TryParse(new string(normalized.TakeWhile(ch => char.IsDigit(ch) || ch == '.').ToArray()), System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var number))
+        {
+            return null;
+        }
+
+        return number;
+    }
+
     [System.Text.RegularExpressions.GeneratedRegex(@"([^{}]+)\{([^}]*)\}")]
     private static partial System.Text.RegularExpressions.Regex RuleRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})|rgba?\([^)]*\)")]
     private static partial System.Text.RegularExpressions.Regex ColorRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"url\(\s*([^)]*)\s*\)")]
+    private static partial System.Text.RegularExpressions.Regex UrlRegex();
 }

@@ -335,9 +335,10 @@ public sealed class OpenXmlPptxRenderer
                 noOutline: true));
         }
 
-        if (!string.IsNullOrWhiteSpace(style.BackgroundImage))
+        var backgroundImage = style.BackgroundImage ?? context.Theme.BackgroundImage;
+        if (!string.IsNullOrWhiteSpace(backgroundImage))
         {
-            AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), style.BackgroundImage, string.Empty, useFullBleed: true);
+            AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), backgroundImage, string.Empty, useFullBleed: true);
         }
     }
 
@@ -567,6 +568,13 @@ public sealed class OpenXmlPptxRenderer
 
             paragraph.Append(paragraphProperties);
         }
+        else if (style.LineHeight.HasValue)
+        {
+            var paragraphProperties = new A.ParagraphProperties();
+            var lineSpacingValue = (int)Math.Round(style.LineHeight.Value * 100000);
+            paragraphProperties.Append(new A.LineSpacing(new A.SpacingPercent { Val = lineSpacingValue }));
+            paragraph.Append(paragraphProperties);
+        }
 
         if (!string.IsNullOrEmpty(text))
         {
@@ -576,15 +584,32 @@ public sealed class OpenXmlPptxRenderer
                 FontSize = (int)Math.Round(style.FontSize * 100),
                 Bold = style.Bold,
             };
+            if (style.LetterSpacing.HasValue)
+            {
+                runProperties.Spacing = (int)Math.Round(style.LetterSpacing.Value * 100);
+            }
+
             runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(style.Color) }));
             runProperties.Append(new A.LatinFont { Typeface = style.FontFamily });
 
-            paragraph.Append(new A.Run(runProperties, new A.Text(text)));
+            var displayText = ApplyTextTransform(text, style.TextTransform);
+            paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
         }
 
         paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
         return paragraph;
     }
+
+    private static string ApplyTextTransform(string text, string? textTransform)
+        => textTransform switch
+        {
+            "uppercase" => text.ToUpperInvariant(),
+            "lowercase" => text.ToLowerInvariant(),
+            // ToTitleCase capitalises the first letter of each word, which matches CSS capitalize intent.
+            // Unlike CSS, it may downcase other letters for some casing-sensitive locales.
+            "capitalize" => System.Globalization.CultureInfo.InvariantCulture.TextInfo.ToTitleCase(text.ToLowerInvariant()),
+            _ => text,
+        };
 
     private static P.NonVisualGroupShapeProperties CreateRootGroupShapeProperties()
         => new(

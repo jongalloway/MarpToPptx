@@ -52,7 +52,7 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 | Marpit | Extended image syntax | Width, height, filters, `bg`, split backgrounds | Partially supported | Normal Markdown images are parsed; Marpit image keywords are treated as alt text, not structured options. |
 | Marpit | Background image syntax via image alt text | `![bg](...)` and related | Not supported | Backgrounds are supported only through directives, not image syntax. |
 | Marpit | Fragmented lists | Incremental list reveal | Not supported | No fragment model in parser or renderer. |
-| Marpit | Theme CSS | CSS-driven slide theming | Supported subset | Minimal CSS extraction for fonts, sizes, colors, padding, and code style. |
+| Marpit | Theme CSS | CSS-driven slide theming | Supported subset | CSS extraction for fonts, sizes, colors, padding, background, line-height, letter-spacing, text-transform, font-weight, and code style. See the CSS property reference below. |
 | Marp Core | Built-in theme names | Themes such as `default`, `gaia`, `uncover` | Name-only unless CSS is supplied | Theme name is stored, but real styling comes from parsed CSS or defaults. |
 | Marp Core | `size` directive | Slide size preset selection | Not supported | Renderer uses a fixed 16:9 slide size. |
 | Marp Core | Math | MathJax / KaTeX rendering | Not supported | No math parsing or render pipeline. |
@@ -83,7 +83,7 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 - Images with local file paths
 - Fenced and indented code blocks
 - GFM-style tables at the semantic-model level
-- Minimal theme CSS extraction from `section`, `:root`, `body`, `h1`-`h6`, `pre`, and `code`
+- Theme CSS extraction from `section`, `:root`, `body`, `h1`-`h6`, `pre`, and `code` — see the CSS property reference below
 
 ### Supported Rendering Features
 
@@ -91,7 +91,10 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 - Editable text fallback for tables
 - Local image embedding with aspect-ratio-aware placement
 - Solid slide background color
-- Full-slide background image via directive
+- Full-slide background image via directive or theme `background-image`
+- Line spacing applied from CSS `line-height`
+- Letter spacing applied from CSS `letter-spacing`
+- Text transform applied from CSS `text-transform` (`uppercase`, `lowercase`, `capitalize`)
 - Optional template-copy workflow via `--template`
 
 ### Not Yet Supported
@@ -107,6 +110,63 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 - native PPTX table generation
 - Marp CLI metadata semantics
 - browser-based preview or HTML/PDF/image outputs
+- CSS `background-attachment`, `background-blend-mode`, `background-origin`, `background-clip`
+- CSS `font-variant`, `font-stretch`, `font-style`
+- CSS `text-shadow`, `box-shadow`
+- CSS `border`, `border-radius` on shapes
+- CSS `opacity`, `filter`
+- CSS custom properties (`--var-name`) and `var()` references
+- CSS nesting, pseudo-classes (`:hover`, `:first-child`, etc.), or combinators
+- CSS `@media`, `@keyframes`, or other at-rules
+
+## Theme CSS Property Reference
+
+The following table documents every CSS property that `MarpToPptx` recognises, which selectors it applies to, and what it maps to in the PPTX output.
+
+### Supported Selectors
+
+`section`, `:root`, `body`, `h1`–`h6`, `pre`, `code`
+
+All other selectors are silently ignored.
+
+### Supported Properties Per Selector
+
+| CSS Property | Selectors | PPTX Mapping | Notes |
+| --- | --- | --- | --- |
+| `font-family` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Run font (Latin typeface) | First family in the comma-separated list is used. Quotes are stripped. |
+| `font-size` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Run font size | Accepts `px`, `rem`, and unitless pt. `1px` = 0.75pt. `1rem` = 12pt. |
+| `font-weight` | `section`, `:root`, `body`, `h1`–`h6` | Run bold flag | `bold`, `bolder`, or numeric ≥ 600 → bold. `normal`, `lighter`, or numeric < 600 → not bold. |
+| `color` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Run fill color | Hex or `rgb()`/`rgba()` values. |
+| `background-color` | `section`, `:root`, `body` | Slide background fill | Hex or `rgb()`/`rgba()` values. |
+| `background` | `section`, `:root`, `body`, `pre`, `code` | Slide or code background | Color and URL extracted from shorthand. Other shorthand tokens (e.g. `no-repeat`) are ignored. |
+| `background-image` | `section`, `:root`, `body` | Theme-level background image | `url(...)` value. Applied as full-bleed image behind all slides unless overridden per slide. |
+| `background-size` | `section`, `:root`, `body` | Stored in theme model | Stored as-is (e.g. `cover`, `contain`, `100% 100%`). Not currently mapped to a PPTX fill option. |
+| `background-position` | `section`, `:root`, `body` | Stored in theme model | Stored as-is (e.g. `center`, `top left`). Not currently mapped to a PPTX fill option. |
+| `padding` | `section`, `:root`, `body` | Slide padding inset | 1–4 value shorthand. Accepts `px`, `rem`, and unitless pt. |
+| `line-height` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Paragraph line spacing (percent) | Unitless or `%` values treated as multipliers. `1.5` and `150%` both map to 150 % line spacing. |
+| `letter-spacing` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Run character spacing | Accepts `px`, `rem`, and unitless pt. Converted to pt before storage. |
+| `text-transform` | `section`, `:root`, `body`, `h1`–`h6` | Text content transform | `uppercase`, `lowercase`, and `capitalize` applied at render time. `none` or unrecognised values leave text unchanged. |
+
+### Explicitly Unsupported Properties
+
+The following properties are present in many Marp theme files but are silently ignored by the parser.
+
+| CSS Property | Reason Not Supported |
+| --- | --- |
+| `background-attachment` | No PPTX equivalent. |
+| `background-blend-mode` | No PPTX equivalent. |
+| `background-repeat` | Background images are always rendered as full-bleed fills. |
+| `background-clip` | No PPTX equivalent. |
+| `font-style` | Italic run property not yet mapped. |
+| `font-variant` | No PPTX equivalent for small-caps. |
+| `font-stretch` | No PPTX equivalent. |
+| `text-shadow` | No PPTX equivalent. |
+| `box-shadow` | No PPTX equivalent. |
+| `border` / `border-radius` | Shape borders not modelled per text element. |
+| `opacity` | No PPTX per-shape opacity mapping. |
+| `margin` / `margin-top` / `margin-bottom` | Slide layout uses a fixed padding inset, not per-element margins. |
+| `text-decoration` | Underline/strikethrough run property not yet mapped. |
+| `CSS custom properties` (`--name`, `var()`) | Variable resolution is not implemented. |
 
 ## Implementation Map
 
