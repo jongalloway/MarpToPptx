@@ -52,6 +52,36 @@ To update later:
 dotnet tool update --global MarpToPptx
 ```
 
+### VS Code Task
+
+Add a `.vscode/tasks.json` to your content repository to export the currently open file:
+
+```json
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "Export to PPTX",
+      "type": "shell",
+      "command": "dnx",
+      "args": [
+        "MarpToPptx",
+        "${file}",
+        "-o",
+        "${fileDirname}/${fileBasenameNoExtension}.pptx"
+      ],
+      "group": "build",
+      "presentation": { "reveal": "always", "panel": "shared" },
+      "problemMatcher": []
+    }
+  ]
+}
+```
+
+Run it from **Terminal → Run Task** while the Markdown file is open. The `.pptx` is written next to the source file.
+
+For template-based export, theme CSS, version pinning, team sharing, and the full edit / preview / export loop with the Marp for VS Code extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
+
 ### Run From Source
 
 If you are developing on the repo, you can still run the CLI project directly:
