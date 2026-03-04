@@ -1606,13 +1606,20 @@ public class PptxRendererTests
         var slideParts = document.PresentationPart!.SlideParts.ToArray();
         Assert.Equal(3, slideParts.Length);
 
-        // Verify each slide's field contains the correct slide number as display text.
+        // Verify each slide's field contains the correct slide number as display text
+        // and has explicit font styling matching the footer style.
         for (var i = 0; i < slideParts.Length; i++)
         {
             var field = slideParts[i].Slide!.Descendants<A.Field>()
                 .FirstOrDefault(f => f.Type?.Value == "slidenum");
             Assert.NotNull(field);
             Assert.Equal((i + 1).ToString(), field!.GetFirstChild<A.Text>()?.Text);
+
+            // Run properties should include explicit font family and color.
+            var runProps = field.GetFirstChild<A.RunProperties>();
+            Assert.NotNull(runProps);
+            Assert.NotNull(runProps!.Descendants<A.LatinFont>().FirstOrDefault());
+            Assert.NotNull(runProps.Descendants<A.SolidFill>().FirstOrDefault());
         }
     }
 

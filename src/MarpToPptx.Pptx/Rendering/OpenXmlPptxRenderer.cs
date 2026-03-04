@@ -943,17 +943,24 @@ public sealed class OpenXmlPptxRenderer
         {
             var pageNumX = slideWidth - marginX - pageNumWidth;
             var fieldId = Guid.NewGuid().ToString("B").ToUpperInvariant();
+            var fieldRunProperties = new A.RunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
+            fieldRunProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(footerStyle.Color) }));
+            fieldRunProperties.Append(new A.LatinFont { Typeface = footerStyle.FontFamily });
+
             var field = new A.Field(
-                new A.RunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) },
+                fieldRunProperties,
                 new A.Text(slideNumber.ToString(System.Globalization.CultureInfo.InvariantCulture)))
             {
                 Id = fieldId,
                 Type = "slidenum",
             };
 
-            var paragraph = new A.Paragraph(
-                field,
-                new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) });
+            var endRunProperties = new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
+            endRunProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(footerStyle.Color) }));
+            endRunProperties.Append(new A.LatinFont { Typeface = footerStyle.FontFamily });
+
+            var paragraphProperties = new A.ParagraphProperties { Alignment = A.TextAlignmentTypeValues.Right };
+            var paragraph = new A.Paragraph(paragraphProperties, field, endRunProperties);
 
             context.ShapeTree.Append(CreateTextShape(
                 context.NextShapeId(),
