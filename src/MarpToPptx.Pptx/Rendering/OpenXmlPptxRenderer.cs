@@ -40,12 +40,15 @@ public sealed class OpenXmlPptxRenderer
             {
                 EnsureRelationshipId(document, presentationPart, "rId1");
             }
-            var slideLayoutPart = EnsurePresentationScaffold(presentationPart);
+            var allLayouts = EnsurePresentationScaffold(presentationPart);
+            var templateSelector = new SlideTemplateSelector(allLayouts);
 
             ClearSlides(presentationPart);
 
             foreach (var slideModel in deck.Slides)
             {
+                var slideKind = SlideTemplateSelector.Classify(slideModel);
+                var slideLayoutPart = templateSelector.SelectLayout(slideKind);
                 AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets);
             }
 
@@ -75,21 +78,23 @@ public sealed class OpenXmlPptxRenderer
         return PresentationDocument.Create(outputPath, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
     }
 
-    private static SlideLayoutPart EnsurePresentationScaffold(PresentationPart presentationPart)
+    private static IReadOnlyList<SlideLayoutPart> EnsurePresentationScaffold(PresentationPart presentationPart)
     {
         if (presentationPart.Presentation is null)
         {
             presentationPart.Presentation = new P.Presentation();
         }
 
-        var existingLayout = presentationPart.SlideMasterParts.FirstOrDefault()?.SlideLayoutParts.FirstOrDefault();
-        if (existingLayout is not null)
+        var existingLayouts = presentationPart.SlideMasterParts
+            .SelectMany(master => master.SlideLayoutParts)
+            .ToList();
+        if (existingLayouts.Count > 0)
         {
             EnsurePresentationMetadataParts(presentationPart);
             presentationPart.Presentation.SlideIdList ??= new P.SlideIdList();
             presentationPart.Presentation.SlideSize ??= new P.SlideSize { Cx = (int)SlideWidthEmu, Cy = (int)SlideHeightEmu, Type = P.SlideSizeValues.Screen16x9 };
             presentationPart.Presentation.NotesSize ??= new P.NotesSize { Cx = 6858000, Cy = 9144000 };
-            return existingLayout;
+            return existingLayouts;
         }
 
         var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
@@ -179,7 +184,7 @@ public sealed class OpenXmlPptxRenderer
         presentationPart.Presentation.NotesSize = new P.NotesSize { Cx = 6858000, Cy = 9144000 };
         presentationPart.Presentation.DefaultTextStyle = new P.DefaultTextStyle();
         presentationPart.Presentation.Save();
-        return slideLayoutPart;
+        return [contentLayoutPart, slideLayoutPart];
     }
 
     private static void EnsurePresentationMetadataParts(PresentationPart presentationPart)
@@ -289,28 +294,52 @@ public sealed class OpenXmlPptxRenderer
         var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets);
         AddBackground(slideModel.Style, context);
 
+        // Read placeholder bounds from the selected layout. When both title and body
+        // placeholders carry explicit transforms, use them to position content so that
+        // the slide respects the template's intended layout structure. When only one
+        // placeholder is present (or neither), fall back to LayoutEngine positioning.
+        var titleRect = SlideTemplateSelector.GetTitlePlaceholderRect(slideLayoutPart);
+        var bodyRect = SlideTemplateSelector.GetBodyPlaceholderRect(slideLayoutPart);
+        var nonHeadingCount = slideModel.Elements.Count(e => e is not HeadingElement);
+        var hasHeading = slideModel.Elements.OfType<HeadingElement>().Any();
+
+        // Only use the body rect when the title rect is also known, so that the two
+        // placeholder regions are coordinated and won't overlap each other. If there
+        // is no heading on the slide at all, the body rect is safe to apply on its own.
+        var canUseBodyRect = bodyRect is not null &&
+            (titleRect is not null || !hasHeading);
+
         var plan = _layoutEngine.LayoutSlide(slideModel, theme);
         foreach (var placed in plan.Elements)
         {
+            // Resolve the frame: prefer template placeholder rect when available.
+            var frame = placed.Element is HeadingElement ph &&
+                ph.Level == 1 && slideModel.Elements.IndexOf(ph) == 0 &&
+                titleRect is not null
+                ? titleRect
+                : canUseBodyRect && placed.Element is not HeadingElement && nonHeadingCount == 1
+                    ? bodyRect!
+                    : placed.Frame;
+
             switch (placed.Element)
             {
                 case HeadingElement heading:
-                    AddTextShape(context, placed.Frame, heading.Text, ResolveHeadingStyle(theme, heading.Level), isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
+                    AddTextShape(context, frame, heading.Text, ResolveHeadingStyle(theme, heading.Level), isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
                     break;
                 case ParagraphElement paragraph:
-                    AddTextShape(context, placed.Frame, paragraph.Text, theme.Body);
+                    AddTextShape(context, frame, paragraph.Text, theme.Body);
                     break;
                 case BulletListElement list:
-                    AddBulletList(context, placed.Frame, list, theme.Body);
+                    AddBulletList(context, frame, list, theme.Body);
                     break;
                 case ImageElement image:
-                    AddImage(context, placed.Frame, image.Source, image.AltText);
+                    AddImage(context, frame, image.Source, image.AltText);
                     break;
                 case CodeBlockElement code:
-                    AddCodeBlock(context, placed.Frame, code, theme.Code);
+                    AddCodeBlock(context, frame, code, theme.Code);
                     break;
                 case TableElement table:
-                    AddTable(context, placed.Frame, table, theme.Body);
+                    AddTable(context, frame, table, theme.Body);
                     break;
             }
         }
