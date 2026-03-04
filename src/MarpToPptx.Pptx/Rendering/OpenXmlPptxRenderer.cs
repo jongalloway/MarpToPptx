@@ -337,6 +337,9 @@ public sealed class OpenXmlPptxRenderer
                 case ImageElement image:
                     AddImage(context, frame, image.Source, image.AltText);
                     break;
+                case VideoElement video:
+                    AddVideo(context, frame, video.Source, video.AltText);
+                    break;
                 case CodeBlockElement code:
                     AddCodeBlock(context, frame, code, theme.Code);
                     break;
@@ -629,6 +632,50 @@ public sealed class OpenXmlPptxRenderer
                 new A.Transform2D(
                     new A.Offset { X = ToEmu(x), Y = ToEmu(y) },
                     new A.Extents { Cx = ToEmu(width), Cy = ToEmu(height) }),
+                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
+
+        context.ShapeTree.Append(picture);
+    }
+
+    private static void AddVideo(SlideRenderContext context, Rect frame, string source, string altText)
+    {
+        var resolved = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
+        if (resolved is null || !File.Exists(resolved))
+        {
+            var errorText = resolveError is not null
+                ? $"Missing video: {source} ({resolveError})"
+                : string.IsNullOrWhiteSpace(source) ? "Missing video" : $"Missing video: {source}";
+            AddTextShape(context, frame, errorText, context.Theme.Body);
+            return;
+        }
+
+        var ext = IOPath.GetExtension(resolved).ToLowerInvariant();
+        if (ext != ".mp4")
+        {
+            AddTextShape(context, frame, $"Unsupported video format: {source}", context.Theme.Body);
+            return;
+        }
+
+        var mediaDataPart = context.SlidePart.OpenXmlPackage.CreateMediaDataPart(MediaDataPartType.Mp4);
+        using (var videoStream = File.OpenRead(resolved))
+        {
+            mediaDataPart.FeedData(videoStream);
+        }
+
+        var videoRel = context.SlidePart.AddVideoReferenceRelationship(mediaDataPart);
+
+        var picture = new P.Picture(
+            new P.NonVisualPictureProperties(
+                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = IOPath.GetFileName(resolved), Description = altText },
+                new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
+                new P.ApplicationNonVisualDrawingProperties(new A.VideoFromFile { Link = videoRel.Id })),
+            new P.BlipFill(
+                new A.Blip(),
+                new A.Stretch(new A.FillRectangle())),
+            new P.ShapeProperties(
+                new A.Transform2D(
+                    new A.Offset { X = ToEmu(frame.X), Y = ToEmu(frame.Y) },
+                    new A.Extents { Cx = ToEmu(frame.Width), Cy = ToEmu(frame.Height) }),
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         context.ShapeTree.Append(picture);

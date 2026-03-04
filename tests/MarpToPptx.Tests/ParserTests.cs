@@ -237,4 +237,95 @@ public class ParserTests
         Assert.True(theme.Headings[2].Bold);
         Assert.False(theme.Headings[3].Bold);
     }
+
+    [Fact]
+    public void Parser_ParsesHtmlVideoInlineTag_AsVideoElement()
+    {
+        const string markdown = """
+        # Slide
+
+        <video src="clip.mp4"></video>
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Collection(
+            slide.Elements,
+            e => Assert.IsType<HeadingElement>(e),
+            e =>
+            {
+                var video = Assert.IsType<VideoElement>(e);
+                Assert.Equal("clip.mp4", video.Source);
+            });
+    }
+
+    [Fact]
+    public void Parser_ParsesHtmlVideoSelfClosingTag_AsVideoElement()
+    {
+        const string markdown = "# Slide\n\n<video src=\"clip.mp4\" />\n\ntext";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var videoElement = slide.Elements.OfType<VideoElement>().SingleOrDefault();
+        Assert.NotNull(videoElement);
+        Assert.Equal("clip.mp4", videoElement!.Source);
+    }
+
+    [Fact]
+    public void Parser_ParsesHtmlVideoTag_WithExtraAttributes()
+    {
+        const string markdown = """
+        # Slide
+
+        <video controls width="640" src="demo.mp4" height="360"></video>
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var video = slide.Elements.OfType<VideoElement>().SingleOrDefault();
+        Assert.NotNull(video);
+        Assert.Equal("demo.mp4", video!.Source);
+    }
+
+    [Fact]
+    public void Parser_ParsesMarkdownImageWithMp4Extension_AsVideoElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ![My clip](video.mp4)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var video = slide.Elements.OfType<VideoElement>().SingleOrDefault();
+        Assert.NotNull(video);
+        Assert.Equal("video.mp4", video!.Source);
+        Assert.Equal("My clip", video.AltText);
+    }
+
+    [Fact]
+    public void Parser_DoesNotTreatNonMp4ImageAsVideo()
+    {
+        const string markdown = """
+        # Slide
+
+        ![Photo](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Empty(slide.Elements.OfType<VideoElement>());
+        Assert.Single(slide.Elements.OfType<ImageElement>());
+    }
 }
