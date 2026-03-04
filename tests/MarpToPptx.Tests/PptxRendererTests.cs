@@ -1,7 +1,7 @@
 using DocumentFormat.OpenXml.Packaging;
-using DocumentFormat.OpenXml.Validation;
 using MarpToPptx.Core;
 using MarpToPptx.Pptx.Rendering;
+using MarpToPptx.Pptx.Validation;
 using System.IO.Compression;
 using A = DocumentFormat.OpenXml.Drawing;
 using P = DocumentFormat.OpenXml.Presentation;
@@ -54,12 +54,15 @@ public class PptxRendererTests
         Assert.Equal(2, presentationPart.SlideMasterParts.Single().SlideLayoutParts.Count());
 
         var slideParts = presentationPart.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
         Assert.All(slideParts, slidePart => Assert.Equal("/ppt/slideLayouts/slideLayout2.xml", slidePart.SlideLayoutPart?.Uri.ToString()));
-        Assert.Contains("Title Slide", slideParts[0].Slide.Descendants<A.Text>().Select(text => text.Text));
-        Assert.Contains("Intro paragraph.", slideParts[0].Slide.Descendants<A.Text>().Select(text => text.Text));
-        Assert.Single(slideParts[1].Slide.Descendants<P.Picture>());
+        Assert.NotNull(slideParts[0].Slide);
+        Assert.NotNull(slideParts[1].Slide);
+        Assert.Contains("Title Slide", slideParts[0].Slide!.Descendants<A.Text>().Select(text => text.Text));
+        Assert.Contains("Intro paragraph.", slideParts[0].Slide!.Descendants<A.Text>().Select(text => text.Text));
+        Assert.Single(slideParts[1].Slide!.Descendants<P.Picture>());
 
-        var validationErrors = new OpenXmlValidator().Validate(document).ToList();
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
 
         using var archive = ZipFile.OpenRead(outputPath);
@@ -116,7 +119,7 @@ public class PptxRendererTests
         renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = tempRoot });
 
         using var document = PresentationDocument.Open(outputPath, false);
-        var validationErrors = new OpenXmlValidator().Validate(document).ToList();
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
 
         using var archive = ZipFile.OpenRead(outputPath);

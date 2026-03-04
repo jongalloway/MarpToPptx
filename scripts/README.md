@@ -48,7 +48,7 @@ pwsh ./scripts/Compare-PptxStructure.ps1 -PathA artifacts/samples/01-minimal-scr
 
 ### `Invoke-PptxSmokeTest.ps1`
 
-Run the main local PPTX smoke-test flow in one command: generate with the local CLI project, validate with the Open XML SDK, and then open the result in PowerPoint.
+Run the main local PPTX smoke-test flow in one command: generate with the local CLI project, validate with the .NET Open XML helper, and then open the result in PowerPoint.
 
 ```powershell
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md
@@ -62,4 +62,4 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Ci
 - `Test-PowerPointOpen.ps1` requires Microsoft PowerPoint to be installed and available through COM interop.
 - `Generate-LocalPptx.ps1` is the preferred path for renderer debugging because it executes the current workspace code.
 - `Invoke-PptxSmokeTest.ps1` is the quickest end-to-end check before or after renderer/package changes.
-- `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus Open XML validation on CI agents or other environments without PowerPoint.
+- `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus .NET-hosted Open XML validation on CI agents or other environments without PowerPoint.
