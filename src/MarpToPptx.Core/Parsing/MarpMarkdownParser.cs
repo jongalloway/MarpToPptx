@@ -86,8 +86,8 @@ public sealed class MarpMarkdownParser
 
         foreach (var chunk in SlideTokenizer.SplitSlides(body))
         {
-            var (style, cleaned) = MarpDirectiveParser.Parse(chunk, defaultStyle);
-            var slide = new Slide { Style = style };
+            var (style, cleaned, notes) = MarpDirectiveParser.Parse(chunk, defaultStyle);
+            var slide = new Slide { Style = style, Notes = notes };
             foreach (var element in ParseElements(cleaned))
             {
                 slide.Elements.Add(element);

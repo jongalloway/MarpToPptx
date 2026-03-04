@@ -328,4 +328,110 @@ public class ParserTests
         Assert.Empty(slide.Elements.OfType<VideoElement>());
         Assert.Single(slide.Elements.OfType<ImageElement>());
     }
+
+    [Fact]
+    public void Parser_ExtractsNotesFromNonDirectiveHtmlComment()
+    {
+        const string markdown = """
+        # Slide
+
+        Content here.
+
+        <!-- This is a presenter note. -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("This is a presenter note.", slide.Notes);
+    }
+
+    [Fact]
+    public void Parser_ExcludesDirectiveCommentsFromNotes()
+    {
+        const string markdown = """
+        <!-- class: lead -->
+        # Slide
+
+        Content here.
+
+        <!-- This is a note. -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("lead", slide.Style.ClassName);
+        Assert.Equal("This is a note.", slide.Notes);
+    }
+
+    [Fact]
+    public void Parser_CombinesMultipleNoteCommentsWithNewline()
+    {
+        const string markdown = """
+        # Slide
+
+        <!-- First note. -->
+
+        Content.
+
+        <!-- Second note. -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("First note.\nSecond note.", slide.Notes);
+    }
+
+    [Fact]
+    public void Parser_NoteCommentIsNotEmittedAsSlideElement()
+    {
+        const string markdown = """
+        # Slide
+
+        <!-- Presenter note text. -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Single(slide.Elements);
+        Assert.IsType<HeadingElement>(slide.Elements[0]);
+        Assert.Equal("Presenter note text.", slide.Notes);
+    }
+
+    [Fact]
+    public void Parser_AssignsNotesToCorrectSlides_InMultiSlideDeck()
+    {
+        const string markdown = """
+        # Slide One
+
+        <!-- Note for slide one. -->
+
+        ---
+
+        # Slide Two
+
+        No notes here.
+
+        ---
+
+        # Slide Three
+
+        <!-- Note for slide three. -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("Note for slide one.", deck.Slides[0].Notes);
+        Assert.Null(deck.Slides[1].Notes);
+        Assert.Equal("Note for slide three.", deck.Slides[2].Notes);
+    }
 }
