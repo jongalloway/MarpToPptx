@@ -1,0 +1,33 @@
+/* @theme editorial */
+
+:root {
+  font-family: "IBM Plex Sans", sans-serif;
+  font-size: 30px;
+  color: #1F2933;
+  background-color: #FCFBF7;
+  padding: 44px 60px;
+}
+
+h1 {
+  font-family: "Aptos Display", sans-serif;
+  font-size: 62px;
+  color: #7C2D12;
+}
+
+h2 {
+  font-size: 40px;
+  color: #9A3412;
+}
+
+h3 {
+  font-size: 30px;
+  color: #B45309;
+}
+
+pre,
+code {
+  font-family: "Cascadia Mono", monospace;
+  font-size: 20px;
+  color: #F8FAFC;
+  background: #0F172A;
+}

@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 540" role="img" aria-label="Stack diagram">
+  <rect width="960" height="540" fill="#F8FAFC" />
+  <rect x="110" y="80" width="740" height="90" rx="18" fill="#0F766E" />
+  <rect x="110" y="220" width="740" height="90" rx="18" fill="#0EA5E9" />
+  <rect x="110" y="360" width="740" height="90" rx="18" fill="#F59E0B" />
+  <text x="480" y="135" text-anchor="middle" font-family="Aptos, sans-serif" font-size="34" fill="#FFFFFF">Markdown Parsing</text>
+  <text x="480" y="275" text-anchor="middle" font-family="Aptos, sans-serif" font-size="34" fill="#FFFFFF">Semantic Slide Model</text>
+  <text x="480" y="415" text-anchor="middle" font-family="Aptos, sans-serif" font-size="34" fill="#1F2937">Editable PPTX Rendering</text>
+</svg>

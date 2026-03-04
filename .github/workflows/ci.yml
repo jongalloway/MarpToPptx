@@ -40,3 +40,38 @@ jobs:
           name: marp2pptx-nupkg
           path: artifacts/nupkg/*.nupkg
           if-no-files-found: error
+
+  smoke-test:
+    needs: build-test-pack
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+          dotnet-version: 10.0.x
+
+      - name: Restore
+        run: dotnet restore MarpToPptx.slnx
+
+      - name: Run PPTX Smoke Test
+        shell: pwsh
+        run: |
+          ./scripts/Invoke-PptxSmokeTest.ps1 `
+            -InputMarkdown samples/01-minimal.md `
+            -Configuration Release `
+            -CiSafe
+
+      - name: Upload Smoke Test Artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: marp2pptx-smoke-test-artifacts
+          path: artifacts/smoke-tests/*
+          if-no-files-found: warn
