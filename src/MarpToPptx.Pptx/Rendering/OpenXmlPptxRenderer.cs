@@ -409,7 +409,27 @@ public sealed class OpenXmlPptxRenderer
     {
         if (presentationPart.NotesMasterPart is not null)
         {
-            return presentationPart.NotesMasterPart;
+            var existingNotesMasterPart = presentationPart.NotesMasterPart;
+            var existingRelId = presentationPart.GetIdOfPart(existingNotesMasterPart);
+
+            var notesMasterIdList = presentationPart.Presentation!.NotesMasterIdList ??= new P.NotesMasterIdList();
+
+            var hasEntry = false;
+            foreach (var notesMasterId in notesMasterIdList.Elements<P.NotesMasterId>())
+            {
+                if (notesMasterId.Id == existingRelId)
+                {
+                    hasEntry = true;
+                    break;
+                }
+            }
+
+            if (!hasEntry)
+            {
+                notesMasterIdList.Append(new P.NotesMasterId { Id = existingRelId });
+            }
+
+            return existingNotesMasterPart;
         }
 
         var notesMasterPart = presentationPart.AddNewPart<NotesMasterPart>(GetNextRelationshipId(presentationPart));
