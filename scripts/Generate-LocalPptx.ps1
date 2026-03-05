@@ -7,6 +7,7 @@ param(
 
     [string]$ThemeCss,
     [string]$Template,
+    [switch]$AllowRemoteAssets,
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug"
 )
@@ -35,6 +36,10 @@ try {
 
     if ($Template) {
         $arguments += @("--template", $Template)
+    }
+
+    if ($AllowRemoteAssets) {
+        $arguments += "--allow-remote-assets"
     }
 
     Write-Host "Generating PPTX with local CLI project..."

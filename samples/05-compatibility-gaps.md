@@ -15,9 +15,11 @@ This deck intentionally uses upstream Marp features that are not fully implement
 ---
 
 <!-- _backgroundColor: #EEF2FF -->
-# Spot Directive
+# Implemented Spot Directive
 
-The `_backgroundColor` syntax is supported upstream for one-slide overrides, but is not implemented here.
+The `_backgroundColor` syntax is now implemented here.
+
+This slide remains in the compatibility deck as a quick visual regression check that spot overrides still apply to a single slide only.
 
 ---
 

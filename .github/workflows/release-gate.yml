@@ -1,0 +1,106 @@
+name: Release Gate
+
+on:
+    workflow_dispatch:
+        inputs:
+            configuration:
+                description: Build configuration to use for validation
+                required: true
+                default: Release
+                type: choice
+                options:
+                    - Release
+                    - Debug
+
+jobs:
+    hosted-release-gate:
+        runs-on: ubuntu-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  global-json-file: global.json
+                  dotnet-version: 10.0.x
+
+            - name: Install LibreOffice
+              run: |
+                  sudo apt-get update
+                  sudo apt-get install -y libreoffice-impress
+
+            - name: Restore
+              run: dotnet restore MarpToPptx.slnx
+
+            - name: Build
+              run: dotnet build MarpToPptx.slnx --configuration ${{ inputs.configuration }} --no-restore
+
+            - name: Test
+              run: dotnet test --solution MarpToPptx.slnx --configuration ${{ inputs.configuration }} --no-build
+
+            - name: Pack CLI Tool
+              run: dotnet pack src/MarpToPptx.Cli/MarpToPptx.Cli.csproj --configuration ${{ inputs.configuration }} --no-build
+
+            - name: Generate Complete Sample Set
+              shell: pwsh
+              run: |
+                  ./scripts/Generate-SamplePptxSet.ps1 `
+                    -Configuration ${{ inputs.configuration }} `
+                    -OutputDirectory artifacts/release-gate/samples `
+                    -IncludeRemoteSamples `
+                    -Force
+
+            - name: Validate Generated PPTX Packages
+              shell: pwsh
+              run: |
+                  $pptxFiles = Get-ChildItem artifacts/release-gate/samples -Filter *.pptx | Sort-Object Name
+                  if ($pptxFiles.Count -eq 0) {
+                    throw "No PPTX files were generated for release-gate validation."
+                  }
+
+                  foreach ($pptxFile in $pptxFiles) {
+                    Write-Host "Validating '$($pptxFile.Name)' with Open XML SDK..." -ForegroundColor Cyan
+                    dotnet run --project src/MarpToPptx.OpenXmlValidator -c ${{ inputs.configuration }} -- $pptxFile.FullName
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "Open XML validation failed for $($pptxFile.FullName)"
+                    }
+                  }
+
+            - name: Convert PPTX To PDF With LibreOffice
+              shell: pwsh
+              run: |
+                  $pdfDirectory = Join-Path $PWD "artifacts/release-gate/pdf"
+                  New-Item -ItemType Directory -Path $pdfDirectory -Force | Out-Null
+
+                  $pptxFiles = Get-ChildItem artifacts/release-gate/samples -Filter *.pptx | Sort-Object Name
+                  foreach ($pptxFile in $pptxFiles) {
+                    Write-Host "Importing '$($pptxFile.Name)' in LibreOffice and exporting to PDF..." -ForegroundColor Cyan
+                    soffice --headless --nologo --nodefault --nofirststartwizard --convert-to pdf --outdir $pdfDirectory $pptxFile.FullName
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "LibreOffice failed while converting $($pptxFile.FullName)"
+                    }
+                  }
+
+            - name: Verify PDF Output
+              shell: pwsh
+              run: |
+                  $pptxCount = (Get-ChildItem artifacts/release-gate/samples -Filter *.pptx).Count
+                  $pdfCount = (Get-ChildItem artifacts/release-gate/pdf -Filter *.pdf).Count
+
+                  if ($pptxCount -ne $pdfCount) {
+                    throw "Expected $pptxCount PDFs from LibreOffice conversion, but found $pdfCount."
+                  }
+
+            - name: Upload Release Gate Artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: marp2pptx-release-gate-artifacts
+                  path: |
+                      artifacts/release-gate/*
+                      artifacts/nupkg/*.nupkg
+                  if-no-files-found: warn

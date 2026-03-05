@@ -58,3 +58,12 @@ section.invert {
   background-color: #1A1A2E;
   color: #E0E0E0;
 }
+
+section.expansive {
+  font-size: 48px;
+  line-height: 1.35;
+}
+
+section.expansive h2 {
+  font-size: 54px;
+}

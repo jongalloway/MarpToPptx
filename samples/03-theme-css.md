@@ -26,6 +26,17 @@ The heading size hierarchy should reflect the CSS file, and the top-level headin
 
 ---
 
+<!-- class: expansive -->
+## Class Variant: Layout Stress
+
+This slide uses a class variant that increases body and heading size enough to change placement.
+
+The layout engine should account for the class-adjusted typography rather than sizing frames from the base theme and rendering with larger text afterward.
+
+This makes the sample useful as a visual smoke check for layout consistency, not just color and font application.
+
+---
+
 ```csharp
 var compiler = new MarpCompiler();
 var deck = compiler.Compile(markdown, sourcePath, themeCss);

@@ -10,6 +10,7 @@ Generate a PPTX with the local CLI project instead of the published `dnx` tool.
 
 ```powershell
 pwsh ./scripts/Generate-LocalPptx.ps1 -InputMarkdown samples/01-minimal.md -OutputPath artifacts/samples/01-minimal-scripted.pptx
+pwsh ./scripts/Generate-LocalPptx.ps1 -InputMarkdown samples/06-remote-assets.md -OutputPath artifacts/samples/06-remote-assets-scripted.pptx -AllowRemoteAssets
 ```
 
 ### `Generate-SamplePptxSet.ps1`
@@ -19,6 +20,7 @@ Generate PPTX output for each sample deck in `samples/`, writing results to `art
 ```powershell
 pwsh ./scripts/Generate-SamplePptxSet.ps1
 pwsh ./scripts/Generate-SamplePptxSet.ps1 -Configuration Release -Force
+pwsh ./scripts/Generate-SamplePptxSet.ps1 -Configuration Release -Force -IncludeRemoteSamples
 ```
 
 ### `Expand-Pptx.ps1`
@@ -54,6 +56,7 @@ Run the main local PPTX smoke-test flow in one command: generate with the local 
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/03-theme-css.md -ThemeCss samples/03-theme.css -Configuration Release
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -CiSafe
+pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/06-remote-assets.md -Configuration Release -AllowRemoteAssets -CiSafe
 ```
 
 ## Notes
@@ -63,3 +66,5 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Ci
 - `Generate-LocalPptx.ps1` is the preferred path for renderer debugging because it executes the current workspace code.
 - `Invoke-PptxSmokeTest.ps1` is the quickest end-to-end check before or after renderer/package changes.
 - `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus .NET-hosted Open XML validation on CI agents or other environments without PowerPoint.
+- Remote asset smoke coverage is opt-in in the sample-generation helpers so the default local flow stays deterministic when working offline.
+- The manual pre-release PowerPoint review checklist is documented in `doc/release-validation.md`.
