@@ -5,6 +5,7 @@ param(
 	[string]$OutputPath,
 	[string]$ThemeCss,
 	[string]$Template,
+	[switch]$AllowRemoteAssets,
 	[ValidateSet("Debug", "Release")]
 	[string]$Configuration = "Debug",
 	[switch]$CiSafe,
@@ -97,7 +98,7 @@ if ($CiSafe -and -not $SkipPowerPoint -and -not $powerPointAvailable) {
 Write-Host "Step 1: Generate PPTX from the local workspace code." -ForegroundColor Cyan
 $generateArguments = @{
 	InputMarkdown = $InputMarkdown
-	OutputPath = $resolvedOutputPath
+	OutputPath    = $resolvedOutputPath
 	Configuration = $Configuration
 }
 
@@ -107,6 +108,10 @@ if ($ThemeCss) {
 
 if ($Template) {
 	$generateArguments.Template = $Template
+}
+
+if ($AllowRemoteAssets) {
+	$generateArguments.AllowRemoteAssets = $true
 }
 
 & $generateScript @generateArguments

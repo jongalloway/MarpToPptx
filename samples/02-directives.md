@@ -5,6 +5,8 @@ theme: gaia
 paginate: true
 lang: en-US
 backgroundColor: "#F7F3E8"
+backgroundImage: url(assets/accent-wave.svg)
+backgroundSize: contain
 header: MarpToPptx Directive Sample
 footer: Sample deck footer
 # The 'style' key merges inline CSS with any --theme-css file.
@@ -20,6 +22,7 @@ style: |
 This slide uses front matter plus an inline `class` directive.
 
 - `theme`, `paginate`, `backgroundColor`, `header`, `footer`, `lang`, and `style` are set in front matter and apply globally.
+- `backgroundImage: url(...)` and `backgroundSize: contain` are also set in front matter and should normalize and apply globally.
 - `<!-- class: lead -->` is a **local directive** — it carries forward to subsequent slides.
 
 <!-- HTML comments that do not match the key: value directive pattern become presenter notes. -->
@@ -32,7 +35,7 @@ This slide uses front matter plus an inline `class` directive.
 This slide has no directives of its own.
 
 - `class: lead` from the previous slide **carries forward** here (local directive behavior).
-- Front-matter `paginate`, `header`, `footer`, `backgroundColor` also persist.
+- Front-matter `paginate`, `header`, `footer`, `backgroundColor`, `backgroundImage`, and `backgroundSize` also persist.
 
 ---
 
@@ -69,9 +72,19 @@ No directives on this slide.
 ---
 
 <!-- backgroundImage: url(assets/accent-wave.svg) -->
+<!-- backgroundSize: cover -->
 # Background Image Directive
 
-`backgroundImage` is a local directive — this background fills this slide and carries forward.
+`backgroundImage` is a local directive, and `backgroundSize: cover` locally overrides the global `contain` behavior.
+
+---
+
+# After Background Size Override
+
+No directives on this slide.
+
+- `backgroundImage` and `backgroundSize: cover` from the previous slide carry forward.
+- This verifies local override behavior on top of normalized front-matter defaults.
 
 ---
 

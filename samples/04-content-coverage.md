@@ -47,6 +47,14 @@ The local MP3 should embed as a PowerPoint audio object.
 
 ---
 
+## M4A Audio
+
+![Narration track](assets/narration.m4a)
+
+The local M4A should embed as a PowerPoint audio object using the explicit content-type path rather than falling back to unsupported-media text.
+
+---
+
 ## Mixed Lists
 
 - Top-level bullet

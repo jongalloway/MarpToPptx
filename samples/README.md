@@ -14,10 +14,13 @@ Covers front matter plus the supported slide directives, including background, h
 Uses `03-theme.css` to exercise theme parsing for fonts, colors, padding, background images, typography, headings, and code styles.
 
 4. `04-content-coverage.md`
-Combines images, syntax-highlighted code blocks, local audio/video, ordered lists, unordered lists, and native tables in one deck.
+Combines images, syntax-highlighted code blocks, local MP3/M4A audio, local video, ordered lists, unordered lists, and native tables in one deck.
 
 5. `05-compatibility-gaps.md`
 Intentionally includes Marp features that are not fully implemented yet so behavior gaps are easy to reproduce and discuss.
+
+6. `06-remote-assets.md`
+Opt-in integration smoke deck for real HTTP(S) image fetches using commit-pinned raw GitHub URLs.
 
 ## Running The Samples
 
@@ -43,5 +46,6 @@ dotnet run --project src/MarpToPptx.Cli -- samples/03-theme-css.md --theme-css s
 
 - Asset references are relative to each sample Markdown file.
 - `04-content-coverage.md` depends on the small local media fixtures under `samples/assets/`.
+- `06-remote-assets.md` is intended for integration smoke testing and should be run with remote assets explicitly enabled.
 - The compatibility-gap sample is useful for validating current limitations without needing to invent ad hoc repros.
 - Output paths above target `artifacts/samples/`, but any writable location will work.

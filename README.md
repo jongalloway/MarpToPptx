@@ -15,6 +15,8 @@ For the `DocumentFormat.OpenXml` `3.4.1` presentation-impact audit and related f
 
 For integrating `MarpToPptx` into a VS Code authoring workflow in a content repository, see `doc/vscode-workflow.md`.
 
+For pre-release validation, hosted LibreOffice gate coverage, and the manual PowerPoint review checklist, see `doc/release-validation.md`.
+
 ## Current Structure
 
 - `src/MarpToPptx.Core`: semantic slide model, Markdown parsing, theme parsing, layout planning
@@ -122,6 +124,8 @@ dotnet tool run marp2pptx sample.md -o sample.pptx
 ## Releases
 
 NuGet publishing is handled by `.github/workflows/publish.yml` using nuget.org Trusted Publishing with GitHub OIDC.
+
+Heavier pre-release validation is available separately through `.github/workflows/release-gate.yml`.
 
 - Versioning is tag-based via `MinVer`.
 - Stable release tags should use the form `v1.2.3`.

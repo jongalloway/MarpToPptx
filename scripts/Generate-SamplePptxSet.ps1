@@ -4,6 +4,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
     [string]$Template,
+    [switch]$IncludeRemoteSamples,
     [switch]$Force
 )
 
@@ -31,6 +32,16 @@ function Get-ThemeCssPath {
     return $null
 }
 
+function Test-RequiresRemoteAssets {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.IO.FileInfo]$MarkdownFile
+    )
+
+    $content = [System.IO.File]::ReadAllText($MarkdownFile.FullName)
+    return $content -match 'https?://'
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $generateScript = Join-Path $PSScriptRoot "Generate-LocalPptx.ps1"
 $resolvedSamplesDirectory = [System.IO.Path]::GetFullPath($SamplesDirectory, $repoRoot)
@@ -43,14 +54,20 @@ if (-not (Test-Path $resolvedSamplesDirectory)) {
 New-Item -ItemType Directory -Path $resolvedOutputDirectory -Force | Out-Null
 
 $sampleFiles = Get-ChildItem -Path $resolvedSamplesDirectory -File -Filter *.md |
-    Where-Object { $_.Name -ne "README.md" } |
-    Sort-Object Name
+Where-Object { $_.Name -ne "README.md" } |
+Sort-Object Name
 
 if ($sampleFiles.Count -eq 0) {
     throw "No sample Markdown files were found in '$resolvedSamplesDirectory'."
 }
 
 foreach ($sampleFile in $sampleFiles) {
+    $requiresRemoteAssets = Test-RequiresRemoteAssets -MarkdownFile $sampleFile
+    if ($requiresRemoteAssets -and -not $IncludeRemoteSamples) {
+        Write-Host "Skipping '$($sampleFile.Name)' because it requires remote assets. Use -IncludeRemoteSamples to enable remote smoke samples." -ForegroundColor Yellow
+        continue
+    }
+
     $outputPath = Join-Path $resolvedOutputDirectory ("{0}.pptx" -f $sampleFile.BaseName)
 
     if ((-not $Force) -and (Test-Path $outputPath)) {
@@ -60,7 +77,7 @@ foreach ($sampleFile in $sampleFiles) {
 
     $arguments = @{
         InputMarkdown = $sampleFile.FullName
-        OutputPath = $outputPath
+        OutputPath    = $outputPath
         Configuration = $Configuration
     }
 
@@ -72,6 +89,11 @@ foreach ($sampleFile in $sampleFiles) {
 
     if ($Template) {
         $arguments.Template = [System.IO.Path]::GetFullPath($Template, $repoRoot)
+    }
+
+    if ($requiresRemoteAssets) {
+        $arguments.AllowRemoteAssets = $true
+        Write-Host "Enabling remote asset downloads for '$($sampleFile.Name)'." -ForegroundColor Cyan
     }
 
     Write-Host "Generating PPTX for '$($sampleFile.Name)'..." -ForegroundColor Cyan

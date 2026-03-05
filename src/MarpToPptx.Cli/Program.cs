@@ -17,6 +17,7 @@ internal static class ProgramEntry
 		string? outputPath = null;
 		string? templatePath = null;
 		string? themeCssPath = null;
+		var allowRemoteAssets = false;
 
 		for (var index = 0; index < args.Length; index++)
 		{
@@ -32,6 +33,9 @@ internal static class ProgramEntry
 					break;
 				case "--theme-css":
 					themeCssPath = RequireValue(args, ref index, arg);
+					break;
+				case "--allow-remote-assets":
+					allowRemoteAssets = true;
 					break;
 				default:
 					if (arg.StartsWith('-'))
@@ -69,6 +73,7 @@ internal static class ProgramEntry
 		{
 			TemplatePath = string.IsNullOrWhiteSpace(templatePath) ? null : Path.GetFullPath(templatePath),
 			SourceDirectory = Path.GetDirectoryName(inputPath),
+			AllowRemoteAssets = allowRemoteAssets,
 		});
 
 		Console.WriteLine($"Generated '{outputPath}'.");
@@ -88,11 +93,12 @@ internal static class ProgramEntry
 
 	private static void PrintUsage()
 	{
-		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css]");
+		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets]");
 		Console.WriteLine();
 		Console.WriteLine("Options:");
 		Console.WriteLine("  -o, --output      Output .pptx path. Defaults to the input file name with a .pptx extension.");
 		Console.WriteLine("  --template        Existing .pptx template to copy masters/themes from before rendering slides.");
 		Console.WriteLine("  --theme-css       CSS file to parse for Marp-style theme values.");
+		Console.WriteLine("  --allow-remote-assets  Enable HTTP/HTTPS image downloads during rendering.");
 	}
 }
