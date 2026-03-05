@@ -1263,6 +1263,57 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_EmitsNotesRelationshipsNeededForPowerPointCompatibility()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Title Slide
+
+            Body text.
+
+            <!-- Presenter note text. -->
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var notesSlidePart = slidePart.NotesSlidePart;
+        var notesMasterPart = document.PresentationPart.NotesMasterPart;
+
+        Assert.NotNull(notesSlidePart);
+        Assert.NotNull(notesMasterPart);
+        Assert.NotNull(notesMasterPart!.ThemePart);
+        Assert.Equal("/ppt/slides/slide1.xml", notesSlidePart!.SlidePart?.Uri.ToString());
+        Assert.Equal(notesMasterPart.Uri, notesSlidePart.NotesMasterPart?.Uri);
+
+        using var archive = ZipFile.OpenRead(outputPath);
+
+        var notesMasterRelationshipsEntry = archive.GetEntry("ppt/notesMasters/_rels/notesMaster1.xml.rels");
+        Assert.NotNull(notesMasterRelationshipsEntry);
+        using (var reader = new StreamReader(notesMasterRelationshipsEntry!.Open()))
+        {
+            var xml = reader.ReadToEnd();
+            Assert.Contains("relationships/theme", xml);
+            Assert.Contains("theme", xml);
+        }
+
+        var notesSlideRelationshipsEntry = archive.GetEntry("ppt/notesSlides/_rels/notesSlide1.xml.rels");
+        Assert.NotNull(notesSlideRelationshipsEntry);
+        using (var reader = new StreamReader(notesSlideRelationshipsEntry!.Open()))
+        {
+            var xml = reader.ReadToEnd();
+            Assert.Contains("relationships/notesMaster", xml);
+            Assert.Contains("relationships/slide", xml);
+            Assert.Contains("../slides/slide1.xml", xml);
+        }
+    }
+
+    [Fact]
     public void Renderer_DoesNotCreateNotesSlidePart_WhenSlideHasNoNotes()
     {
         using var workspace = TestWorkspace.Create();

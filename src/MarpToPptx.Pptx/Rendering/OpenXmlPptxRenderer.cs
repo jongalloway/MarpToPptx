@@ -388,6 +388,7 @@ public sealed class OpenXmlPptxRenderer
         var notesMasterPart = EnsureNotesMasterPart(presentationPart);
         var notesSlidePart = slidePart.AddNewPart<NotesSlidePart>(GetNextRelationshipId(slidePart));
         notesSlidePart.AddPart(notesMasterPart, "rId1");
+        notesSlidePart.AddPart(slidePart, GetNextRelationshipId(notesSlidePart));
 
         var paragraphs = notes
             .Replace("\r\n", "\n", StringComparison.Ordinal)
@@ -432,6 +433,7 @@ public sealed class OpenXmlPptxRenderer
         if (presentationPart.NotesMasterPart is not null)
         {
             var existingNotesMasterPart = presentationPart.NotesMasterPart;
+            EnsureNotesMasterThemePart(presentationPart, existingNotesMasterPart);
             var existingRelId = presentationPart.GetIdOfPart(existingNotesMasterPart);
 
             var notesMasterIdList = presentationPart.Presentation!.NotesMasterIdList ??= new P.NotesMasterIdList();
@@ -478,6 +480,7 @@ public sealed class OpenXmlPptxRenderer
                 Hyperlink = A.ColorSchemeIndexValues.Hyperlink,
                 FollowedHyperlink = A.ColorSchemeIndexValues.FollowedHyperlink,
             });
+        EnsureNotesMasterThemePart(presentationPart, notesMasterPart);
         notesMasterPart.NotesMaster.Save();
 
         var relId = presentationPart.GetIdOfPart(notesMasterPart);
@@ -498,6 +501,30 @@ public sealed class OpenXmlPptxRenderer
 
         paragraph.Append(new A.EndParagraphRunProperties { Language = language });
         return paragraph;
+    }
+
+    private static void EnsureNotesMasterThemePart(PresentationPart presentationPart, NotesMasterPart notesMasterPart)
+    {
+        if (notesMasterPart.ThemePart is not null)
+        {
+            notesMasterPart.ThemePart.Theme ??= ClonePresentationTheme(presentationPart);
+            notesMasterPart.ThemePart.Theme.Save();
+            return;
+        }
+
+        var themePart = notesMasterPart.AddNewPart<ThemePart>(GetNextRelationshipId(notesMasterPart));
+        themePart.Theme = ClonePresentationTheme(presentationPart);
+        themePart.Theme.Save();
+    }
+
+    private static A.Theme ClonePresentationTheme(PresentationPart presentationPart)
+    {
+        var sourceTheme = presentationPart.SlideMasterParts.FirstOrDefault()?.ThemePart?.Theme
+            ?? presentationPart.ThemePart?.Theme;
+
+        return sourceTheme is null
+            ? CreateTheme()
+            : (A.Theme)sourceTheme.CloneNode(true);
     }
 
     private static void AddBackground(SlideStyle style, SlideRenderContext context)
