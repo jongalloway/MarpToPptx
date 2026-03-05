@@ -126,7 +126,11 @@ public sealed class MarpMarkdownParser
         // lang: set deck language from front-matter.
         if (frontMatter.TryGetValue("lang", out var lang))
         {
-            deck.Language = lang;
+            lang = lang?.Trim();
+            if (!string.IsNullOrWhiteSpace(lang))
+            {
+                deck.Language = lang;
+            }
         }
 
         // style: merge inline CSS from front-matter with the external theme CSS.

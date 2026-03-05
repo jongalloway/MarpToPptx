@@ -1024,6 +1024,24 @@ public class ParserTests
     }
 
     [Fact]
+    public void Lang_IsNull_WhenEmptyValue()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        lang:
+        ---
+
+        # Slide 1
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Null(deck.Language);
+    }
+
+    [Fact]
     public void Style_MergesInlineCssWithThemeCss()
     {
         const string themeCss = "section { background: red; }";
@@ -1040,10 +1058,10 @@ public class ParserTests
         var compiler = new MarpCompiler();
         var deck = compiler.Compile(markdown, themeCss: themeCss);
 
-        // The theme parser should have received both chunks.
-        // Verify the inline style was picked up by checking the theme was parsed
-        // (non-default theme means custom CSS was processed).
-        Assert.NotNull(deck.Theme);
+        // Both the theme CSS (background: red on section) and the inline CSS
+        // (h1 { color: blue }) should have been applied to the ThemeDefinition.
+        Assert.Equal("red", deck.Theme.BackgroundColor);
+        Assert.Equal("blue", deck.Theme.Headings[1].Color);
     }
 
     [Fact]
@@ -1062,7 +1080,8 @@ public class ParserTests
         var compiler = new MarpCompiler();
         var deck = compiler.Compile(markdown);
 
-        Assert.NotNull(deck.Theme);
+        // Inline CSS alone should override the default font family.
+        Assert.Equal("Comic Sans MS", deck.Theme.FontFamily);
     }
 
     [Fact]
