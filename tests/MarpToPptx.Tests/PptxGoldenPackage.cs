@@ -36,7 +36,7 @@ internal static class PptxGoldenPackage
 
         Assert.True(File.Exists(fixturePath), $"Golden fixture '{fixtureFileName}' was not found at '{fixturePath}'. Set UPDATE_GOLDEN_PACKAGES=1 and rerun the tests to create it intentionally.");
 
-        var expectedJson = File.ReadAllText(fixturePath).Replace("\r\n", "\n", StringComparison.Ordinal);
+        var expectedJson = NormalizeLineEndings(File.ReadAllText(fixturePath));
         Assert.Equal(expectedJson, actualJson);
     }
 
@@ -120,7 +120,10 @@ internal static class PptxGoldenPackage
     }
 
     private static string Serialize(PptxPackageSnapshot snapshot)
-        => JsonSerializer.Serialize(snapshot, JsonOptions).Replace("\r\n", "\n", StringComparison.Ordinal);
+        => NormalizeLineEndings(JsonSerializer.Serialize(snapshot, JsonOptions));
+
+    private static string NormalizeLineEndings(string text)
+        => text.ReplaceLineEndings("\n");
 
     private static bool ShouldUpdateFixtures()
         => string.Equals(Environment.GetEnvironmentVariable("UPDATE_GOLDEN_PACKAGES"), "1", StringComparison.Ordinal);
