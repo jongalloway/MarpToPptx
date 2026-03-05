@@ -33,6 +33,12 @@ public static partial class MarpDirectiveParser
                 var isSpot = rawKey.StartsWith('_');
                 var key = isSpot ? rawKey[1..] : rawKey;
 
+                // Skip directives with an empty key (e.g. <!-- _: value -->).
+                if (string.IsNullOrEmpty(key))
+                {
+                    continue;
+                }
+
                 if (isSpot)
                 {
                     spotOverrides[key] = value;
