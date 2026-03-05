@@ -10,6 +10,7 @@ namespace MarpToPptx.Core.Parsing;
 
 public sealed class MarpMarkdownParser
 {
+
     // Matches the opening or self-closing <video> tag and captures the src attribute value.
     private static readonly Regex VideoTagRegex = new(
         @"<video\b[^>]*?\bsrc\s*=\s*(?:""([^""]*)""|'([^']*)'|(\S+?)(?:\s|/?>))",
@@ -89,7 +90,7 @@ public sealed class MarpMarkdownParser
             var (effectiveStyle, newCarryForward, cleaned, notes) = MarpDirectiveParser.Parse(chunk, carryForwardStyle);
             carryForwardStyle = newCarryForward;
 
-            var slide = new Slide { Style = effectiveStyle, Notes = notes };
+            var slide = new Slide { Style = effectiveStyle, Notes = notes, NoteSpans = ParseNoteSpans(notes) };
             foreach (var element in ParseElements(cleaned))
             {
                 slide.Elements.Add(element);
@@ -135,6 +136,110 @@ public sealed class MarpMarkdownParser
         }
 
         return elements;
+    }
+
+    private IReadOnlyList<InlineSpan> ParseNoteSpans(string? notes)
+    {
+        if (string.IsNullOrWhiteSpace(notes))
+        {
+            return [];
+        }
+
+        var document = Markdown.Parse(notes, _pipeline);
+        var spans = new List<InlineSpan>();
+        foreach (var block in document)
+        {
+            var blockSpans = block switch
+            {
+                HeadingBlock heading => TrimSpans(ExtractInlineSpans(heading.Inline)),
+                ParagraphBlock paragraph => TrimSpans(ExtractInlineSpans(paragraph.Inline)),
+                ListBlock list => FlattenNoteListSpans(list),
+                FencedCodeBlock fencedCode => FlattenCodeBlockSpans(fencedCode),
+                CodeBlock codeBlock => FlattenCodeBlockSpans(codeBlock),
+                _ => [],
+            };
+
+            if (blockSpans.Count == 0)
+            {
+                continue;
+            }
+
+            if (spans.Count > 0)
+            {
+                spans.Add(new InlineSpan("\n"));
+            }
+
+            spans.AddRange(blockSpans);
+        }
+
+        return spans.Count > 0 ? spans : CreateLiteralNoteSpans(notes);
+    }
+
+    private static IReadOnlyList<InlineSpan> FlattenNoteListSpans(ListBlock list)
+    {
+        var spans = new List<InlineSpan>();
+        var items = FlattenListItems(list).ToArray();
+        for (var index = 0; index < items.Length; index++)
+        {
+            if (index > 0)
+            {
+                spans.Add(new InlineSpan("\n"));
+            }
+
+            var item = items[index];
+            var indent = item.Depth > 0 ? new string(' ', item.Depth * 2) : string.Empty;
+            var prefix = list.IsOrdered ? $"{indent}{index + 1}. " : $"{indent}• ";
+            spans.Add(new InlineSpan(prefix));
+            spans.AddRange(item.Spans);
+        }
+
+        return spans;
+    }
+
+    private static IReadOnlyList<InlineSpan> FlattenCodeBlockSpans(CodeBlock codeBlock)
+    {
+        var text = codeBlock.Lines.ToString() ?? string.Empty;
+        if (text.Length == 0)
+        {
+            return [];
+        }
+
+        var lines = text.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.None);
+        var spans = new List<InlineSpan>();
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                spans.Add(new InlineSpan("\n"));
+            }
+
+            if (lines[index].Length > 0)
+            {
+                spans.Add(new InlineSpan(lines[index], Code: true));
+            }
+        }
+
+        return spans;
+    }
+
+    private static IReadOnlyList<InlineSpan> CreateLiteralNoteSpans(string notes)
+    {
+        var spans = new List<InlineSpan>();
+        var lines = notes.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.None);
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                spans.Add(new InlineSpan("\n"));
+            }
+
+            if (lines[index].Length > 0)
+            {
+                spans.Add(new InlineSpan(lines[index]));
+            }
+        }
+
+        return spans;
     }
 
     private static void AppendHtmlBlockElements(HtmlBlock htmlBlock, ICollection<ISlideElement> elements)

@@ -376,24 +376,32 @@ public sealed class OpenXmlPptxRenderer
 
         if (!string.IsNullOrWhiteSpace(slideModel.Notes))
         {
-            AddNotesSlide(presentationPart, slidePart, slideModel.Notes!, language);
+            AddNotesSlide(presentationPart, slidePart, slideModel.NoteSpans, slideModel.Notes!, effectiveTheme, language);
         }
     }
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
         => theme.GetHeadingStyle(level);
 
-    private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, string notes, string language)
+    private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, IReadOnlyList<InlineSpan> noteSpans, string notes, ThemeDefinition theme, string language)
     {
         var notesMasterPart = EnsureNotesMasterPart(presentationPart);
         var notesSlidePart = slidePart.AddNewPart<NotesSlidePart>(GetNextRelationshipId(slidePart));
         notesSlidePart.AddPart(notesMasterPart, "rId1");
         notesSlidePart.AddPart(slidePart, GetNextRelationshipId(notesSlidePart));
 
-        var paragraphs = notes
-            .Replace("\r\n", "\n", StringComparison.Ordinal)
-            .Split('\n', StringSplitOptions.None)
-            .Select(line => CreateNotesParagraph(line, language))
+        var effectiveNoteSpans = noteSpans.Count > 0
+            ? noteSpans
+            : CreateLiteralNoteSpans(notes);
+
+        var noteTextStyle = CreateNotesTextStyle(theme);
+        var noteCodeStyle = noteTextStyle with
+        {
+            Color = theme.Code.Color,
+            FontFamily = theme.Code.FontFamily,
+        };
+        var paragraphs = SplitSpansIntoParagraphs(effectiveNoteSpans)
+            .Select(group => CreateParagraphFromSpans(group, noteTextStyle, noteCodeStyle, null, null, false, 1, language))
             .ToArray();
 
         var notesTextBody = new P.TextBody(new A.BodyProperties(), new A.ListStyle());
@@ -490,19 +498,6 @@ public sealed class OpenXmlPptxRenderer
         return notesMasterPart;
     }
 
-    private static A.Paragraph CreateNotesParagraph(string line, string language)
-    {
-        var paragraph = new A.Paragraph();
-        if (!string.IsNullOrEmpty(line))
-        {
-            var runProperties = new A.RunProperties { Language = language };
-            paragraph.Append(new A.Run(runProperties, new A.Text(line)));
-        }
-
-        paragraph.Append(new A.EndParagraphRunProperties { Language = language });
-        return paragraph;
-    }
-
     private static void EnsureNotesMasterThemePart(PresentationPart presentationPart, NotesMasterPart notesMasterPart)
     {
         if (notesMasterPart.ThemePart is not null)
@@ -526,6 +521,37 @@ public sealed class OpenXmlPptxRenderer
             ? CreateTheme()
             : (A.Theme)sourceTheme.CloneNode(true);
     }
+
+    private static IReadOnlyList<InlineSpan> CreateLiteralNoteSpans(string notes)
+    {
+        var spans = new List<InlineSpan>();
+        var lines = notes.Replace("\r\n", "\n", StringComparison.Ordinal).Split('\n', StringSplitOptions.None);
+        for (var index = 0; index < lines.Length; index++)
+        {
+            if (index > 0)
+            {
+                spans.Add(new InlineSpan("\n"));
+            }
+
+            if (lines[index].Length > 0)
+            {
+                spans.Add(new InlineSpan(lines[index]));
+            }
+        }
+
+        return spans;
+    }
+
+    private static TextStyle CreateNotesTextStyle(ThemeDefinition theme)
+        => new(
+            FontSize: 12,
+            Color: theme.Body.Color,
+            FontFamily: theme.Body.FontFamily,
+            Bold: false,
+            BackgroundColor: null,
+            LineHeight: theme.Body.LineHeight,
+            LetterSpacing: theme.Body.LetterSpacing,
+            TextTransform: null);
 
     private static void AddBackground(SlideStyle style, SlideRenderContext context)
     {

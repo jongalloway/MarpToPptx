@@ -1210,6 +1210,82 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_FormatsPresenterNotesWithRichRuns()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Title Slide
+
+            <!-- **Bold** and *italic* and `code` and ~~strike~~ -->
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var runs = document.PresentationPart!.SlideParts.Single()
+            .NotesSlidePart!.NotesSlide!
+            .Descendants<A.Run>()
+            .ToArray();
+
+        var boldRun = Assert.Single(runs, run => run.Text?.Text == "Bold");
+        Assert.True(boldRun.RunProperties?.Bold?.Value);
+
+        var italicRun = Assert.Single(runs, run => run.Text?.Text == "italic");
+        Assert.True(italicRun.RunProperties?.Italic?.Value);
+
+        var codeRun = Assert.Single(runs, run => run.Text?.Text == "code");
+        Assert.Equal("Cascadia Mono", codeRun.RunProperties?.GetFirstChild<A.LatinFont>()?.Typeface?.Value);
+
+        var strikeRun = Assert.Single(runs, run => run.Text?.Text == "strike");
+        Assert.Equal(A.TextStrikeValues.SingleStrike, strikeRun.RunProperties?.Strike?.Value);
+    }
+
+    [Fact]
+    public void Renderer_FormatsPresenterNoteCodeBlocksWithMonospaceRuns()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Title Slide
+
+            <!--
+            ```csharp
+            var total = items.Count;
+            Console.WriteLine(total);
+            ```
+            -->
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var runs = document.PresentationPart!.SlideParts.Single()
+            .NotesSlidePart!.NotesSlide!
+            .Descendants<A.Run>()
+            .ToArray();
+
+        Assert.Collection(
+            runs,
+            run =>
+            {
+                Assert.Equal("var total = items.Count;", run.Text?.Text);
+                Assert.Equal("Cascadia Mono", run.RunProperties?.GetFirstChild<A.LatinFont>()?.Typeface?.Value);
+            },
+            run =>
+            {
+                Assert.Equal("Console.WriteLine(total);", run.Text?.Text);
+                Assert.Equal("Cascadia Mono", run.RunProperties?.GetFirstChild<A.LatinFont>()?.Typeface?.Value);
+            });
+    }
+
+    [Fact]
     public void Renderer_CreatesNotesForMultipleSlides_AttachedToCorrectSlides()
     {
         using var workspace = TestWorkspace.Create();

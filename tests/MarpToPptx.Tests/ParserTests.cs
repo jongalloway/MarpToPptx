@@ -388,6 +388,85 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_ParsesPresenterNoteFormattingIntoNoteSpans()
+    {
+        const string markdown = """
+        # Slide
+
+        <!--
+        First note line.
+        - bullet item with **bold** and `code`
+        -->
+        <!-- Second note line with _italic_. -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("First note line.\n- bullet item with **bold** and `code`\nSecond note line with _italic_.", slide.Notes);
+        Assert.Collection(
+            slide.NoteSpans,
+            span => Assert.Equal("First note line.", span.Text),
+            span => Assert.Equal("\n", span.Text),
+            span => Assert.Equal("• ", span.Text),
+            span => Assert.Equal("bullet item with ", span.Text),
+            span =>
+            {
+                Assert.Equal("bold", span.Text);
+                Assert.True(span.Bold);
+            },
+            span => Assert.Equal(" and ", span.Text),
+            span =>
+            {
+                Assert.Equal("code", span.Text);
+                Assert.True(span.Code);
+            },
+            span => Assert.Equal("\n", span.Text),
+            span => Assert.Equal("Second note line with ", span.Text),
+            span =>
+            {
+                Assert.Equal("italic", span.Text);
+                Assert.True(span.Italic);
+            },
+            span => Assert.Equal(".", span.Text));
+    }
+
+    [Fact]
+    public void Parser_ParsesPresenterNoteCodeBlockIntoCodeSpans()
+    {
+        const string markdown = """
+        # Slide
+
+        <!--
+        ```csharp
+        var total = items.Count;
+        Console.WriteLine(total);
+        ```
+        -->
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("```csharp\nvar total = items.Count;\nConsole.WriteLine(total);\n```", slide.Notes);
+        Assert.Collection(
+            slide.NoteSpans,
+            span =>
+            {
+                Assert.Equal("var total = items.Count;", span.Text);
+                Assert.True(span.Code);
+            },
+            span => Assert.Equal("\n", span.Text),
+            span =>
+            {
+                Assert.Equal("Console.WriteLine(total);", span.Text);
+                Assert.True(span.Code);
+            });
+    }
+
+    [Fact]
     public void Parser_NoteCommentIsNotEmittedAsSlideElement()
     {
         const string markdown = """

@@ -117,9 +117,21 @@ All recognised directive keys support the `_` prefix. The next slide reverts to 
 
 HTML comments that do **not** match the `<!-- key: value -->` pattern are treated as presenter notes. They are stripped from the slide content and stored in `Slide.Notes`, then emitted as PPTX speaker notes.
 
-```markdown
+Presenter notes preserve line breaks and support Markdown-style formatting for bold, italic, strikethrough, inline code, and fenced code blocks in the emitted PPTX notes text. Non-directive note text is still captured from HTML comments, not from normal slide Markdown blocks.
+
+Compatibility note: during manual PowerPoint testing, inline-code and fenced-code note text may not consistently honor the requested monospace font face in the notes pane, even though the PPTX run structure is emitted with code-oriented formatting. Treat note code formatting as best-effort PowerPoint compatibility rather than a strict visual guarantee.
+
+````markdown
 <!-- This is a presenter note, not a directive. -->
+
+<!-- **Bold** and *italic* and `code` inside notes. -->
+
+<!--
+```csharp
+Console.WriteLine("notes code block");
 ```
+-->
+````
 
 ## Current MarpToPptx Compatibility Profile
 

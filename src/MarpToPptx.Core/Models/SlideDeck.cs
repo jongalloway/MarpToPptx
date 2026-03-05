@@ -26,6 +26,8 @@ public sealed class Slide
     public SlideStyle Style { get; init; } = new();
 
     public string? Notes { get; init; }
+
+    public IReadOnlyList<InlineSpan> NoteSpans { get; init; } = [];
 }
 
 public sealed class SlideStyle

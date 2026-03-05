@@ -57,6 +57,7 @@ Open each generated deck from `artifacts/manual-review/` in PowerPoint Desktop a
 - code blocks, lists, and tables remain editable and visually coherent
 - local media placeholders and embedded media objects appear as expected on `04-content-coverage.pptx`
 - remote asset slides render correctly on `06-remote-assets.pptx`
+- presenter notes appear on the expected slides in `07-presenter-notes.pptx`, and the control slide has no notes
 
 ### Sample Focus Areas
 
@@ -66,6 +67,7 @@ Open each generated deck from `artifacts/manual-review/` in PowerPoint Desktop a
 - `04-content-coverage.pptx`: images, tables, code, MP3, M4A, video
 - `05-compatibility-gaps.pptx`: current non-goals and known-approximation behavior
 - `06-remote-assets.pptx`: real HTTP(S) image fetches
+- `07-presenter-notes.pptx`: explicit presenter notes packaging and slide-to-notes attachment
 
 ## Current Exclusions
 
