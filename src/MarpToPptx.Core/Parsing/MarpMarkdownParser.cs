@@ -84,6 +84,21 @@ public sealed class MarpMarkdownParser
             };
         }
 
+        if (frontMatter.TryGetValue("backgroundSize", out var backgroundSize))
+        {
+            defaultStyle = new SlideStyle
+            {
+                ThemeName = defaultStyle.ThemeName,
+                Paginate = defaultStyle.Paginate,
+                ClassName = defaultStyle.ClassName,
+                BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = backgroundSize,
+                BackgroundColor = defaultStyle.BackgroundColor,
+                Header = defaultStyle.Header,
+                Footer = defaultStyle.Footer,
+            };
+        }
+
         if (frontMatter.TryGetValue("backgroundColor", out var backgroundColor))
         {
             defaultStyle = new SlideStyle
@@ -126,21 +141,6 @@ public sealed class MarpMarkdownParser
                 BackgroundColor = defaultStyle.BackgroundColor,
                 Header = defaultStyle.Header,
                 Footer = footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("backgroundSize", out var backgroundSize))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = defaultStyle.ClassName,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = backgroundSize,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                Header = defaultStyle.Header,
-                Footer = defaultStyle.Footer,
             };
         }
 
