@@ -125,7 +125,7 @@ HTML comments that do **not** match the `<!-- key: value -->` pattern are treate
 
 ### Supported Authoring Features
 
-- YAML front matter with simple scalar values
+- YAML front matter with simple `key: value` scalars, plus `|` literal block scalars (for `style`)
   - `lang` — sets the BCP-47 language tag for document metadata
   - `style` — inline CSS merged with any external theme CSS
 - Slide splitting on literal `---`
