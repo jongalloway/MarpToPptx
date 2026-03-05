@@ -45,10 +45,10 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 | Marpit | Slide separator `---` | Splits slides on horizontal rules | Supported subset | `SlideTokenizer` splits on a line that is exactly `---`, except inside fenced code blocks. |
 | Marpit | Alternate separators `***`, `___`, `- - -` | Alternate CommonMark rulers that can separate slides | Not supported | Only literal `---` is recognized as a slide boundary. |
 | Marpit | YAML front matter | Deck-level metadata | Supported subset | Parsed as simple `key: value` pairs only. |
-| Marpit | Directives in HTML comments | Slide and deck directives | Supported subset | Supports `theme`, `paginate`, `class`, `backgroundImage`, and `backgroundColor`. |
-| Marpit | Spot directives with `_` prefix | Apply a local directive to one slide only | Not supported | `_paginate`, `_class`, and similar are not recognized specially. |
-| Marpit | `headingDivider` | Split slides before headings automatically | Not supported | No heading-based slide splitting. |
-| Marpit | Header / footer directives | Per-slide repeated content | Not supported | Parsed neither into style nor slide elements. |
+| Marpit | Directives in HTML comments | Slide and deck directives | Supported subset | Supports `theme`, `paginate`, `class`, `backgroundImage`, `backgroundSize`, `backgroundColor`, `header`, and `footer`. |
+| Marpit | Spot directives with `_` prefix | Apply a local directive to one slide only | Supported | All recognised directive keys work with a `_` prefix (e.g. `_class`, `_paginate`, `_backgroundColor`). Spot directives apply to the current slide only and do not carry forward to subsequent slides. |
+| Marpit | `headingDivider` | Split slides before headings automatically | Supported subset | Parsed from front matter as an integer 1–6; slides are split before headings at or above that level. |
+| Marpit | Header / footer directives | Per-slide repeated content | Supported | `header` and `footer` string values are stored in `SlideStyle` and emitted into PPTX text shapes on each slide. |
 | Marpit | Extended image syntax | Width, height, filters, `bg`, split backgrounds | Partially supported | Normal Markdown images are parsed; Marpit image keywords are treated as alt text, not structured options. |
 | Marpit | Background image syntax via image alt text | `![bg](...)` and related | Not supported | Backgrounds are supported only through directives, not image syntax. |
 | Marpit | Fragmented lists | Incremental list reveal | Not supported | No fragment model in parser or renderer. |
@@ -65,18 +65,81 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 | Marp CLI / tooling | Browser-based rendering behavior | Preview, browser output, local-file rules | Not supported | `MarpToPptx` does not use a browser renderer. |
 | MarpToPptx-specific | PPTX template reuse | Copy masters/themes from an existing deck | Supported | `--template` copies an existing `.pptx` before rendering slides. |
 
+## Directive Behavior
+
+Marpit directives can be authored in YAML front matter or as HTML comments inside slide content. `MarpToPptx` recognises three scopes:
+
+### Global Directives (front matter only)
+
+Front matter key-value pairs set deck-level defaults that apply to all slides unless overridden. The following keys are interpreted and mapped to `SlideStyle`:
+
+| Key | Type | Description |
+| --- | --- | --- |
+| `theme` | string | Theme name; used for CSS class-variant lookup |
+| `paginate` | boolean | Enable slide-number rendering |
+| `class` | string | CSS class applied to all slides |
+| `backgroundImage` | string | URL of background image for all slides |
+| `backgroundSize` | string | Background sizing hint (`cover`, `contain`, etc.) |
+| `backgroundColor` | string | Background fill color for all slides |
+| `header` | string | Repeated header text on every slide |
+| `footer` | string | Repeated footer text on every slide |
+| `headingDivider` | integer (1–6) | Split slides before headings at or above that level |
+| `lang` | BCP-47 string | Language tag written to PPTX document metadata |
+| `style` | CSS string | Inline CSS merged with any `--theme-css` CSS |
+
+All other front matter keys are stored in `SlideDeck.FrontMatter` but not interpreted.
+
+### Local Directives (HTML comments, carried forward)
+
+HTML comments of the form `<!-- key: value -->` inside slide content set a local override for the current slide. The new value **carries forward** to every subsequent slide unless overridden again. Local directives update the carry-forward style.
+
+```markdown
+<!-- backgroundColor: #102A43 -->
+<!-- class: contrast -->
+# This slide and all slides after it use the dark background
+```
+
+The same keys listed in the global table above are recognised as local directives.
+
+### Spot Directives (HTML comments, current slide only)
+
+A leading `_` on the key makes a directive a **spot directive**: it applies only to the current slide and does not carry forward. Spot directives are layered on top of the inherited local style for that slide.
+
+```markdown
+<!-- _paginate: false -->
+<!-- _backgroundColor: #FFD700 -->
+# This slide only: pagination off, gold background
+```
+
+All recognised directive keys support the `_` prefix. The next slide reverts to the inherited carry-forward value.
+
+### Presenter Notes
+
+HTML comments that do **not** match the `<!-- key: value -->` pattern are treated as presenter notes. They are stripped from the slide content and stored in `Slide.Notes`, then emitted as PPTX speaker notes.
+
+```markdown
+<!-- This is a presenter note, not a directive. -->
+```
+
 ## Current MarpToPptx Compatibility Profile
 
 ### Supported Authoring Features
 
 - YAML front matter with simple scalar values
+  - `lang` — sets the BCP-47 language tag for document metadata
+  - `style` — inline CSS merged with any external theme CSS
 - Slide splitting on literal `---`
-- HTML comment directives for:
+- `headingDivider` in front matter (integer 1–6) — also splits slides before headings at or above that level
+- HTML comment directives (local and spot) for:
   - `theme`
   - `paginate`
   - `class`
   - `backgroundImage`
+  - `backgroundSize`
   - `backgroundColor`
+  - `header`
+  - `footer`
+- Spot directives — all of the above keys work with a `_` prefix (e.g. `_class`, `_paginate`); they apply only to the current slide and do not carry forward
 - Headings
 - Paragraphs
 - Bullet lists and ordered lists
@@ -100,10 +163,7 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 ### Not Yet Supported
 
 - Native Marpit background image syntax such as `![bg](...)`
-- `headingDivider`
-- header / footer directives
 - fragmented lists
-- spot directives using `_`
 - Marp Core `size`
 - math
 - Marp `fit`
@@ -201,7 +261,10 @@ Important current behavior:
 - Front matter is parsed only when it appears first and is delimited by `---`.
 - Front matter parsing is intentionally simple and does not implement full YAML features such as multiline blocks or nested structures.
 - Slide splitting ignores `---` inside fenced code blocks.
+- `headingDivider` in front matter splits slides before headings at or above the specified level.
 - Directive parsing only recognizes HTML comments that match `<!-- key: value -->`.
+- Local directives (no `_` prefix) carry forward to subsequent slides.
+- Spot directives (`_` prefix) apply only to the current slide and do not carry forward.
 
 ### Theme Resolution
 

@@ -1,10 +1,13 @@
 ---
+# Directive keys set in front matter apply globally to the entire deck.
+# All keys listed here are fully supported by MarpToPptx.
 theme: gaia
 paginate: true
 lang: en-US
 backgroundColor: "#F7F3E8"
 header: MarpToPptx Directive Sample
 footer: Sample deck footer
+# The 'style' key merges inline CSS with any --theme-css file.
 style: |
   section.contrast {
     color: #FFFFFF;
@@ -16,8 +19,11 @@ style: |
 
 This slide uses front matter plus an inline `class` directive.
 
-- Front matter header should appear at the top of every slide.
-- Front matter footer should appear at the bottom unless a slide overrides it.
+- `theme`, `paginate`, `backgroundColor`, `header`, `footer`, `lang`, and `style` are set in front matter and apply globally.
+- `<!-- class: lead -->` is a **local directive** — it carries forward to subsequent slides.
+
+<!-- HTML comments that do not match the key: value directive pattern become presenter notes. -->
+<!-- presenter note: slide 1 -->
 
 ---
 
@@ -25,8 +31,8 @@ This slide uses front matter plus an inline `class` directive.
 
 This slide has no directives of its own.
 
-- `class: lead` from the previous slide should **carry forward** here.
-- Front-matter `paginate`, `header`, `footer`, `backgroundColor` should persist.
+- `class: lead` from the previous slide **carries forward** here (local directive behavior).
+- Front-matter `paginate`, `header`, `footer`, `backgroundColor` also persist.
 
 ---
 
@@ -34,15 +40,22 @@ This slide has no directives of its own.
 <!-- class: contrast -->
 # Per-Slide Background Color
 
-The current implementation supports these directive keys:
+Both directives above are **local** — they apply here and carry forward.
 
-- `theme`
-- `paginate`
-- `class`
-- `backgroundImage`
-- `backgroundColor`
-- `header`
-- `footer`
+The following directive keys are supported in HTML comments (local and spot):
+
+| Key | Scope | Notes |
+| --- | --- | --- |
+| `theme` | local | Applies from this slide onward |
+| `paginate` | local | `true` or `false` |
+| `class` | local | CSS class name from theme |
+| `backgroundImage` | local | `url(...)` or bare path |
+| `backgroundSize` | local | e.g. `cover`, `contain` |
+| `backgroundColor` | local | Hex or `rgb()` |
+| `header` | local | Text string |
+| `footer` | local | Text string |
+
+Add a `_` prefix to any key to make it a **spot directive** (current slide only).
 
 ---
 
@@ -50,15 +63,15 @@ The current implementation supports these directive keys:
 
 No directives on this slide.
 
-- `class: contrast` and `backgroundColor: #102A43` from slide 3 should carry forward.
-- Front-matter `header` and `footer` should still be present.
+- `class: contrast` and `backgroundColor: #102A43` from the previous slide carry forward.
+- Front-matter `header` and `footer` are still present.
 
 ---
 
 <!-- backgroundImage: url(assets/accent-wave.svg) -->
 # Background Image Directive
 
-Use this slide to verify that a local background image fills the slide.
+`backgroundImage` is a local directive — this background fills this slide and carries forward.
 
 ---
 
@@ -69,8 +82,9 @@ Use this slide to verify that a local background image fills the slide.
 
 This slide uses **spot directives** (`_paginate`, `_header`, `_footer`).
 
-- Pagination should be **off** on this slide only.
-- Header and footer text should be overridden on this slide only.
+- Pagination is **off** on this slide only.
+- Header and footer text are overridden on this slide only.
+- Spot directives use a `_` prefix and do not carry forward.
 
 ---
 
@@ -78,9 +92,9 @@ This slide uses **spot directives** (`_paginate`, `_header`, `_footer`).
 
 No directives on this slide.
 
-- `_paginate: false` should **not** carry forward — pagination should be back on.
-- `_header` and `_footer` should **not** carry forward — original front-matter header/footer should appear.
-- `class: contrast` and `backgroundColor: #102A43` from slide 3 should still carry forward.
+- `_paginate: false` does **not** carry forward — pagination is back on.
+- `_header` and `_footer` do **not** carry forward — original front-matter header/footer appear.
+- `class: contrast` and `backgroundColor: #102A43` from slide 3 still carry forward (they were local, not spot).
 
 ---
 
@@ -90,8 +104,8 @@ No directives on this slide.
 
 This slide uses spot directives for `_class` and `_backgroundColor`.
 
-- Should display with class `special` and gold background.
-- Neither should carry to the next slide.
+- Displays with class `special` and gold background on this slide only.
+- Neither carries forward to the next slide.
 
 ---
 
@@ -99,6 +113,6 @@ This slide uses spot directives for `_class` and `_backgroundColor`.
 
 No directives.
 
-- `class` should revert to `contrast` (last local directive, from slide 3).
-- `backgroundColor` should revert to `#102A43` (last local directive, from slide 3).
-- `paginate`, `header`, `footer` should reflect their last inherited values.
+- `class` reverts to `contrast` (last **local** directive, from slide 3).
+- `backgroundColor` reverts to `#102A43` (last **local** directive, from slide 3).
+- `paginate`, `header`, `footer` reflect their last inherited values.
