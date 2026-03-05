@@ -36,7 +36,7 @@ internal static class PptxGoldenPackage
 
         Assert.True(File.Exists(fixturePath), $"Golden fixture '{fixtureFileName}' was not found at '{fixturePath}'. Set UPDATE_GOLDEN_PACKAGES=1 and rerun the tests to create it intentionally.");
 
-        var expectedJson = File.ReadAllText(fixturePath);
+        var expectedJson = File.ReadAllText(fixturePath).Replace("\r\n", "\n", StringComparison.Ordinal);
         Assert.Equal(expectedJson, actualJson);
     }
 
