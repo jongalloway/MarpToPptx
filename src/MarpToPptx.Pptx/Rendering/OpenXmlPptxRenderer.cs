@@ -1519,23 +1519,29 @@ public sealed class OpenXmlPptxRenderer
         XNamespace dcmitype = "http://purl.org/dc/dcmitype/";
         XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
+        var coreProperties = new XElement(
+            cp + "coreProperties",
+            new XAttribute(XNamespace.Xmlns + "cp", cp),
+            new XAttribute(XNamespace.Xmlns + "dc", dc),
+            new XAttribute(XNamespace.Xmlns + "dcterms", dcterms),
+            new XAttribute(XNamespace.Xmlns + "dcmitype", dcmitype),
+            new XAttribute(XNamespace.Xmlns + "xsi", xsi),
+            new XElement(dc + "title", GetPresentationTitle(deck)),
+            new XElement(dc + "subject", "PowerPoint Presentation"),
+            new XElement(dc + "creator", "MarpToPptx"),
+            new XElement(cp + "lastModifiedBy", "MarpToPptx"),
+            new XElement(cp + "revision", "1"),
+            new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)),
+            new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)));
+
+        if (deck.Language is not null)
+        {
+            coreProperties.Add(new XElement(dc + "language", deck.Language));
+        }
+
         return new XDocument(
             new XDeclaration("1.0", "UTF-8", "yes"),
-            new XElement(
-                cp + "coreProperties",
-                new XAttribute(XNamespace.Xmlns + "cp", cp),
-                new XAttribute(XNamespace.Xmlns + "dc", dc),
-                new XAttribute(XNamespace.Xmlns + "dcterms", dcterms),
-                new XAttribute(XNamespace.Xmlns + "dcmitype", dcmitype),
-                new XAttribute(XNamespace.Xmlns + "xsi", xsi),
-                new XElement(dc + "title", GetPresentationTitle(deck)),
-                new XElement(dc + "subject", "PowerPoint Presentation"),
-                new XElement(dc + "creator", "MarpToPptx"),
-                deck.Language is not null ? new XElement(dc + "language", deck.Language) : null!,
-                new XElement(cp + "lastModifiedBy", "MarpToPptx"),
-                new XElement(cp + "revision", "1"),
-                new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)),
-                new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))));
+            coreProperties);
     }
 
     private static XElement CreateVariantString(XNamespace variantNamespace, string value)

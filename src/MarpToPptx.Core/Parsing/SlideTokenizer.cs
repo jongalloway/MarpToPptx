@@ -57,6 +57,6 @@ public static partial class SlideTokenizer
         return slides.Where(slide => !string.IsNullOrWhiteSpace(slide)).ToArray();
     }
 
-    [GeneratedRegex(@"^(#{1,6})\s")]
+    [GeneratedRegex(@"^\s{0,3}(#{1,6})\s")]
     private static partial Regex HeadingLineRegex();
 }
