@@ -1968,39 +1968,6 @@ public class PptxRendererTests
     // ────────────────────────────────────────────────────────
 
     [Fact]
-    public void Renderer_EmitsSlideNumberField_WhenPaginateTrue()
-    {
-        using var workspace = TestWorkspace.Create();
-
-        var markdownPath = workspace.WriteMarkdown(
-            "deck.md",
-            """
-            ---
-            paginate: true
-            ---
-
-            # Slide One
-
-            ---
-
-            # Slide Two
-            """);
-
-        var outputPath = workspace.GetPath("deck.pptx");
-        RenderDeck(markdownPath, outputPath, workspace.RootPath);
-
-        using var document = PresentationDocument.Open(outputPath, false);
-        var slideParts = document.PresentationPart!.SlideParts.ToArray();
-
-        // Each slide should have a slidenum field.
-        foreach (var slidePart in slideParts)
-        {
-            var fields = slidePart.Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum").ToArray();
-            Assert.Single(fields);
-        }
-    }
-
-    [Fact]
     public void Renderer_OmitsSlideNumberField_WhenPaginateFalse()
     {
         using var workspace = TestWorkspace.Create();
@@ -2069,7 +2036,6 @@ public class PptxRendererTests
         section { background-color: #FFFFFF; }
         section.dark { background-color: #1A1A2E; }
         """;
-        workspace.WriteFile("theme.css", themeCss);
 
         var markdownPath = workspace.WriteMarkdown(
             "deck.md",

@@ -292,22 +292,24 @@ public static partial class MarpThemeParser
 
         if (string.IsNullOrEmpty(subElement))
         {
-            // section.classname { ... } — section-level overrides
-            variant = variant with
-            {
-                BackgroundColor = declarations.TryGetValue("background-color", out var bgColor) ? bgColor : variant.BackgroundColor,
-                TextColor = declarations.TryGetValue("color", out var color) ? color : variant.TextColor,
-                FontFamily = declarations.TryGetValue("font-family", out var font) ? NormalizeFontFamily(font) : variant.FontFamily,
-            };
-
+            // section.classname { ... } — section-level overrides.
+            // Apply background shorthand first, then background-color so that
+            // background-color takes precedence (matching the main loop priority).
+            var backgroundColor = variant.BackgroundColor;
             if (declarations.TryGetValue("background", out var bg))
             {
                 var extractedColor = ExtractColor(bg);
                 if (!string.IsNullOrWhiteSpace(extractedColor))
                 {
-                    variant = variant with { BackgroundColor = extractedColor };
+                    backgroundColor = extractedColor;
                 }
             }
+            if (declarations.TryGetValue("background-color", out var bgColor))
+            {
+                backgroundColor = bgColor;
+            }
+
+            variant = variant with { BackgroundColor = backgroundColor };
 
             // Build or update body text style from the CSS declarations.
             var body = variant.Body ?? baseBody;
@@ -324,12 +326,19 @@ public static partial class MarpThemeParser
         }
         else if (subElement.StartsWith("h", StringComparison.OrdinalIgnoreCase) && subElement.Length == 2 && char.IsDigit(subElement[1]))
         {
-            // section.classname h1 { ... } — heading override within class
+            // section.classname h1 { ... } — heading override within class.
             var level = subElement[1] - '0';
+            if (!baseHeadings.TryGetValue(level, out var baseHeading))
+            {
+                // Ignore invalid heading levels (e.g., h0, h7) that have no base heading style.
+                variants[className] = variant;
+                return;
+            }
+
             var headings = variant.Headings is not null
                 ? new Dictionary<int, TextStyle>(variant.Headings)
                 : new Dictionary<int, TextStyle>();
-            var current = headings.TryGetValue(level, out var existing) ? existing : baseHeadings[level];
+            var current = headings.TryGetValue(level, out var existing) ? existing : baseHeading;
             headings[level] = current with
             {
                 FontFamily = declarations.TryGetValue("font-family", out var hFont) ? NormalizeFontFamily(hFont) : current.FontFamily,
