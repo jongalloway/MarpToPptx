@@ -22,6 +22,9 @@ Intentionally includes Marp features that are not fully implemented yet so behav
 6. `06-remote-assets.md`
 Opt-in integration smoke deck for real HTTP(S) image fetches using commit-pinned raw GitHub URLs.
 
+7. `07-presenter-notes.md`
+Dedicated smoke deck for presenter notes packaging, including note-bearing slides, a no-notes control slide, and a slide that mixes directive comments with presenter notes.
+
 ## Running The Samples
 
 Run any sample with the published tool:
@@ -47,5 +50,6 @@ dotnet run --project src/MarpToPptx.Cli -- samples/03-theme-css.md --theme-css s
 - Asset references are relative to each sample Markdown file.
 - `04-content-coverage.md` depends on the small local media fixtures under `samples/assets/`.
 - `06-remote-assets.md` is intended for integration smoke testing and should be run with remote assets explicitly enabled.
+- `07-presenter-notes.md` is the explicit smoke deck for speaker notes and PowerPoint-open compatibility of emitted notes parts.
 - The compatibility-gap sample is useful for validating current limitations without needing to invent ad hoc repros.
 - Output paths above target `artifacts/samples/`, but any writable location will work.
