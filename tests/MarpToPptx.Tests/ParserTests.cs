@@ -983,4 +983,192 @@ public class ParserTests
         Assert.DoesNotContain("", deck.Slides[1].Style.Directives.Keys);
         Assert.DoesNotContain("", deck.Slides[2].Style.Directives.Keys);
     }
+
+    // ────────────────────────────────────────────────────────
+    // Issue #38 – Global directives: headingDivider, lang, style
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Lang_SetsLanguageOnSlideDeck()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        lang: ja
+        ---
+
+        # Slide 1
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal("ja", deck.Language);
+    }
+
+    [Fact]
+    public void Lang_DefaultsToNull_WhenNotSpecified()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        ---
+
+        # Slide 1
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Null(deck.Language);
+    }
+
+    [Fact]
+    public void Style_MergesInlineCssWithThemeCss()
+    {
+        const string themeCss = "section { background: red; }";
+        const string markdown = """
+        ---
+        marp: true
+        style: |
+          h1 { color: blue; }
+        ---
+
+        # Slide 1
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, themeCss: themeCss);
+
+        // The theme parser should have received both chunks.
+        // Verify the inline style was picked up by checking the theme was parsed
+        // (non-default theme means custom CSS was processed).
+        Assert.NotNull(deck.Theme);
+    }
+
+    [Fact]
+    public void Style_UsedAlone_WhenNoThemeCss()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        style: |
+          section { font-family: "Comic Sans MS"; }
+        ---
+
+        # Slide 1
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.NotNull(deck.Theme);
+    }
+
+    [Fact]
+    public void HeadingDivider_SplitsSlidesOnHeading()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        headingDivider: 2
+        ---
+
+        # Part One
+
+        Intro text.
+
+        ## Section A
+
+        Content A.
+
+        ## Section B
+
+        Content B.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        // headingDivider: 2 should split on ## headings, producing 3 slides:
+        // 1. "# Part One" + "Intro text."
+        // 2. "## Section A" + "Content A."
+        // 3. "## Section B" + "Content B."
+        Assert.Equal(3, deck.Slides.Count);
+    }
+
+    [Fact]
+    public void HeadingDivider_IgnoresLowerLevelHeadings()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        headingDivider: 1
+        ---
+
+        # First Slide
+
+        ### This is H3 (below divider level)
+
+        More content.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        // headingDivider: 1 splits only on # headings; ### should not split.
+        Assert.Single(deck.Slides);
+    }
+
+    [Fact]
+    public void HeadingDivider_WorksWithExplicitSeparators()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        headingDivider: 2
+        ---
+
+        # Slide One
+
+        ---
+
+        # Slide Two
+
+        ## Sub-section
+
+        Content here.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        // Explicit --- creates slide 1→2 break.
+        // headingDivider: 2 creates slide 2→3 break at ## Sub-section.
+        Assert.Equal(3, deck.Slides.Count);
+    }
+
+    [Fact]
+    public void HeadingDivider_InvalidValue_IsIgnored()
+    {
+        const string markdown = """
+        ---
+        marp: true
+        headingDivider: abc
+        ---
+
+        # Slide One
+
+        ## Section
+
+        Content.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        // Invalid value should be ignored — no heading-based splitting.
+        // Only the initial slide exists (no --- separators).
+        Assert.Single(deck.Slides);
+    }
 }

@@ -1,9 +1,14 @@
 ---
 theme: gaia
 paginate: true
+lang: en-US
 backgroundColor: "#F7F3E8"
 header: MarpToPptx Directive Sample
 footer: Sample deck footer
+style: |
+  section.contrast {
+    color: #FFFFFF;
+  }
 ---
 
 <!-- class: lead -->

@@ -11,6 +11,12 @@ public sealed class SlideDeck
     public List<Slide> Slides { get; } = [];
 
     public ThemeDefinition Theme { get; set; } = ThemeDefinition.Default;
+
+    /// <summary>
+    /// BCP-47 language tag from the <c>lang</c> global directive.
+    /// When set, this is used for document metadata and run-level language properties.
+    /// </summary>
+    public string? Language { get; set; }
 }
 
 public sealed class Slide
