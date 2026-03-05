@@ -21,6 +21,7 @@ public static partial class MarpThemeParser
         var fontFamily = theme.FontFamily;
         var monospace = theme.MonospaceFontFamily;
         var slidePadding = theme.SlidePadding;
+        var classVariants = new Dictionary<string, ClassVariant>(StringComparer.OrdinalIgnoreCase);
 
         foreach (var match in RuleRegex().Matches(css).Cast<System.Text.RegularExpressions.Match>())
         {
@@ -100,6 +101,10 @@ public static partial class MarpThemeParser
                                 TextTransform = declarations.TryGetValue("text-transform", out var headingTextTransform) ? headingTextTransform.Trim().ToLowerInvariant() : current.TextTransform,
                             };
                         }
+                        else if (TryParseClassSelector(selector, out var className, out var subElement))
+                        {
+                            ApplyClassVariant(classVariants, className!, subElement, declarations, bodyStyle, headingStyles);
+                        }
                         break;
                 }
             }
@@ -120,6 +125,7 @@ public static partial class MarpThemeParser
             Body = bodyStyle,
             Code = codeStyle,
             Headings = headingStyles,
+            ClassVariants = classVariants,
         };
     }
 
@@ -238,6 +244,112 @@ public static partial class MarpThemeParser
         }
 
         return number;
+    }
+
+    /// <summary>
+    /// Tries to match selectors like <c>section.lead</c> or <c>section.lead h1</c>.
+    /// Returns the class name and optional sub-element (e.g. "h1").
+    /// </summary>
+    private static bool TryParseClassSelector(string selector, out string? className, out string? subElement)
+    {
+        className = null;
+        subElement = null;
+
+        // Match "section.name" or "section.name subSelector"
+        if (!selector.StartsWith("section.", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        var afterDot = selector[8..]; // skip "section."
+        var spaceIndex = afterDot.IndexOf(' ');
+        if (spaceIndex < 0)
+        {
+            className = afterDot.Trim();
+            return className.Length > 0;
+        }
+
+        className = afterDot[..spaceIndex].Trim();
+        subElement = afterDot[(spaceIndex + 1)..].Trim();
+        return className.Length > 0;
+    }
+
+    /// <summary>
+    /// Applies CSS declarations to a class variant, creating it if it doesn't exist yet.
+    /// </summary>
+    private static void ApplyClassVariant(
+        Dictionary<string, ClassVariant> variants,
+        string className,
+        string? subElement,
+        Dictionary<string, string> declarations,
+        TextStyle baseBody,
+        Dictionary<int, TextStyle> baseHeadings)
+    {
+        if (!variants.TryGetValue(className, out var variant))
+        {
+            variant = new ClassVariant();
+        }
+
+        if (string.IsNullOrEmpty(subElement))
+        {
+            // section.classname { ... } — section-level overrides.
+            // Apply background shorthand first, then background-color so that
+            // background-color takes precedence (matching the main loop priority).
+            var backgroundColor = variant.BackgroundColor;
+            if (declarations.TryGetValue("background", out var bg))
+            {
+                var extractedColor = ExtractColor(bg);
+                if (!string.IsNullOrWhiteSpace(extractedColor))
+                {
+                    backgroundColor = extractedColor;
+                }
+            }
+            if (declarations.TryGetValue("background-color", out var bgColor))
+            {
+                backgroundColor = bgColor;
+            }
+
+            variant = variant with { BackgroundColor = backgroundColor };
+
+            // Build or update body text style from the CSS declarations.
+            var body = variant.Body ?? baseBody;
+            variant = variant with
+            {
+                Body = body with
+                {
+                    Color = declarations.TryGetValue("color", out var bodyColor) ? bodyColor : body.Color,
+                    FontFamily = declarations.TryGetValue("font-family", out var bodyFont) ? NormalizeFontFamily(bodyFont) : body.FontFamily,
+                    FontSize = declarations.TryGetValue("font-size", out var bodySize) ? ParseFontSize(bodySize, body.FontSize) : body.FontSize,
+                    Bold = declarations.TryGetValue("font-weight", out var bodyWeight) ? ParseFontWeight(bodyWeight) ?? body.Bold : body.Bold,
+                },
+            };
+        }
+        else if (subElement.StartsWith("h", StringComparison.OrdinalIgnoreCase) && subElement.Length == 2 && char.IsDigit(subElement[1]))
+        {
+            // section.classname h1 { ... } — heading override within class.
+            var level = subElement[1] - '0';
+            if (!baseHeadings.TryGetValue(level, out var baseHeading))
+            {
+                // Ignore invalid heading levels (e.g., h0, h7) that have no base heading style.
+                variants[className] = variant;
+                return;
+            }
+
+            var headings = variant.Headings is not null
+                ? new Dictionary<int, TextStyle>(variant.Headings)
+                : new Dictionary<int, TextStyle>();
+            var current = headings.TryGetValue(level, out var existing) ? existing : baseHeading;
+            headings[level] = current with
+            {
+                FontFamily = declarations.TryGetValue("font-family", out var hFont) ? NormalizeFontFamily(hFont) : current.FontFamily,
+                FontSize = declarations.TryGetValue("font-size", out var hSize) ? ParseFontSize(hSize, current.FontSize) : current.FontSize,
+                Color = declarations.TryGetValue("color", out var hColor) ? hColor : current.Color,
+                Bold = declarations.TryGetValue("font-weight", out var hWeight) ? ParseFontWeight(hWeight) ?? current.Bold : current.Bold,
+            };
+            variant = variant with { Headings = headings };
+        }
+
+        variants[className] = variant;
     }
 
     [System.Text.RegularExpressions.GeneratedRegex(@"([^{}]+)\{([^}]*)\}")]

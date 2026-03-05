@@ -32,3 +32,24 @@ var deck = compiler.Compile(markdown, sourcePath, themeCss);
 ```
 
 The code block should use the theme's monospace font, dark background, and configured code typography.
+
+---
+
+<!-- class: lead -->
+# Class Variant: Lead
+
+This slide uses `class: lead` to select the `section.lead` class variant.
+
+- Background should be dark (#102A43).
+- Body text should be light (#F0F4F8).
+- The heading should be gold (#F7C948).
+
+---
+
+<!-- class: invert -->
+# Class Variant: Invert
+
+This slide uses `class: invert`.
+
+- Background should be dark (#1A1A2E).
+- Body text should be light (#E0E0E0).

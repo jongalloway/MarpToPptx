@@ -44,3 +44,17 @@ code {
   line-height: 1.5;
   letter-spacing: 0px;
 }
+
+section.lead {
+  background-color: #102A43;
+  color: #F0F4F8;
+}
+
+section.lead h1 {
+  color: #F7C948;
+}
+
+section.invert {
+  background-color: #1A1A2E;
+  color: #E0E0E0;
+}

@@ -37,6 +37,22 @@ public sealed record ThemeDefinition
         [5] = new(18, "#0F172A", "Aptos", true),
         [6] = new(16, "#0F172A", "Aptos", true),
     };
+
+    public IReadOnlyDictionary<string, ClassVariant> ClassVariants { get; init; } =
+        new Dictionary<string, ClassVariant>(StringComparer.OrdinalIgnoreCase);
+}
+
+/// <summary>
+/// Style overrides applied when a slide has a matching <c>class</c> directive.
+/// Null properties inherit the base theme value.
+/// </summary>
+public sealed record ClassVariant
+{
+    public string? BackgroundColor { get; init; }
+
+    public TextStyle? Body { get; init; }
+
+    public IReadOnlyDictionary<int, TextStyle>? Headings { get; init; }
 }
 
 public sealed record TextStyle(double FontSize, string Color, string FontFamily, bool Bold, string? BackgroundColor = null, double? LineHeight = null, double? LetterSpacing = null, string? TextTransform = null);
