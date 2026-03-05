@@ -26,6 +26,8 @@ For pre-release validation, hosted LibreOffice gate coverage, and the manual Pow
 - `scripts/`: PowerShell helpers for local generation, smoke tests, package inspection, and PowerPoint troubleshooting
 - `tests/MarpToPptx.Tests`: xUnit v3 tests running on Microsoft Testing Platform
 - `samples/`: Marp-style sample decks for smoke tests, feature coverage, theme parsing, and compatibility-gap repros
+- `.github/copilot-instructions.md`: concise repo-specific Copilot guidance for PPTX compatibility, testing flow, and reference sources
+- `.github/prompts/`: reusable prompts for PPTX compatibility investigation and implementation review workflows
 - `.github/workflows/ci.yml`: Ubuntu build/test/pack plus an Ubuntu CI-safe PPTX smoke-test job
 
 ## Usage
