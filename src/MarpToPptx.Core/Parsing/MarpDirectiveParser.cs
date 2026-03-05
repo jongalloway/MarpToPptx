@@ -4,6 +4,13 @@ namespace MarpToPptx.Core.Parsing;
 
 public static partial class MarpDirectiveParser
 {
+    public static SlideStyle ApplyDirective(SlideStyle style, string key, string value)
+    {
+        var updatedStyle = Clone(style);
+        updatedStyle.Directives[key] = value;
+        return ApplyKnownDirective(updatedStyle, key, value);
+    }
+
     /// <summary>
     /// Parses HTML-comment directives from a single slide chunk.
     /// Returns the effective style (local + spot directives applied),
@@ -45,8 +52,7 @@ public static partial class MarpDirectiveParser
                 }
                 else
                 {
-                    localStyle.Directives[key] = value;
-                    localStyle = ApplyKnownDirective(localStyle, key, value);
+                    localStyle = ApplyDirective(localStyle, key, value);
                 }
             }
             else
@@ -66,8 +72,7 @@ public static partial class MarpDirectiveParser
         var effectiveStyle = Clone(localStyle);
         foreach (var (key, value) in spotOverrides)
         {
-            effectiveStyle.Directives[key] = value;
-            effectiveStyle = ApplyKnownDirective(effectiveStyle, key, value);
+            effectiveStyle = ApplyDirective(effectiveStyle, key, value);
         }
 
         // Strip all HTML comments (directives and notes) from the cleaned output.
