@@ -44,3 +44,20 @@ so list reveal behavior should not be expected in PPTX output.
 ## Math And Fit
 
 Inline math like $E = mc^2$ and fit comments such as `# <!-- fit -->` are useful future compatibility checks, but are not currently rendered with Marp semantics.
+
+---
+
+## Background Size: Contain
+
+<!-- backgroundImage: assets/accent-wave.svg -->
+<!-- backgroundSize: contain -->
+
+When `backgroundSize: contain` is set, the background image should be fitted within the slide without cropping.
+
+---
+
+## Background Size: Cover (Default)
+
+<!-- _backgroundSize: cover -->
+
+Without an explicit `backgroundSize` (or with `cover`), the background image should stretch to fill the slide, cropping if needed.

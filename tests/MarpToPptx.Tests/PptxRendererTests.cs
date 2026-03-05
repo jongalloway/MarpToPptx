@@ -2129,4 +2129,338 @@ public class PptxRendererTests
 
         return null;
     }
+
+    // ────────────────────────────────────────────────────────
+    // Issue #44 – header, footer, backgroundSize rendering
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Renderer_HeaderCarriesForward_AcrossSlides()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            header: Persistent Header
+            ---
+
+            # Slide One
+
+            ---
+
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var slidePart in slideParts)
+        {
+            var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+            Assert.Contains("Persistent Header", texts);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_SpotHeader_OverridesOnSingleSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            header: Default Header
+            ---
+
+            # Slide One
+
+            ---
+
+            <!-- _header: Override Header -->
+            # Slide Two
+
+            ---
+
+            # Slide Three
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(3, slideParts.Length);
+
+        Assert.Contains("Default Header", slideParts[0].Slide!.Descendants<A.Text>().Select(t => t.Text));
+        Assert.Contains("Override Header", slideParts[1].Slide!.Descendants<A.Text>().Select(t => t.Text));
+        Assert.DoesNotContain("Default Header", slideParts[1].Slide!.Descendants<A.Text>().Select(t => t.Text));
+        Assert.Contains("Default Header", slideParts[2].Slide!.Descendants<A.Text>().Select(t => t.Text));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FooterCarriesForward_AcrossSlides()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            footer: © 2024 Company
+            ---
+
+            # Slide One
+
+            ---
+
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var slidePart in slideParts)
+        {
+            var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+            Assert.Contains("© 2024 Company", texts);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundSize_ContainUsesContainedPlacement()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Create a minimal 2x1 PNG (landscape aspect ratio)
+        var pngBytes = CreateMinimalPng(2, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            # Contained Background
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // The background image should be present as a picture element.
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        // With contain mode, the image should be fitted within the slide
+        // (not extend beyond). The image extent should be <= slide dimensions.
+        var extents = pictures[0].Descendants<A.Extents>().First();
+        Assert.True(extents.Cx!.Value <= 12192000L, "Image width should not exceed slide width");
+        Assert.True(extents.Cy!.Value <= 6858000L, "Image height should not exceed slide height");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundSize_DefaultIsCover()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Create a tall 1x2 PNG (portrait)
+        var pngBytes = CreateMinimalPng(1, 2);
+        workspace.WriteFile("tall.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: tall.png -->
+            # Full Bleed Background
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // With cover mode (default), the image should extend beyond the slide
+        // to cover it fully. For a portrait image on a landscape slide,
+        // the width should match or exceed slide width.
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+        var extents = pictures[0].Descendants<A.Extents>().First();
+        Assert.True(extents.Cx!.Value >= 12192000L, "Cover mode should scale image to at least slide width");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_SpotBackgroundSize_AffectsSingleSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = CreateMinimalPng(2, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            # Cover (default)
+
+            ---
+
+            <!-- _backgroundSize: contain -->
+            # Contained
+
+            ---
+
+            # Cover again
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(3, slideParts.Length);
+
+        // Slide 2 (contain) should have image extents within slide bounds.
+        var slide2Pictures = slideParts[1].Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(slide2Pictures);
+        var slide2Extents = slide2Pictures[0].Descendants<A.Extents>().First();
+        Assert.True(slide2Extents.Cx!.Value <= 12192000L);
+        Assert.True(slide2Extents.Cy!.Value <= 6858000L);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    /// <summary>
+    /// Creates a minimal valid PNG file with the specified dimensions.
+    /// </summary>
+    private static byte[] CreateMinimalPng(int width, int height)
+    {
+        using var ms = new MemoryStream();
+        // PNG signature
+        ms.Write([0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A]);
+
+        // IHDR chunk
+        var ihdr = new byte[13];
+        WriteBigEndian(ihdr, 0, width);
+        WriteBigEndian(ihdr, 4, height);
+        ihdr[8] = 8; // bit depth
+        ihdr[9] = 2; // color type: RGB
+        WriteChunk(ms, "IHDR", ihdr);
+
+        // IDAT chunk (minimal: a single row of zeros per scanline)
+        using var deflateMs = new MemoryStream();
+        using (var deflate = new System.IO.Compression.DeflateStream(deflateMs, System.IO.Compression.CompressionLevel.Optimal, leaveOpen: true))
+        {
+            for (var y = 0; y < height; y++)
+            {
+                deflate.WriteByte(0); // filter: none
+                for (var x = 0; x < width; x++)
+                {
+                    deflate.WriteByte(0); deflate.WriteByte(0); deflate.WriteByte(0); // RGB
+                }
+            }
+        }
+
+        // Wrap in zlib container: header (78 01) + deflate data + Adler-32
+        var rawDeflate = deflateMs.ToArray();
+        var zlibData = new byte[2 + rawDeflate.Length + 4];
+        zlibData[0] = 0x78;
+        zlibData[1] = 0x01;
+        Array.Copy(rawDeflate, 0, zlibData, 2, rawDeflate.Length);
+        var adler = ComputeAdler32(height, width);
+        WriteBigEndian(zlibData, 2 + rawDeflate.Length, (int)adler);
+
+        WriteChunk(ms, "IDAT", zlibData);
+
+        // IEND chunk
+        WriteChunk(ms, "IEND", []);
+
+        return ms.ToArray();
+
+        static void WriteBigEndian(byte[] buffer, int offset, int value)
+        {
+            buffer[offset] = (byte)(value >> 24);
+            buffer[offset + 1] = (byte)(value >> 16);
+            buffer[offset + 2] = (byte)(value >> 8);
+            buffer[offset + 3] = (byte)value;
+        }
+
+        static void WriteChunk(MemoryStream stream, string type, byte[] data)
+        {
+            var lengthBytes = new byte[4];
+            WriteBigEndian(lengthBytes, 0, data.Length);
+            stream.Write(lengthBytes);
+
+            var typeBytes = System.Text.Encoding.ASCII.GetBytes(type);
+            stream.Write(typeBytes);
+            stream.Write(data);
+
+            // CRC32 over type + data
+            var crcData = new byte[4 + data.Length];
+            Array.Copy(typeBytes, crcData, 4);
+            Array.Copy(data, 0, crcData, 4, data.Length);
+            var crc = Crc32(crcData);
+            var crcBytes = new byte[4];
+            WriteBigEndian(crcBytes, 0, (int)crc);
+            stream.Write(crcBytes);
+        }
+
+        static uint Crc32(byte[] data)
+        {
+            uint crc = 0xFFFFFFFF;
+            foreach (var b in data)
+            {
+                crc ^= b;
+                for (var i = 0; i < 8; i++)
+                    crc = (crc >> 1) ^ (crc % 2 != 0 ? 0xEDB88320 : 0);
+            }
+            return ~crc;
+        }
+
+        static uint ComputeAdler32(int height, int width)
+        {
+            uint a = 1, b = 0;
+            for (var y = 0; y < height; y++)
+            {
+                // filter byte (0)
+                a = (a + 0) % 65521;
+                b = (b + a) % 65521;
+                for (var x = 0; x < width * 3; x++)
+                {
+                    a = (a + 0) % 65521;
+                    b = (b + a) % 65521;
+                }
+            }
+            return (b << 16) | a;
+        }
+    }
 }

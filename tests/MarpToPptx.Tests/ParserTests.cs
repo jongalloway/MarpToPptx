@@ -1254,4 +1254,127 @@ public class ParserTests
 
         Assert.Empty(theme.ClassVariants);
     }
+
+    // ────────────────────────────────────────────────────────
+    // Issue #44 – backgroundSize, header, and footer directives
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parser_ParsesBackgroundSize_FromFrontMatter()
+    {
+        const string markdown = """
+        ---
+        backgroundImage: url(bg.jpg)
+        backgroundSize: contain
+        ---
+
+        # Slide
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("contain", deck.Slides[0].Style.BackgroundSize);
+    }
+
+    [Fact]
+    public void Parser_ParsesBackgroundSize_FromSlideDirective()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- backgroundImage: url(bg.jpg) -->
+        <!-- backgroundSize: contain -->
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.BackgroundSize);
+        Assert.Equal("contain", deck.Slides[1].Style.BackgroundSize);
+    }
+
+    [Fact]
+    public void Parser_BackgroundSize_CarriesForwardToSubsequentSlides()
+    {
+        const string markdown = """
+        <!-- backgroundSize: contain -->
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal("contain", deck.Slides[0].Style.BackgroundSize);
+        Assert.Equal("contain", deck.Slides[1].Style.BackgroundSize);
+    }
+
+    [Fact]
+    public void Parser_SpotBackgroundSize_AppliesToSingleSlide()
+    {
+        const string markdown = """
+        ---
+        backgroundImage: url(bg.jpg)
+        backgroundSize: cover
+        ---
+
+        # Default
+
+        ---
+
+        <!-- _backgroundSize: contain -->
+        # Contained
+
+        ---
+
+        # Back To Cover
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("cover", deck.Slides[0].Style.BackgroundSize);
+        Assert.Equal("contain", deck.Slides[1].Style.BackgroundSize);
+        Assert.Equal("cover", deck.Slides[2].Style.BackgroundSize);
+    }
+
+    [Fact]
+    public void Parser_SpotHeader_AppliesToSingleSlideOnly()
+    {
+        const string markdown = """
+        ---
+        header: Default Header
+        ---
+
+        # Slide One
+
+        ---
+
+        <!-- _header: Special Header -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("Default Header", deck.Slides[0].Style.Header);
+        Assert.Equal("Special Header", deck.Slides[1].Style.Header);
+        Assert.Equal("Default Header", deck.Slides[2].Style.Header);
+    }
 }

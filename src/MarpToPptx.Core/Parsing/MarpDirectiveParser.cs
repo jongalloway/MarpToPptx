@@ -84,6 +84,7 @@ public static partial class MarpDirectiveParser
             "paginate" => Clone(style, paginate: bool.TryParse(value, out var p) ? p : null),
             "class" => Clone(style, className: value),
             "backgroundimage" => Clone(style, backgroundImage: UnwrapUrl(value)),
+            "backgroundsize" => Clone(style, backgroundSize: value),
             "backgroundcolor" => Clone(style, backgroundColor: value),
             "header" => Clone(style, header: value),
             "footer" => Clone(style, footer: value),
@@ -97,6 +98,7 @@ public static partial class MarpDirectiveParser
         bool? paginate = null,
         string? className = null,
         string? backgroundImage = null,
+        string? backgroundSize = null,
         string? backgroundColor = null,
         string? header = null,
         string? footer = null)
@@ -107,6 +109,7 @@ public static partial class MarpDirectiveParser
             Paginate = paginate ?? source.Paginate,
             ClassName = className ?? source.ClassName,
             BackgroundImage = backgroundImage ?? source.BackgroundImage,
+            BackgroundSize = backgroundSize ?? source.BackgroundSize,
             BackgroundColor = backgroundColor ?? source.BackgroundColor,
             Header = header ?? source.Header,
             Footer = footer ?? source.Footer,

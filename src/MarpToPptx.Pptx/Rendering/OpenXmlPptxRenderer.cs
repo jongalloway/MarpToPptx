@@ -525,7 +525,9 @@ public sealed class OpenXmlPptxRenderer
         var backgroundImage = style.BackgroundImage ?? context.Theme.BackgroundImage;
         if (!string.IsNullOrWhiteSpace(backgroundImage))
         {
-            AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), backgroundImage, string.Empty, useFullBleed: true);
+            var backgroundSize = style.BackgroundSize ?? context.Theme.BackgroundSize;
+            var useFullBleed = !string.Equals(backgroundSize, "contain", StringComparison.OrdinalIgnoreCase);
+            AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), backgroundImage, string.Empty, useFullBleed: useFullBleed);
         }
     }
 
