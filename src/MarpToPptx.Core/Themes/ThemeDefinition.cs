@@ -40,6 +40,33 @@ public sealed record ThemeDefinition
 
     public IReadOnlyDictionary<string, ClassVariant> ClassVariants { get; init; } =
         new Dictionary<string, ClassVariant>(StringComparer.OrdinalIgnoreCase);
+
+    public ThemeDefinition ApplyClassVariant(ClassVariant? classVariant)
+    {
+        if (classVariant is null)
+        {
+            return this;
+        }
+
+        var headings = Headings.ToDictionary(static pair => pair.Key, static pair => pair.Value);
+        if (classVariant.Headings is not null)
+        {
+            foreach (var pair in classVariant.Headings)
+            {
+                headings[pair.Key] = pair.Value;
+            }
+        }
+
+        return this with
+        {
+            BackgroundColor = classVariant.BackgroundColor ?? BackgroundColor,
+            Body = classVariant.Body ?? Body,
+            Headings = headings,
+        };
+    }
+
+    public TextStyle GetHeadingStyle(int level)
+        => Headings.TryGetValue(level, out var style) ? style : Headings[1];
 }
 
 /// <summary>

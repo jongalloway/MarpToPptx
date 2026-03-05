@@ -34,114 +34,21 @@ public sealed class MarpMarkdownParser
         }
 
         var defaultStyle = new SlideStyle();
-        if (frontMatter.TryGetValue("theme", out var themeName))
+        foreach (var pair in frontMatter)
         {
-            defaultStyle = new SlideStyle { ThemeName = themeName };
-        }
-
-        if (frontMatter.TryGetValue("paginate", out var paginate) && bool.TryParse(paginate, out var paginateValue))
-        {
-            defaultStyle = new SlideStyle
+            switch (pair.Key.ToLowerInvariant())
             {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = paginateValue,
-                ClassName = defaultStyle.ClassName,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = defaultStyle.BackgroundSize,
-                Header = defaultStyle.Header,
-                Footer = defaultStyle.Footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("class", out var className))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = className,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = defaultStyle.BackgroundSize,
-                Header = defaultStyle.Header,
-                Footer = defaultStyle.Footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("backgroundImage", out var backgroundImage))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = defaultStyle.ClassName,
-                BackgroundImage = backgroundImage,
-                BackgroundSize = defaultStyle.BackgroundSize,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                Header = defaultStyle.Header,
-                Footer = defaultStyle.Footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("backgroundSize", out var backgroundSize))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = defaultStyle.ClassName,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = backgroundSize,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                Header = defaultStyle.Header,
-                Footer = defaultStyle.Footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("backgroundColor", out var backgroundColor))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = defaultStyle.ClassName,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = defaultStyle.BackgroundSize,
-                BackgroundColor = backgroundColor,
-                Header = defaultStyle.Header,
-                Footer = defaultStyle.Footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("header", out var header))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = defaultStyle.ClassName,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = defaultStyle.BackgroundSize,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                Header = header,
-                Footer = defaultStyle.Footer,
-            };
-        }
-
-        if (frontMatter.TryGetValue("footer", out var footer))
-        {
-            defaultStyle = new SlideStyle
-            {
-                ThemeName = defaultStyle.ThemeName,
-                Paginate = defaultStyle.Paginate,
-                ClassName = defaultStyle.ClassName,
-                BackgroundImage = defaultStyle.BackgroundImage,
-                BackgroundSize = defaultStyle.BackgroundSize,
-                BackgroundColor = defaultStyle.BackgroundColor,
-                Header = defaultStyle.Header,
-                Footer = footer,
-            };
+                case "theme":
+                case "paginate":
+                case "class":
+                case "backgroundimage":
+                case "backgroundsize":
+                case "backgroundcolor":
+                case "header":
+                case "footer":
+                    defaultStyle = MarpDirectiveParser.ApplyDirective(defaultStyle, pair.Key, pair.Value);
+                    break;
+            }
         }
 
         // lang: set deck language from front-matter.

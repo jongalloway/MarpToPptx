@@ -297,8 +297,6 @@ public sealed class OpenXmlPptxRenderer
             new P.ColorMapOverride(new A.MasterColorMapping()));
 
         slidePart.Slide = slide;
-        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets, language);
-
         // Resolve class variant: when the slide has a className, look up overrides.
         ClassVariant? classVariant = null;
         if (!string.IsNullOrWhiteSpace(slideModel.Style.ClassName))
@@ -306,7 +304,10 @@ public sealed class OpenXmlPptxRenderer
             theme.ClassVariants.TryGetValue(slideModel.Style.ClassName!, out classVariant);
         }
 
-        AddBackground(slideModel.Style, context, classVariant);
+        var effectiveTheme = theme.ApplyClassVariant(classVariant);
+        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, language);
+
+        AddBackground(slideModel.Style, context);
 
         // Read placeholder bounds from the selected layout. When the title placeholder
         // carries an explicit transform, use it for the first top-level heading so that
@@ -325,13 +326,14 @@ public sealed class OpenXmlPptxRenderer
         var canUseBodyRect = bodyRect is not null &&
             (titleRect is not null || !hasHeading);
 
-        var plan = _layoutEngine.LayoutSlide(slideModel, theme);
-        var bodyStyle = classVariant?.Body ?? theme.Body;
+        var firstElement = slideModel.Elements.FirstOrDefault();
+        var plan = _layoutEngine.LayoutSlide(slideModel, effectiveTheme);
+        var bodyStyle = effectiveTheme.Body;
         foreach (var placed in plan.Elements)
         {
             // Resolve the frame: prefer template placeholder rect when available.
             var frame = placed.Element is HeadingElement ph &&
-                ph.Level == 1 && slideModel.Elements.IndexOf(ph) == 0 &&
+                ph.Level == 1 && ReferenceEquals(ph, firstElement) &&
                 titleRect is not null
                 ? titleRect
                 : canUseBodyRect && placed.Element is not HeadingElement && nonHeadingCount == 1
@@ -341,10 +343,10 @@ public sealed class OpenXmlPptxRenderer
             switch (placed.Element)
             {
                 case HeadingElement heading:
-                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(theme, heading.Level, classVariant), theme.Code, isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
+                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(effectiveTheme, heading.Level), effectiveTheme.Code, isTitle: heading.Level == 1 && ReferenceEquals(heading, firstElement));
                     break;
                 case ParagraphElement paragraph:
-                    AddTextShape(context, frame, paragraph.Spans, bodyStyle, theme.Code);
+                    AddTextShape(context, frame, paragraph.Spans, bodyStyle, effectiveTheme.Code);
                     break;
                 case BulletListElement list:
                     AddBulletList(context, frame, list, bodyStyle);
@@ -359,7 +361,7 @@ public sealed class OpenXmlPptxRenderer
                     AddAudio(context, frame, audio.Source, audio.AltText);
                     break;
                 case CodeBlockElement code:
-                    AddCodeBlock(context, frame, code, theme.Code);
+                    AddCodeBlock(context, frame, code, effectiveTheme.Code);
                     break;
                 case TableElement table:
                     AddTable(context, frame, table, bodyStyle);
@@ -378,15 +380,8 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level, ClassVariant? classVariant = null)
-    {
-        if (classVariant?.Headings is not null && classVariant.Headings.TryGetValue(level, out var classStyle))
-        {
-            return classStyle;
-        }
-
-        return theme.Headings.TryGetValue(level, out var style) ? style : theme.Headings[1];
-    }
+    private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
+        => theme.GetHeadingStyle(level);
 
     private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, string notes, string language)
     {
@@ -505,9 +500,9 @@ public sealed class OpenXmlPptxRenderer
         return paragraph;
     }
 
-    private static void AddBackground(SlideStyle style, SlideRenderContext context, ClassVariant? classVariant = null)
+    private static void AddBackground(SlideStyle style, SlideRenderContext context)
     {
-        var backgroundColor = style.BackgroundColor ?? classVariant?.BackgroundColor ?? context.Theme.BackgroundColor;
+        var backgroundColor = style.BackgroundColor ?? context.Theme.BackgroundColor;
         if (!string.IsNullOrWhiteSpace(backgroundColor))
         {
             context.ShapeTree.Append(CreateRectangleShape(
@@ -790,13 +785,8 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, bool useFullBleed = false)
     {
-        var resolved = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
-        if (resolved is null || !File.Exists(resolved))
+        if (!TryResolveMediaSource(context, frame, source, "image", out var resolved))
         {
-            var errorText = resolveError is not null
-                ? $"Missing image: {source} ({resolveError})"
-                : string.IsNullOrWhiteSpace(source) ? "Missing image" : $"Missing image: {source}";
-            AddTextShape(context, frame, errorText, context.Theme.Body);
             return;
         }
 
@@ -835,13 +825,8 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddVideo(SlideRenderContext context, Rect frame, string source, string altText)
     {
-        var resolved = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
-        if (resolved is null || !File.Exists(resolved))
+        if (!TryResolveMediaSource(context, frame, source, "video", out var resolved))
         {
-            var errorText = resolveError is not null
-                ? $"Missing video: {source} ({resolveError})"
-                : string.IsNullOrWhiteSpace(source) ? "Missing video" : $"Missing video: {source}";
-            AddTextShape(context, frame, errorText, context.Theme.Body);
             return;
         }
 
@@ -852,7 +837,7 @@ public sealed class OpenXmlPptxRenderer
             return;
         }
 
-        var mediaDataPart = context.SlidePart.OpenXmlPackage.CreateMediaDataPart(MediaDataPartType.Mp4);
+        var mediaDataPart = context.SlidePart.OpenXmlPackage.CreateMediaDataPart("video/mp4", ".mp4");
         using (var videoStream = File.OpenRead(resolved))
         {
             mediaDataPart.FeedData(videoStream);
@@ -881,31 +866,27 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddAudio(SlideRenderContext context, Rect frame, string source, string altText)
     {
-        var resolved = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
-        if (resolved is null || !File.Exists(resolved))
+        if (!TryResolveMediaSource(context, frame, source, "audio", out var resolved))
         {
-            var errorText = resolveError is not null
-                ? $"Missing audio: {source} ({resolveError})"
-                : string.IsNullOrWhiteSpace(source) ? "Missing audio" : $"Missing audio: {source}";
-            AddTextShape(context, frame, errorText, context.Theme.Body);
             return;
         }
 
         var ext = IOPath.GetExtension(resolved).ToLowerInvariant();
-        MediaDataPartType? mediaType = ext switch
+        (string ContentType, string Extension)? mediaPartInfo = ext switch
         {
-            ".mp3" => MediaDataPartType.Mp3,
-            ".wav" => MediaDataPartType.Wav,
+            ".mp3" => (ContentType: "audio/mp3", Extension: ".mp3"),
+            ".wav" => (ContentType: "audio/wav", Extension: ".wav"),
+            ".m4a" => (ContentType: "audio/mp4", Extension: ".m4a"),
             _ => null,
         };
 
-        if (mediaType is null)
+        if (mediaPartInfo is null)
         {
             AddTextShape(context, frame, $"Unsupported audio format: {source}", context.Theme.Body);
             return;
         }
 
-        var mediaDataPart = context.SlidePart.OpenXmlPackage.CreateMediaDataPart(mediaType.Value);
+        var mediaDataPart = context.SlidePart.OpenXmlPackage.CreateMediaDataPart(mediaPartInfo.Value.ContentType, mediaPartInfo.Value.Extension);
         using (var audioStream = File.OpenRead(resolved))
         {
             mediaDataPart.FeedData(audioStream);
@@ -973,6 +954,24 @@ public sealed class OpenXmlPptxRenderer
         using var imageStream = new MemoryStream(MediaPlaceholderImage, writable: false);
         imagePart.FeedData(imageStream);
         return slidePart.GetIdOfPart(imagePart);
+    }
+
+    private static bool TryResolveMediaSource(SlideRenderContext context, Rect frame, string source, string mediaKind, out string resolved)
+    {
+        resolved = string.Empty;
+
+        var candidate = ResolvePath(context.SourceDirectory, source, context.RemoteAssets, out var resolveError);
+        if (candidate is null || !File.Exists(candidate))
+        {
+            var errorText = resolveError is not null
+                ? $"Missing {mediaKind}: {source} ({resolveError})"
+                : string.IsNullOrWhiteSpace(source) ? $"Missing {mediaKind}" : $"Missing {mediaKind}: {source}";
+            AddTextShape(context, frame, errorText, context.Theme.Body);
+            return false;
+        }
+
+        resolved = candidate;
+        return true;
     }
 
     private static void AddHeaderFooterAndPageNumber(SlideRenderContext context, SlideStyle style, TextStyle bodyStyle, int slideNumber)

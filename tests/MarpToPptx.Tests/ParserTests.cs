@@ -1279,6 +1279,24 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_NormalizesBackgroundImage_FromFrontMatterUrlSyntax()
+    {
+        const string markdown = """
+        ---
+        backgroundImage: url(bg.jpg)
+        ---
+
+        # Slide
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("bg.jpg", deck.Slides[0].Style.BackgroundImage);
+    }
+
+    [Fact]
     public void Parser_ParsesBackgroundSize_FromSlideDirective()
     {
         const string markdown = """

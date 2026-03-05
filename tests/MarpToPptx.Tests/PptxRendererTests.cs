@@ -1896,7 +1896,7 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_ShowsActionableError_ForUnsupportedAudioFormat()
+    public void Renderer_EmbedsM4aAudio_WhenLocalFileExists()
     {
         using var workspace = TestWorkspace.Create();
 
@@ -1915,8 +1915,29 @@ public class PptxRendererTests
 
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.First();
-        var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
-        Assert.Contains(texts, t => t.Contains("Unsupported audio format") && t.Contains("audio.m4a"));
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.Single(pictures);
+
+        var audioFile = pictures[0].Descendants<A.AudioFromFile>().SingleOrDefault();
+        Assert.NotNull(audioFile);
+
+        var audioRels = slidePart.DataPartReferenceRelationships
+            .OfType<AudioReferenceRelationship>()
+            .ToArray();
+        Assert.Single(audioRels);
+        Assert.Equal("audio/mp4", audioRels[0].DataPart.ContentType);
+
+        var mediaRels = slidePart.DataPartReferenceRelationships
+            .OfType<MediaReferenceRelationship>()
+            .ToArray();
+        Assert.Single(mediaRels);
+        Assert.Equal("audio/mp4", mediaRels[0].DataPart.ContentType);
+
+        Assert.DoesNotContain("Unsupported audio format", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
     }
 
     [Fact]
@@ -2105,6 +2126,52 @@ public class PptxRendererTests
         Assert.Equal("E94560", color);
     }
 
+    [Fact]
+    public void Renderer_ClassVariant_AffectsLayoutSizing()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        const string themeCss = """
+        section { font-size: 24px; }
+        section.large { font-size: 48px; }
+        section.large h2 { font-size: 64px; }
+        """;
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: custom
+            ---
+
+            ## Normal Heading
+
+            First paragraph.
+
+            Second paragraph.
+
+            ---
+
+            <!-- class: large -->
+            ## Large Heading
+
+            First paragraph.
+
+            Second paragraph.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeckWithTheme(markdownPath, outputPath, workspace.RootPath, themeCss);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+
+        var normalY = GetShapeTopByContainedText(slideParts[0], "Second paragraph.");
+        var largeY = GetShapeTopByContainedText(slideParts[1], "Second paragraph.");
+
+        Assert.True(largeY > normalY);
+    }
+
     private static void RenderDeckWithTheme(string markdownPath, string outputPath, string sourceDirectory, string themeCss)
     {
         var compiler = new MarpCompiler();
@@ -2128,6 +2195,14 @@ public class PptxRendererTests
         }
 
         return null;
+    }
+
+    private static long GetShapeTopByContainedText(SlidePart slidePart, string text)
+    {
+        var shape = slidePart.Slide!.Descendants<P.Shape>()
+            .First(s => s.Descendants<A.Text>().Any(t => t.Text == text));
+
+        return shape.ShapeProperties!.Transform2D!.Offset!.Y!.Value;
     }
 
     // ────────────────────────────────────────────────────────

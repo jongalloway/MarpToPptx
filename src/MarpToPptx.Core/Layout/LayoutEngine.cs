@@ -38,7 +38,7 @@ public sealed class LayoutEngine
 
     private static Rect CreateHeadingFrame(HeadingElement heading, ThemeDefinition theme, double x, double width, ref double y, bool isTitleSlide)
     {
-        var style = theme.Headings.TryGetValue(heading.Level, out var resolved) ? resolved : theme.Headings[1];
+        var style = theme.GetHeadingStyle(heading.Level);
         var height = EstimateTextHeight(heading.Text, style.FontSize, width, isTitleSlide ? 1.15 : 1.1);
         var top = isTitleSlide ? Math.Max(y, 110) : y;
         y = top + height + (isTitleSlide ? 18 : 10);
