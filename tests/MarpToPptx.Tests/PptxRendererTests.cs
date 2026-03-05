@@ -2348,12 +2348,26 @@ public class PptxRendererTests
         var slideParts = document.PresentationPart!.SlideParts.ToArray();
         Assert.Equal(3, slideParts.Length);
 
+        // Slides 1 and 3 (cover mode) should have image width exceeding slide width
+        // because the wide 2:1 image in cover mode scales to fill the 16:9 slide height,
+        // resulting in a width larger than the slide width (12192000 EMU).
+        var slide1Pictures = slideParts[0].Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(slide1Pictures);
+        var slide1Extents = slide1Pictures[0].Descendants<A.Extents>().First();
+        Assert.True(slide1Extents.Cx!.Value >= 12192000L, "Slide 1 should retain cover mode after spot directive on slide 2");
+
         // Slide 2 (contain) should have image extents within slide bounds.
         var slide2Pictures = slideParts[1].Slide!.Descendants<P.Picture>().ToArray();
         Assert.NotEmpty(slide2Pictures);
         var slide2Extents = slide2Pictures[0].Descendants<A.Extents>().First();
         Assert.True(slide2Extents.Cx!.Value <= 12192000L);
         Assert.True(slide2Extents.Cy!.Value <= 6858000L);
+
+        // Slide 3 should revert to cover mode (spot directive only affects slide 2).
+        var slide3Pictures = slideParts[2].Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(slide3Pictures);
+        var slide3Extents = slide3Pictures[0].Descendants<A.Extents>().First();
+        Assert.True(slide3Extents.Cx!.Value >= 12192000L, "Slide 3 should revert to cover mode after spot directive on slide 2");
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
