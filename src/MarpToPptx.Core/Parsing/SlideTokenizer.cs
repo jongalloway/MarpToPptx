@@ -1,8 +1,14 @@
+using System.Text.RegularExpressions;
+
 namespace MarpToPptx.Core.Parsing;
 
-public static class SlideTokenizer
+public static partial class SlideTokenizer
 {
-    public static IReadOnlyList<string> SplitSlides(string markdown)
+    /// <summary>
+    /// Splits markdown into slide chunks on <c>---</c> separators and, when
+    /// <paramref name="headingDivider"/> is set, on headings at or above that level.
+    /// </summary>
+    public static IReadOnlyList<string> SplitSlides(string markdown, int? headingDivider = null)
     {
         var slides = new List<string>();
         var buffer = new List<string>();
@@ -23,6 +29,23 @@ public static class SlideTokenizer
                 continue;
             }
 
+            // headingDivider: split before a heading at or above the specified level.
+            if (!inFence && headingDivider is > 0 and <= 6)
+            {
+                var headingMatch = HeadingLineRegex().Match(line);
+                if (headingMatch.Success && headingMatch.Groups[1].Value.Length <= headingDivider)
+                {
+                    // Flush the current buffer as the previous slide.
+                    var pending = string.Join('\n', buffer).Trim();
+                    if (!string.IsNullOrWhiteSpace(pending))
+                    {
+                        slides.Add(pending);
+                    }
+
+                    buffer.Clear();
+                }
+            }
+
             buffer.Add(rawLine);
         }
 
@@ -33,4 +56,7 @@ public static class SlideTokenizer
 
         return slides.Where(slide => !string.IsNullOrWhiteSpace(slide)).ToArray();
     }
+
+    [GeneratedRegex(@"^\s{0,3}(#{1,6})\s")]
+    private static partial Regex HeadingLineRegex();
 }

@@ -48,12 +48,13 @@ public sealed class OpenXmlPptxRenderer
 
             ClearSlides(presentationPart);
 
+            var language = deck.Language ?? "en-US";
             var slideNumber = 1;
             foreach (var slideModel in deck.Slides)
             {
                 var slideKind = SlideTemplateSelector.Classify(slideModel);
                 var slideLayoutPart = templateSelector.SelectLayout(slideKind);
-                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, slideNumber);
+                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, slideNumber, language);
                 slideNumber++;
             }
 
@@ -278,7 +279,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, int slideNumber)
+    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, int slideNumber, string language)
     {
         var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
         slidePart.AddPart(slideLayoutPart, "rId1");
@@ -296,7 +297,7 @@ public sealed class OpenXmlPptxRenderer
             new P.ColorMapOverride(new A.MasterColorMapping()));
 
         slidePart.Slide = slide;
-        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets);
+        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets, language);
         AddBackground(slideModel.Style, context);
 
         // Read placeholder bounds from the selected layout. When the title placeholder
@@ -364,14 +365,14 @@ public sealed class OpenXmlPptxRenderer
 
         if (!string.IsNullOrWhiteSpace(slideModel.Notes))
         {
-            AddNotesSlide(presentationPart, slidePart, slideModel.Notes!);
+            AddNotesSlide(presentationPart, slidePart, slideModel.Notes!, language);
         }
     }
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
         => theme.Headings.TryGetValue(level, out var style) ? style : theme.Headings[1];
 
-    private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, string notes)
+    private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, string notes, string language)
     {
         var notesMasterPart = EnsureNotesMasterPart(presentationPart);
         var notesSlidePart = slidePart.AddNewPart<NotesSlidePart>(GetNextRelationshipId(slidePart));
@@ -380,7 +381,7 @@ public sealed class OpenXmlPptxRenderer
         var paragraphs = notes
             .Replace("\r\n", "\n", StringComparison.Ordinal)
             .Split('\n', StringSplitOptions.None)
-            .Select(static line => CreateNotesParagraph(line))
+            .Select(line => CreateNotesParagraph(line, language))
             .ToArray();
 
         var notesTextBody = new P.TextBody(new A.BodyProperties(), new A.ListStyle());
@@ -475,16 +476,16 @@ public sealed class OpenXmlPptxRenderer
         return notesMasterPart;
     }
 
-    private static A.Paragraph CreateNotesParagraph(string line)
+    private static A.Paragraph CreateNotesParagraph(string line, string language)
     {
         var paragraph = new A.Paragraph();
         if (!string.IsNullOrEmpty(line))
         {
-            var runProperties = new A.RunProperties { Language = "en-US" };
+            var runProperties = new A.RunProperties { Language = language };
             paragraph.Append(new A.Run(runProperties, new A.Text(line)));
         }
 
-        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US" });
+        paragraph.Append(new A.EndParagraphRunProperties { Language = language });
         return paragraph;
     }
 
@@ -516,7 +517,7 @@ public sealed class OpenXmlPptxRenderer
     {
         var paragraphs = text
             .Split('\n', StringSplitOptions.None)
-            .Select(line => CreateParagraph(line, style, null, false, 1))
+            .Select(line => CreateParagraph(line, style, null, false, 1, context.Language))
             .ToArray();
 
         context.ShapeTree.Append(CreateTextShape(
@@ -533,7 +534,7 @@ public sealed class OpenXmlPptxRenderer
     {
         var paragraphGroups = SplitSpansIntoParagraphs(spans);
         var paragraphs = paragraphGroups
-            .Select(group => CreateParagraphFromSpans(group, style, codeStyle, context.SlidePart, null, false, 1))
+            .Select(group => CreateParagraphFromSpans(group, style, codeStyle, context.SlidePart, null, false, 1, context.Language))
             .ToArray();
 
         context.ShapeTree.Append(CreateTextShape(
@@ -549,7 +550,7 @@ public sealed class OpenXmlPptxRenderer
     private static void AddBulletList(SlideRenderContext context, Rect frame, BulletListElement list, TextStyle style)
     {
         var paragraphs = list.Items
-            .Select((item, index) => CreateParagraphFromSpans(item.Spans, style, context.Theme.Code, context.SlidePart, item.Depth, list.Ordered, index + 1))
+            .Select((item, index) => CreateParagraphFromSpans(item.Spans, style, context.Theme.Code, context.SlidePart, item.Depth, list.Ordered, index + 1, context.Language))
             .ToArray();
 
         context.ShapeTree.Append(CreateTextShape(
@@ -570,7 +571,7 @@ public sealed class OpenXmlPptxRenderer
         {
             var tokenizedLines = SyntaxHighlighter.Tokenize(code.Language, code.Code);
             paragraphs = tokenizedLines
-                .Select(runs => CreateHighlightedParagraph(runs, style))
+                .Select(runs => CreateHighlightedParagraph(runs, style, context.Language))
                 .ToArray();
         }
         else
@@ -578,7 +579,7 @@ public sealed class OpenXmlPptxRenderer
             paragraphs = code.Code
                 .Replace("\r\n", "\n", StringComparison.Ordinal)
                 .Split('\n', StringSplitOptions.None)
-                .Select(line => CreateParagraph(line, style, null, false, 1))
+                .Select(line => CreateParagraph(line, style, null, false, 1, context.Language))
                 .ToArray();
         }
 
@@ -592,7 +593,7 @@ public sealed class OpenXmlPptxRenderer
             lineColor: NormalizeColor(context.Theme.AccentColor)));
     }
 
-    private static A.Paragraph CreateHighlightedParagraph(IReadOnlyList<TokenizedRun> runs, TextStyle style)
+    private static A.Paragraph CreateHighlightedParagraph(IReadOnlyList<TokenizedRun> runs, TextStyle style, string language)
     {
         var paragraph = new A.Paragraph();
 
@@ -614,7 +615,7 @@ public sealed class OpenXmlPptxRenderer
             var runColor = run.Color ?? NormalizeColor(style.Color);
             var runProperties = new A.RunProperties
             {
-                Language = "en-US",
+                Language = language,
                 FontSize = (int)Math.Round(style.FontSize * 100),
                 Bold = style.Bold,
             };
@@ -628,7 +629,7 @@ public sealed class OpenXmlPptxRenderer
             paragraph.Append(new A.Run(runProperties, new A.Text(run.Text)));
         }
 
-        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+        paragraph.Append(new A.EndParagraphRunProperties { Language = language, FontSize = (int)Math.Round(style.FontSize * 100) });
         return paragraph;
     }
 
@@ -669,7 +670,7 @@ public sealed class OpenXmlPptxRenderer
             {
                 var cellSpans = col < row.Cells.Count ? row.Cells[col] : Array.Empty<InlineSpan>();
                 var alignment = col < table.ColumnAlignments.Count ? table.ColumnAlignments[col] : null;
-                aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.Code));
+                aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.Code, context.Language));
             }
 
             aTable.Append(aRow);
@@ -689,7 +690,7 @@ public sealed class OpenXmlPptxRenderer
         context.ShapeTree.Append(graphicFrame);
     }
 
-    private static A.TableCell CreateTableCell(IReadOnlyList<InlineSpan> spans, TextStyle style, bool isHeader, TableColumnAlignment? alignment, SlidePart slidePart, TextStyle? codeStyle)
+    private static A.TableCell CreateTableCell(IReadOnlyList<InlineSpan> spans, TextStyle style, bool isHeader, TableColumnAlignment? alignment, SlidePart slidePart, TextStyle? codeStyle, string language)
     {
         var paragraph = new A.Paragraph();
         var paragraphProperties = new A.ParagraphProperties();
@@ -726,7 +727,7 @@ public sealed class OpenXmlPptxRenderer
             var color = span.Code && codeStyle is not null ? NormalizeColor(codeStyle.Color) : NormalizeColor(style.Color);
             var runProperties = new A.RunProperties
             {
-                Language = "en-US",
+                Language = language,
                 FontSize = (int)Math.Round(style.FontSize * 100),
                 Bold = isHeader || span.Bold || style.Bold,
             };
@@ -758,7 +759,7 @@ public sealed class OpenXmlPptxRenderer
             paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
         }
 
-        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+        paragraph.Append(new A.EndParagraphRunProperties { Language = language, FontSize = (int)Math.Round(style.FontSize * 100) });
 
         var textBody = new A.TextBody(new A.BodyProperties(), new A.ListStyle());
         textBody.Append(paragraph);
@@ -988,7 +989,7 @@ public sealed class OpenXmlPptxRenderer
         {
             var pageNumX = slideWidth - marginX - pageNumWidth;
             var fieldId = Guid.NewGuid().ToString("B").ToUpperInvariant();
-            var fieldRunProperties = new A.RunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
+            var fieldRunProperties = new A.RunProperties { Language = context.Language, FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
             fieldRunProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(footerStyle.Color) }));
             fieldRunProperties.Append(new A.LatinFont { Typeface = footerStyle.FontFamily });
 
@@ -1000,7 +1001,7 @@ public sealed class OpenXmlPptxRenderer
                 Type = "slidenum",
             };
 
-            var endRunProperties = new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
+            var endRunProperties = new A.EndParagraphRunProperties { Language = context.Language, FontSize = (int)Math.Round(footerStyle.FontSize * 100) };
             endRunProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = NormalizeColor(footerStyle.Color) }));
             endRunProperties.Append(new A.LatinFont { Typeface = footerStyle.FontFamily });
 
@@ -1133,7 +1134,7 @@ public sealed class OpenXmlPptxRenderer
             textBody);
     }
 
-    private static A.Paragraph CreateParagraph(string text, TextStyle style, int? level, bool ordered, int orderNumber)
+    private static A.Paragraph CreateParagraph(string text, TextStyle style, int? level, bool ordered, int orderNumber, string language = "en-US")
     {
         var paragraph = new A.Paragraph();
 
@@ -1164,7 +1165,7 @@ public sealed class OpenXmlPptxRenderer
         {
             var runProperties = new A.RunProperties
             {
-                Language = "en-US",
+                Language = language,
                 FontSize = (int)Math.Round(style.FontSize * 100),
                 Bold = style.Bold,
             };
@@ -1180,7 +1181,7 @@ public sealed class OpenXmlPptxRenderer
             paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
         }
 
-        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+        paragraph.Append(new A.EndParagraphRunProperties { Language = language, FontSize = (int)Math.Round(style.FontSize * 100) });
         return paragraph;
     }
 
@@ -1191,7 +1192,8 @@ public sealed class OpenXmlPptxRenderer
         SlidePart? slidePart,
         int? level,
         bool ordered,
-        int orderNumber)
+        int orderNumber,
+        string language = "en-US")
     {
         var paragraph = new A.Paragraph();
 
@@ -1232,7 +1234,7 @@ public sealed class OpenXmlPptxRenderer
 
             var runProperties = new A.RunProperties
             {
-                Language = "en-US",
+                Language = language,
                 FontSize = (int)Math.Round(style.FontSize * 100),
                 Bold = span.Bold || style.Bold,
             };
@@ -1265,7 +1267,7 @@ public sealed class OpenXmlPptxRenderer
             paragraph.Append(new A.Run(runProperties, new A.Text(displayText)));
         }
 
-        paragraph.Append(new A.EndParagraphRunProperties { Language = "en-US", FontSize = (int)Math.Round(style.FontSize * 100) });
+        paragraph.Append(new A.EndParagraphRunProperties { Language = language, FontSize = (int)Math.Round(style.FontSize * 100) });
         return paragraph;
     }
 
@@ -1517,22 +1519,29 @@ public sealed class OpenXmlPptxRenderer
         XNamespace dcmitype = "http://purl.org/dc/dcmitype/";
         XNamespace xsi = "http://www.w3.org/2001/XMLSchema-instance";
 
+        var coreProperties = new XElement(
+            cp + "coreProperties",
+            new XAttribute(XNamespace.Xmlns + "cp", cp),
+            new XAttribute(XNamespace.Xmlns + "dc", dc),
+            new XAttribute(XNamespace.Xmlns + "dcterms", dcterms),
+            new XAttribute(XNamespace.Xmlns + "dcmitype", dcmitype),
+            new XAttribute(XNamespace.Xmlns + "xsi", xsi),
+            new XElement(dc + "title", GetPresentationTitle(deck)),
+            new XElement(dc + "subject", "PowerPoint Presentation"),
+            new XElement(dc + "creator", "MarpToPptx"),
+            new XElement(cp + "lastModifiedBy", "MarpToPptx"),
+            new XElement(cp + "revision", "1"),
+            new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)),
+            new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)));
+
+        if (deck.Language is not null)
+        {
+            coreProperties.Add(new XElement(dc + "language", deck.Language));
+        }
+
         return new XDocument(
             new XDeclaration("1.0", "UTF-8", "yes"),
-            new XElement(
-                cp + "coreProperties",
-                new XAttribute(XNamespace.Xmlns + "cp", cp),
-                new XAttribute(XNamespace.Xmlns + "dc", dc),
-                new XAttribute(XNamespace.Xmlns + "dcterms", dcterms),
-                new XAttribute(XNamespace.Xmlns + "dcmitype", dcmitype),
-                new XAttribute(XNamespace.Xmlns + "xsi", xsi),
-                new XElement(dc + "title", GetPresentationTitle(deck)),
-                new XElement(dc + "subject", "PowerPoint Presentation"),
-                new XElement(dc + "creator", "MarpToPptx"),
-                new XElement(cp + "lastModifiedBy", "MarpToPptx"),
-                new XElement(cp + "revision", "1"),
-                new XElement(dcterms + "created", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture)),
-                new XElement(dcterms + "modified", new XAttribute(xsi + "type", "dcterms:W3CDTF"), now.ToString("yyyy-MM-ddTHH:mm:ssZ", CultureInfo.InvariantCulture))));
+            coreProperties);
     }
 
     private static XElement CreateVariantString(XNamespace variantNamespace, string value)
@@ -1835,7 +1844,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets)
+    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets, string language = "en-US")
     {
         private uint _shapeId = 1;
 
@@ -1848,6 +1857,8 @@ public sealed class OpenXmlPptxRenderer
         public ThemeDefinition Theme { get; } = theme;
 
         public RemoteAssetResolver? RemoteAssets { get; } = remoteAssets;
+
+        public string Language { get; } = language;
 
         public uint NextShapeId() => ++_shapeId;
     }

@@ -18,9 +18,12 @@ public static class FrontMatterParser
             return (values, markdown);
         }
 
-        for (var i = 1; i < closingIndex; i++)
+        var i = 1;
+        while (i < closingIndex)
         {
             var line = lines[i];
+            i++;
+
             var separator = line.IndexOf(':');
             if (separator <= 0)
             {
@@ -29,6 +32,45 @@ public static class FrontMatterParser
 
             var key = line[..separator].Trim();
             var value = line[(separator + 1)..].Trim();
+
+            // Handle YAML literal block scalar ("|"): collect subsequent indented lines.
+            if (value == "|" && key.Length > 0)
+            {
+                var blockLines = new List<string>();
+                var blockIndent = -1;
+                while (i < closingIndex)
+                {
+                    var nextLine = lines[i];
+                    if (string.IsNullOrWhiteSpace(nextLine))
+                    {
+                        blockLines.Add(string.Empty);
+                        i++;
+                        continue;
+                    }
+
+                    var indent = nextLine.Length - nextLine.TrimStart().Length;
+                    if (blockIndent < 0)
+                    {
+                        blockIndent = indent;
+                    }
+                    else if (indent < blockIndent)
+                    {
+                        break;
+                    }
+
+                    blockLines.Add(blockIndent > 0 ? nextLine[blockIndent..] : nextLine);
+                    i++;
+                }
+
+                // Strip trailing empty lines per YAML spec.
+                while (blockLines.Count > 0 && string.IsNullOrWhiteSpace(blockLines[^1]))
+                {
+                    blockLines.RemoveAt(blockLines.Count - 1);
+                }
+
+                value = string.Join('\n', blockLines);
+            }
+
             if (key.Length > 0)
             {
                 values[key] = value;

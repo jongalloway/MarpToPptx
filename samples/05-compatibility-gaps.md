@@ -10,7 +10,7 @@ This deck intentionally uses upstream Marp features that are not fully implement
 
 ## Heading Divider
 
-Upstream Marpit can split slides automatically with `headingDivider`, but the current parser does not.
+`headingDivider` is now implemented — this deck uses `headingDivider: 2` in front matter, so `##` headings create automatic slide breaks.
 
 ---
 

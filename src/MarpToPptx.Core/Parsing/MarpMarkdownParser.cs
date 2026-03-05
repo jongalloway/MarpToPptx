@@ -123,12 +123,40 @@ public sealed class MarpMarkdownParser
             };
         }
 
-        deck.Theme = MarpThemeParser.Parse(themeCss, themeName: defaultStyle.ThemeName ?? "default");
+        // lang: set deck language from front-matter.
+        if (frontMatter.TryGetValue("lang", out var lang))
+        {
+            lang = lang?.Trim();
+            if (!string.IsNullOrWhiteSpace(lang))
+            {
+                deck.Language = lang;
+            }
+        }
+
+        // style: merge inline CSS from front-matter with the external theme CSS.
+        string? mergedCss = themeCss;
+        if (frontMatter.TryGetValue("style", out var inlineStyle) && !string.IsNullOrWhiteSpace(inlineStyle))
+        {
+            mergedCss = string.IsNullOrWhiteSpace(mergedCss)
+                ? inlineStyle
+                : mergedCss + "\n" + inlineStyle;
+        }
+
+        deck.Theme = MarpThemeParser.Parse(mergedCss, themeName: defaultStyle.ThemeName ?? "default");
+
+        // headingDivider: parse from front-matter.
+        int? headingDivider = null;
+        if (frontMatter.TryGetValue("headingDivider", out var hdValue) &&
+            int.TryParse(hdValue, out var hdLevel) &&
+            hdLevel is >= 1 and <= 6)
+        {
+            headingDivider = hdLevel;
+        }
 
         // Track carry-forward style: starts from front-matter defaults,
         // updated by local directives on each slide, unaffected by spot directives.
         var carryForwardStyle = defaultStyle;
-        foreach (var chunk in SlideTokenizer.SplitSlides(body))
+        foreach (var chunk in SlideTokenizer.SplitSlides(body, headingDivider))
         {
             var (effectiveStyle, newCarryForward, cleaned, notes) = MarpDirectiveParser.Parse(chunk, carryForwardStyle);
             carryForwardStyle = newCarryForward;
