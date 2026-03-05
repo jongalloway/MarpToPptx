@@ -52,6 +52,11 @@ pwsh ./scripts/Compare-PptxStructure.ps1 -PathA artifacts/samples/01-minimal-scr
 
 Run the main local PPTX smoke-test flow in one command: generate with the local CLI project, validate with the .NET Open XML helper, and then open the result in PowerPoint.
 
+When you do not provide `-OutputPath`, the script now writes default files using explicit names:
+
+- generated output: `artifacts/smoke-tests/<sample>-generated-<configuration>.pptx`
+- PowerPoint-resaved copy: `artifacts/smoke-tests/<sample>-powerpoint-resaved-<configuration>.pptx`
+
 ```powershell
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/03-theme-css.md -ThemeCss samples/03-theme.css -Configuration Release

@@ -70,11 +70,13 @@ function Test-PowerPointAutomationAvailable {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $generateScript = Join-Path $PSScriptRoot "Generate-LocalPptx.ps1"
 $powerPointScript = Join-Path $PSScriptRoot "Test-PowerPointOpen.ps1"
+$usedDefaultOutputPath = $false
 
 if (-not $OutputPath) {
 	$inputBaseName = [System.IO.Path]::GetFileNameWithoutExtension($InputMarkdown)
 	$smokeTestDirectory = Join-Path (Join-Path $repoRoot "artifacts") "smoke-tests"
-	$OutputPath = Join-Path $smokeTestDirectory ("{0}-{1}.pptx" -f $inputBaseName, $Configuration.ToLowerInvariant())
+	$OutputPath = Join-Path $smokeTestDirectory ("{0}-generated-{1}.pptx" -f $inputBaseName, $Configuration.ToLowerInvariant())
+	$usedDefaultOutputPath = $true
 }
 
 $resolvedOutputPath = [System.IO.Path]::GetFullPath($OutputPath, $repoRoot)
@@ -84,8 +86,14 @@ if ($outputDirectory) {
 }
 
 if (-not $SkipPowerPoint -and -not $SkipRoundTripSave -and -not $RoundTripCopyPath) {
-	$outputBaseName = [System.IO.Path]::GetFileNameWithoutExtension($resolvedOutputPath)
-	$RoundTripCopyPath = Join-Path $outputDirectory ("{0}-roundtrip.pptx" -f $outputBaseName)
+	if ($usedDefaultOutputPath) {
+		$inputBaseName = [System.IO.Path]::GetFileNameWithoutExtension($InputMarkdown)
+		$RoundTripCopyPath = Join-Path $outputDirectory ("{0}-powerpoint-resaved-{1}.pptx" -f $inputBaseName, $Configuration.ToLowerInvariant())
+	}
+	else {
+		$outputBaseName = [System.IO.Path]::GetFileNameWithoutExtension($resolvedOutputPath)
+		$RoundTripCopyPath = Join-Path $outputDirectory ("{0}-powerpoint-resaved.pptx" -f $outputBaseName)
+	}
 }
 
 $powerPointAvailable = Test-PowerPointAutomationAvailable

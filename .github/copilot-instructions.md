@@ -20,6 +20,12 @@
   2. Generate a sample deck with the local CLI project.
   3. Validate with `src/MarpToPptx.OpenXmlValidator`.
   4. If compatibility risk remains, run the PowerPoint smoke flow on Windows.
+- This repo uses Microsoft Testing Platform via `global.json`. Prefer `dotnet test` and the built-in test tooling over invoking test binaries directly.
+- For full test runs, use `dotnet test --solution MarpToPptx.slnx --configuration Release --no-build` when the solution is already built.
+- For targeted xUnit v3 runs under MTP, pass runner-specific filters after `--`, for example:
+  - `dotnet test tests/MarpToPptx.Tests/MarpToPptx.Tests.csproj -c Release --no-restore -- --filter-method "*Renderer_EmitsNotesRelationshipsNeededForPowerPointCompatibility"`
+  - `dotnet test tests/MarpToPptx.Tests/MarpToPptx.Tests.csproj -c Release --no-restore -- --filter-method "*Parser_PreservesPresenterNoteFormattingMarkersAsPlainText"`
+- Do not assume VSTest-style `--filter` works here; under MTP/xUnit v3, prefer `--filter-method`, `--filter-class`, or other runner-supported options after `--`.
 - Use `dotnet run --project src/MarpToPptx.Cli -- ...` for local renderer debugging. Do not rely on `dnx` unless you explicitly want the published tool path.
 - Use `pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown ...` for the quickest end-to-end local check.
 - If golden package baselines intentionally change, regenerate them with `UPDATE_GOLDEN_PACKAGES=1` during the test run.
@@ -36,6 +42,11 @@
 
 ## Working guidance for agents
 
+- Prefer MCP-backed workflows and servers over ad hoc direct calls or manual file/package manipulation when the capability exists.
+- Prefer `Community.Mcp.DotNet` for .NET project, solution, package, and related development workflows before reaching for raw shell commands.
+- Prefer `Microsoft.Docs.Mcp` for authoritative Microsoft and Open XML documentation lookups before open-web searching.
+- Prefer `NuGet.Mcp.Server` for NuGet package/version/readme workflows before manual package inspection or custom dependency queries.
+- Use direct shell commands and manual file/package inspection only when the MCP path does not cover the task or when validating the exact on-disk output is the point of the task.
 - If validation passes but PowerPoint fails, inspect package structure, relationships, and content types before changing slide content logic.
 - Compare generated output against a known-good PowerPoint or reference package when troubleshooting package-shape issues.
 - Keep instructions files small. Put specialized workflows into prompts or skills instead of expanding this file.
