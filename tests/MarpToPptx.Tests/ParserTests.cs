@@ -1203,12 +1203,12 @@ public class ParserTests
         section.lead { background-color: #102A43; color: #FFFFFF; }
         """;
 
-        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+        var theme = MarpThemeParser.Parse(css);
 
         Assert.True(theme.ClassVariants.ContainsKey("lead"));
         var variant = theme.ClassVariants["lead"];
         Assert.Equal("#102A43", variant.BackgroundColor);
-        Assert.Equal("#FFFFFF", variant.TextColor);
+        Assert.Equal("#FFFFFF", variant.Body?.Color);
     }
 
     [Fact]
@@ -1218,7 +1218,7 @@ public class ParserTests
         section.invert h1 { color: #FFDD57; font-size: 40px; }
         """;
 
-        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+        var theme = MarpThemeParser.Parse(css);
 
         Assert.True(theme.ClassVariants.ContainsKey("invert"));
         var variant = theme.ClassVariants["invert"];
@@ -1236,13 +1236,13 @@ public class ParserTests
         section.invert { background-color: #16213E; color: #E94560; }
         """;
 
-        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+        var theme = MarpThemeParser.Parse(css);
 
         Assert.Equal(2, theme.ClassVariants.Count);
         Assert.Equal("#1A1A2E", theme.ClassVariants["lead"].BackgroundColor);
         Assert.Equal("#16213E", theme.ClassVariants["invert"].BackgroundColor);
-        Assert.Equal("#E94560", theme.ClassVariants["invert"].TextColor);
-        Assert.Null(theme.ClassVariants["lead"].TextColor);
+        Assert.Equal("#E94560", theme.ClassVariants["invert"].Body?.Color);
+        Assert.Equal("#1F2937", theme.ClassVariants["lead"].Body?.Color); // no color override; inherits base theme body color
     }
 
     [Fact]
@@ -1250,7 +1250,7 @@ public class ParserTests
     {
         const string css = "section { color: #333; }";
 
-        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+        var theme = MarpThemeParser.Parse(css);
 
         Assert.Empty(theme.ClassVariants);
     }

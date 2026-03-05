@@ -50,10 +50,6 @@ public sealed record ClassVariant
 {
     public string? BackgroundColor { get; init; }
 
-    public string? TextColor { get; init; }
-
-    public string? FontFamily { get; init; }
-
     public TextStyle? Body { get; init; }
 
     public IReadOnlyDictionary<int, TextStyle>? Headings { get; init; }

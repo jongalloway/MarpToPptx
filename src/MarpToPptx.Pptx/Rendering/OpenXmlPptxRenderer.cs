@@ -367,7 +367,7 @@ public sealed class OpenXmlPptxRenderer
             }
         }
 
-        AddHeaderFooterAndPageNumber(context, slideModel.Style, theme, slideNumber);
+        AddHeaderFooterAndPageNumber(context, slideModel.Style, bodyStyle, slideNumber);
 
         slidePart.Slide.Save();
         AppendSlideId(presentationPart, slidePart);
@@ -973,7 +973,7 @@ public sealed class OpenXmlPptxRenderer
         return slidePart.GetIdOfPart(imagePart);
     }
 
-    private static void AddHeaderFooterAndPageNumber(SlideRenderContext context, SlideStyle style, ThemeDefinition theme, int slideNumber)
+    private static void AddHeaderFooterAndPageNumber(SlideRenderContext context, SlideStyle style, TextStyle bodyStyle, int slideNumber)
     {
         // Slide dimensions in points: width ≈ 960pt, height ≈ 540pt.
         const double slideWidth = SlideWidthEmu / (double)LayoutScale;
@@ -985,7 +985,7 @@ public sealed class OpenXmlPptxRenderer
         const double headerHeight = 18.0;
         const double pageNumWidth = 60.0;
 
-        var footerStyle = new TextStyle(10, theme.Body.Color, theme.Body.FontFamily, false);
+        var footerStyle = new TextStyle(10, bodyStyle.Color, bodyStyle.FontFamily, false);
 
         if (!string.IsNullOrWhiteSpace(style.Header))
         {
