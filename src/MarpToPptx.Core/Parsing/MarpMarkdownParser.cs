@@ -48,6 +48,7 @@ public sealed class MarpMarkdownParser
                 ClassName = defaultStyle.ClassName,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = defaultStyle.BackgroundSize,
                 Header = defaultStyle.Header,
                 Footer = defaultStyle.Footer,
             };
@@ -62,6 +63,7 @@ public sealed class MarpMarkdownParser
                 ClassName = className,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = defaultStyle.BackgroundSize,
                 Header = defaultStyle.Header,
                 Footer = defaultStyle.Footer,
             };
@@ -75,6 +77,22 @@ public sealed class MarpMarkdownParser
                 Paginate = defaultStyle.Paginate,
                 ClassName = defaultStyle.ClassName,
                 BackgroundImage = backgroundImage,
+                BackgroundSize = defaultStyle.BackgroundSize,
+                BackgroundColor = defaultStyle.BackgroundColor,
+                Header = defaultStyle.Header,
+                Footer = defaultStyle.Footer,
+            };
+        }
+
+        if (frontMatter.TryGetValue("backgroundSize", out var backgroundSize))
+        {
+            defaultStyle = new SlideStyle
+            {
+                ThemeName = defaultStyle.ThemeName,
+                Paginate = defaultStyle.Paginate,
+                ClassName = defaultStyle.ClassName,
+                BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = backgroundSize,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 Header = defaultStyle.Header,
                 Footer = defaultStyle.Footer,
@@ -89,6 +107,7 @@ public sealed class MarpMarkdownParser
                 Paginate = defaultStyle.Paginate,
                 ClassName = defaultStyle.ClassName,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = defaultStyle.BackgroundSize,
                 BackgroundColor = backgroundColor,
                 Header = defaultStyle.Header,
                 Footer = defaultStyle.Footer,
@@ -103,6 +122,7 @@ public sealed class MarpMarkdownParser
                 Paginate = defaultStyle.Paginate,
                 ClassName = defaultStyle.ClassName,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = defaultStyle.BackgroundSize,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 Header = header,
                 Footer = defaultStyle.Footer,
@@ -117,6 +137,7 @@ public sealed class MarpMarkdownParser
                 Paginate = defaultStyle.Paginate,
                 ClassName = defaultStyle.ClassName,
                 BackgroundImage = defaultStyle.BackgroundImage,
+                BackgroundSize = defaultStyle.BackgroundSize,
                 BackgroundColor = defaultStyle.BackgroundColor,
                 Header = defaultStyle.Header,
                 Footer = footer,

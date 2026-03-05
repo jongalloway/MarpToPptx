@@ -38,6 +38,8 @@ public sealed class SlideStyle
 
     public string? BackgroundImage { get; init; }
 
+    public string? BackgroundSize { get; init; }
+
     public string? BackgroundColor { get; init; }
 
     public string? Header { get; init; }
