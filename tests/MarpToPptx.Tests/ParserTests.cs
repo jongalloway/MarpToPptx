@@ -1190,4 +1190,68 @@ public class ParserTests
         // Only the initial slide exists (no --- separators).
         Assert.Single(deck.Slides);
     }
+
+    // ────────────────────────────────────────────────────────
+    // Issue #39 – Theme class variant parsing
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void ThemeParser_ParsesSectionClassSelector()
+    {
+        const string css = """
+        section { color: #000000; }
+        section.lead { background-color: #102A43; color: #FFFFFF; }
+        """;
+
+        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+
+        Assert.True(theme.ClassVariants.ContainsKey("lead"));
+        var variant = theme.ClassVariants["lead"];
+        Assert.Equal("#102A43", variant.BackgroundColor);
+        Assert.Equal("#FFFFFF", variant.TextColor);
+    }
+
+    [Fact]
+    public void ThemeParser_ParsesSectionClassHeadingSelector()
+    {
+        const string css = """
+        section.invert h1 { color: #FFDD57; font-size: 40px; }
+        """;
+
+        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+
+        Assert.True(theme.ClassVariants.ContainsKey("invert"));
+        var variant = theme.ClassVariants["invert"];
+        Assert.NotNull(variant.Headings);
+        Assert.True(variant.Headings!.ContainsKey(1));
+        Assert.Equal("#FFDD57", variant.Headings[1].Color);
+        Assert.Equal(30, variant.Headings[1].FontSize); // 40px * 0.75 = 30pt
+    }
+
+    [Fact]
+    public void ThemeParser_MultipleClassVariants_ParsedIndependently()
+    {
+        const string css = """
+        section.lead { background-color: #1A1A2E; }
+        section.invert { background-color: #16213E; color: #E94560; }
+        """;
+
+        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+
+        Assert.Equal(2, theme.ClassVariants.Count);
+        Assert.Equal("#1A1A2E", theme.ClassVariants["lead"].BackgroundColor);
+        Assert.Equal("#16213E", theme.ClassVariants["invert"].BackgroundColor);
+        Assert.Equal("#E94560", theme.ClassVariants["invert"].TextColor);
+        Assert.Null(theme.ClassVariants["lead"].TextColor);
+    }
+
+    [Fact]
+    public void ThemeParser_NoClassVariants_WhenNone()
+    {
+        const string css = "section { color: #333; }";
+
+        var theme = MarpToPptx.Core.Themes.MarpThemeParser.Parse(css);
+
+        Assert.Empty(theme.ClassVariants);
+    }
 }

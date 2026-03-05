@@ -1962,4 +1962,205 @@ public class PptxRendererTests
     }
 
     private sealed record PlaceholderBounds(long X, long Y, long W, long H);
+
+    // ────────────────────────────────────────────────────────
+    // Issue #39 – Paginate and class directive output
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Renderer_EmitsSlideNumberField_WhenPaginateTrue()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            paginate: true
+            ---
+
+            # Slide One
+
+            ---
+
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+
+        // Each slide should have a slidenum field.
+        foreach (var slidePart in slideParts)
+        {
+            var fields = slidePart.Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum").ToArray();
+            Assert.Single(fields);
+        }
+    }
+
+    [Fact]
+    public void Renderer_OmitsSlideNumberField_WhenPaginateFalse()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            paginate: false
+            ---
+
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var fields = slidePart.Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum").ToArray();
+        Assert.Empty(fields);
+    }
+
+    [Fact]
+    public void Renderer_SpotPaginateFalse_SuppressesNumberOnSingleSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            paginate: true
+            ---
+
+            # Title
+
+            ---
+
+            <!-- _paginate: false -->
+            # No Number Here
+
+            ---
+
+            # Back To Numbers
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+
+        // Slide 1 and 3 should have slide numbers; slide 2 should not.
+        Assert.Single(slideParts[0].Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum"));
+        Assert.Empty(slideParts[1].Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum"));
+        Assert.Single(slideParts[2].Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum"));
+    }
+
+    [Fact]
+    public void Renderer_ClassVariant_AffectsBackgroundColor()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        const string themeCss = """
+        section { background-color: #FFFFFF; }
+        section.dark { background-color: #1A1A2E; }
+        """;
+        workspace.WriteFile("theme.css", themeCss);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: custom
+            ---
+
+            # Default Background
+
+            ---
+
+            <!-- class: dark -->
+            # Dark Background
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeckWithTheme(markdownPath, outputPath, workspace.RootPath, themeCss);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+
+        // Slide 1 background should be FFFFFF (default).
+        var bg1 = GetBackgroundColor(slideParts[0]);
+        Assert.Equal("FFFFFF", bg1);
+
+        // Slide 2 background should be 1A1A2E (class variant).
+        var bg2 = GetBackgroundColor(slideParts[1]);
+        Assert.Equal("1A1A2E", bg2);
+    }
+
+    [Fact]
+    public void Renderer_ClassVariant_AffectsHeadingColor()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        const string themeCss = """
+        section.accent h1 { color: #E94560; }
+        """;
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: custom
+            ---
+
+            # Normal Title
+
+            ---
+
+            <!-- class: accent -->
+            # Accent Title
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeckWithTheme(markdownPath, outputPath, workspace.RootPath, themeCss);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+
+        // Slide 2 should have the accent heading color.
+        var headingRun = slideParts[1].Slide!.Descendants<A.Run>()
+            .FirstOrDefault(r => r.Descendants<A.Text>().Any());
+        Assert.NotNull(headingRun);
+        var color = headingRun!.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value;
+        Assert.Equal("E94560", color);
+    }
+
+    private static void RenderDeckWithTheme(string markdownPath, string outputPath, string sourceDirectory, string themeCss)
+    {
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath, themeCss);
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = sourceDirectory });
+    }
+
+    private static string? GetBackgroundColor(SlidePart slidePart)
+    {
+        // The first shape named "Background" should contain a filled rectangle with the color.
+        foreach (var shape in slidePart.Slide!.Descendants<P.Shape>())
+        {
+            var nvSpPr = shape.NonVisualShapeProperties;
+            if (nvSpPr?.NonVisualDrawingProperties?.Name == "Background")
+            {
+                var solidFill = shape.Descendants<A.SolidFill>().FirstOrDefault();
+                return solidFill?.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value;
+            }
+        }
+
+        return null;
+    }
 }

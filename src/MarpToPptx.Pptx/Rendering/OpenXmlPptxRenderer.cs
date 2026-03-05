@@ -298,7 +298,15 @@ public sealed class OpenXmlPptxRenderer
 
         slidePart.Slide = slide;
         var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, theme, remoteAssets, language);
-        AddBackground(slideModel.Style, context);
+
+        // Resolve class variant: when the slide has a className, look up overrides.
+        ClassVariant? classVariant = null;
+        if (!string.IsNullOrWhiteSpace(slideModel.Style.ClassName))
+        {
+            theme.ClassVariants.TryGetValue(slideModel.Style.ClassName!, out classVariant);
+        }
+
+        AddBackground(slideModel.Style, context, classVariant);
 
         // Read placeholder bounds from the selected layout. When the title placeholder
         // carries an explicit transform, use it for the first top-level heading so that
@@ -318,6 +326,7 @@ public sealed class OpenXmlPptxRenderer
             (titleRect is not null || !hasHeading);
 
         var plan = _layoutEngine.LayoutSlide(slideModel, theme);
+        var bodyStyle = classVariant?.Body ?? theme.Body;
         foreach (var placed in plan.Elements)
         {
             // Resolve the frame: prefer template placeholder rect when available.
@@ -332,13 +341,13 @@ public sealed class OpenXmlPptxRenderer
             switch (placed.Element)
             {
                 case HeadingElement heading:
-                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(theme, heading.Level), theme.Code, isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
+                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(theme, heading.Level, classVariant), theme.Code, isTitle: heading.Level == 1 && slideModel.Elements.IndexOf(heading) == 0);
                     break;
                 case ParagraphElement paragraph:
-                    AddTextShape(context, frame, paragraph.Spans, theme.Body, theme.Code);
+                    AddTextShape(context, frame, paragraph.Spans, bodyStyle, theme.Code);
                     break;
                 case BulletListElement list:
-                    AddBulletList(context, frame, list, theme.Body);
+                    AddBulletList(context, frame, list, bodyStyle);
                     break;
                 case ImageElement image:
                     AddImage(context, frame, image.Source, image.AltText);
@@ -353,7 +362,7 @@ public sealed class OpenXmlPptxRenderer
                     AddCodeBlock(context, frame, code, theme.Code);
                     break;
                 case TableElement table:
-                    AddTable(context, frame, table, theme.Body);
+                    AddTable(context, frame, table, bodyStyle);
                     break;
             }
         }
@@ -369,8 +378,15 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
-        => theme.Headings.TryGetValue(level, out var style) ? style : theme.Headings[1];
+    private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level, ClassVariant? classVariant = null)
+    {
+        if (classVariant?.Headings is not null && classVariant.Headings.TryGetValue(level, out var classStyle))
+        {
+            return classStyle;
+        }
+
+        return theme.Headings.TryGetValue(level, out var style) ? style : theme.Headings[1];
+    }
 
     private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, string notes, string language)
     {
@@ -489,9 +505,9 @@ public sealed class OpenXmlPptxRenderer
         return paragraph;
     }
 
-    private static void AddBackground(SlideStyle style, SlideRenderContext context)
+    private static void AddBackground(SlideStyle style, SlideRenderContext context, ClassVariant? classVariant = null)
     {
-        var backgroundColor = style.BackgroundColor ?? context.Theme.BackgroundColor;
+        var backgroundColor = style.BackgroundColor ?? classVariant?.BackgroundColor ?? context.Theme.BackgroundColor;
         if (!string.IsNullOrWhiteSpace(backgroundColor))
         {
             context.ShapeTree.Append(CreateRectangleShape(
