@@ -955,4 +955,32 @@ public class ParserTests
         Assert.Equal("red", deck.Slides[1].Style.BackgroundColor);
         Assert.Null(deck.Slides[2].Style.BackgroundColor);
     }
+
+    [Fact]
+    public void Parser_SpotDirective_WithEmptyKeyAfterStrip_IsIgnored()
+    {
+        // A directive like <!-- _: value --> has an empty key after stripping the '_' prefix
+        // and should be silently ignored rather than inserted with an empty key.
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- _: ignored-value -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        // No empty-string key should appear in any slide's directive map.
+        Assert.DoesNotContain("", deck.Slides[0].Style.Directives.Keys);
+        Assert.DoesNotContain("", deck.Slides[1].Style.Directives.Keys);
+        Assert.DoesNotContain("", deck.Slides[2].Style.Directives.Keys);
+    }
 }
