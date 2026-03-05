@@ -723,4 +723,236 @@ public class ParserTests
         var audio = Assert.IsType<AudioElement>(slide.Elements[1]);
         Assert.Equal("background.mp3", audio.Source);
     }
+
+    // ── Directive scoping and spot-directive tests ──────────────────────
+
+    [Fact]
+    public void Parser_LocalDirective_CarriesForwardToSubsequentSlides()
+    {
+        const string markdown = """
+        ---
+        paginate: true
+        ---
+
+        # Slide One
+
+        ---
+
+        <!-- class: lead -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.ClassName);
+        Assert.Equal("lead", deck.Slides[1].Style.ClassName);
+        // Local directive carries forward to slide 3.
+        Assert.Equal("lead", deck.Slides[2].Style.ClassName);
+        // Global front-matter directive persists through all slides.
+        Assert.True(deck.Slides[2].Style.Paginate);
+    }
+
+    [Fact]
+    public void Parser_SpotDirective_AppliesOnlyToCurrentSlide()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- _class: lead -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.ClassName);
+        // Spot directive applies to slide 2.
+        Assert.Equal("lead", deck.Slides[1].Style.ClassName);
+        // Spot directive does NOT carry forward.
+        Assert.Null(deck.Slides[2].Style.ClassName);
+    }
+
+    [Fact]
+    public void Parser_SpotDirective_OverridesLocalDirectiveForOneSlide()
+    {
+        const string markdown = """
+        ---
+        class: default-class
+        ---
+
+        # Slide One
+
+        ---
+
+        <!-- _class: override -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("default-class", deck.Slides[0].Style.ClassName);
+        // Spot overrides for this slide only.
+        Assert.Equal("override", deck.Slides[1].Style.ClassName);
+        // Reverts to carry-forward (front-matter default).
+        Assert.Equal("default-class", deck.Slides[2].Style.ClassName);
+    }
+
+    [Fact]
+    public void Parser_LocalHeaderFooter_CarryForward()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- header: Page Header -->
+        <!-- footer: Page Footer -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.Header);
+        Assert.Null(deck.Slides[0].Style.Footer);
+        Assert.Equal("Page Header", deck.Slides[1].Style.Header);
+        Assert.Equal("Page Footer", deck.Slides[1].Style.Footer);
+        // Carries forward.
+        Assert.Equal("Page Header", deck.Slides[2].Style.Header);
+        Assert.Equal("Page Footer", deck.Slides[2].Style.Footer);
+    }
+
+    [Fact]
+    public void Parser_SpotPaginate_AppliesToSingleSlide()
+    {
+        const string markdown = """
+        ---
+        paginate: true
+        ---
+
+        # Slide One
+
+        ---
+
+        <!-- _paginate: false -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.True(deck.Slides[0].Style.Paginate);
+        // Spot override turns off pagination for this slide only.
+        Assert.False(deck.Slides[1].Style.Paginate);
+        // Reverts to carry-forward (front-matter default).
+        Assert.True(deck.Slides[2].Style.Paginate);
+    }
+
+    [Fact]
+    public void Parser_MultipleLocalDirectives_AllCarryForward()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- class: dark -->
+        <!-- backgroundColor: #000 -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("dark", deck.Slides[1].Style.ClassName);
+        Assert.Equal("#000", deck.Slides[1].Style.BackgroundColor);
+        // Both carry forward.
+        Assert.Equal("dark", deck.Slides[2].Style.ClassName);
+        Assert.Equal("#000", deck.Slides[2].Style.BackgroundColor);
+    }
+
+    [Fact]
+    public void Parser_LocalThenSpotOnSameKey_CarriesLocalOnly()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- class: base -->
+        <!-- _class: spot-override -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        // Spot override wins for effective style on this slide.
+        Assert.Equal("spot-override", deck.Slides[1].Style.ClassName);
+        // Carry-forward uses the local directive value.
+        Assert.Equal("base", deck.Slides[2].Style.ClassName);
+    }
+
+    [Fact]
+    public void Parser_SpotBackgroundColor_DoesNotCarryForward()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- _backgroundColor: red -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("red", deck.Slides[1].Style.BackgroundColor);
+        Assert.Null(deck.Slides[2].Style.BackgroundColor);
+    }
 }

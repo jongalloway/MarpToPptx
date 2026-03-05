@@ -4,9 +4,17 @@ namespace MarpToPptx.Core.Parsing;
 
 public static partial class MarpDirectiveParser
 {
-    public static (SlideStyle Style, string MarkdownWithoutDirectives, string? Notes) Parse(string markdown, SlideStyle? inheritedStyle = null)
+    /// <summary>
+    /// Parses HTML-comment directives from a single slide chunk.
+    /// Returns the effective style (local + spot directives applied),
+    /// the carry-forward style (local directives only, for propagation to subsequent slides),
+    /// the cleaned markdown, and any presenter notes.
+    /// Spot directives use a <c>_</c> prefix (e.g. <c>_class</c>) and apply only to the current slide.
+    /// </summary>
+    public static (SlideStyle EffectiveStyle, SlideStyle CarryForwardStyle, string MarkdownWithoutDirectives, string? Notes) Parse(string markdown, SlideStyle? inheritedStyle = null)
     {
-        var style = Clone(inheritedStyle ?? new SlideStyle());
+        var localStyle = Clone(inheritedStyle ?? new SlideStyle());
+        var spotOverrides = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
         var noteLines = new List<string>();
 
         var anyComment = AnyHtmlCommentRegex();
@@ -18,33 +26,21 @@ public static partial class MarpDirectiveParser
             var directiveMatch = directive.Match(match.Value);
             if (directiveMatch.Success)
             {
-                var key = directiveMatch.Groups[1].Value.Trim();
+                var rawKey = directiveMatch.Groups[1].Value.Trim();
                 var value = directiveMatch.Groups[2].Value.Trim();
-                style.Directives[key] = value;
 
-                switch (key.ToLowerInvariant())
+                // Spot directives use a _ prefix and apply only to the current slide.
+                var isSpot = rawKey.StartsWith('_');
+                var key = isSpot ? rawKey[1..] : rawKey;
+
+                if (isSpot)
                 {
-                    case "theme":
-                        style = Clone(style, themeName: value);
-                        break;
-                    case "paginate":
-                        style = Clone(style, paginate: bool.TryParse(value, out var paginate) ? paginate : null);
-                        break;
-                    case "class":
-                        style = Clone(style, className: value);
-                        break;
-                    case "backgroundimage":
-                        style = Clone(style, backgroundImage: UnwrapUrl(value));
-                        break;
-                    case "backgroundcolor":
-                        style = Clone(style, backgroundColor: value);
-                        break;
-                    case "header":
-                        style = Clone(style, header: value);
-                        break;
-                    case "footer":
-                        style = Clone(style, footer: value);
-                        break;
+                    spotOverrides[key] = value;
+                }
+                else
+                {
+                    localStyle.Directives[key] = value;
+                    localStyle = ApplyKnownDirective(localStyle, key, value);
                 }
             }
             else
@@ -57,10 +53,36 @@ public static partial class MarpDirectiveParser
             }
         }
 
+        // Build the carry-forward style (local directives only).
+        var carryForwardStyle = Clone(localStyle);
+
+        // Layer spot directives on top for the effective style.
+        var effectiveStyle = Clone(localStyle);
+        foreach (var (key, value) in spotOverrides)
+        {
+            effectiveStyle.Directives[key] = value;
+            effectiveStyle = ApplyKnownDirective(effectiveStyle, key, value);
+        }
+
         // Strip all HTML comments (directives and notes) from the cleaned output.
         var cleaned = anyComment.Replace(markdown, string.Empty).Trim();
         var notes = noteLines.Count > 0 ? string.Join("\n", noteLines) : null;
-        return (style, cleaned, notes);
+        return (effectiveStyle, carryForwardStyle, cleaned, notes);
+    }
+
+    private static SlideStyle ApplyKnownDirective(SlideStyle style, string key, string value)
+    {
+        return key.ToLowerInvariant() switch
+        {
+            "theme" => Clone(style, themeName: value),
+            "paginate" => Clone(style, paginate: bool.TryParse(value, out var p) ? p : null),
+            "class" => Clone(style, className: value),
+            "backgroundimage" => Clone(style, backgroundImage: UnwrapUrl(value)),
+            "backgroundcolor" => Clone(style, backgroundColor: value),
+            "header" => Clone(style, header: value),
+            "footer" => Clone(style, footer: value),
+            _ => style,
+        };
     }
 
     private static SlideStyle Clone(

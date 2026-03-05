@@ -125,10 +125,15 @@ public sealed class MarpMarkdownParser
 
         deck.Theme = MarpThemeParser.Parse(themeCss, themeName: defaultStyle.ThemeName ?? "default");
 
+        // Track carry-forward style: starts from front-matter defaults,
+        // updated by local directives on each slide, unaffected by spot directives.
+        var carryForwardStyle = defaultStyle;
         foreach (var chunk in SlideTokenizer.SplitSlides(body))
         {
-            var (style, cleaned, notes) = MarpDirectiveParser.Parse(chunk, defaultStyle);
-            var slide = new Slide { Style = style, Notes = notes };
+            var (effectiveStyle, newCarryForward, cleaned, notes) = MarpDirectiveParser.Parse(chunk, carryForwardStyle);
+            carryForwardStyle = newCarryForward;
+
+            var slide = new Slide { Style = effectiveStyle, Notes = notes };
             foreach (var element in ParseElements(cleaned))
             {
                 slide.Elements.Add(element);
@@ -417,19 +422,19 @@ public sealed class MarpMarkdownParser
                     spans.Add(new InlineSpan(codeInline.Content, bold, italic, Code: true, Strikethrough: strikethrough, HyperlinkUrl: hyperlinkUrl));
                     break;
                 case EmphasisInline emphasis:
-                {
-                    var isBold = (emphasis.DelimiterChar is '*' or '_') && emphasis.DelimiterCount >= 2;
-                    var isItalic = (emphasis.DelimiterChar is '*' or '_') && emphasis.DelimiterCount == 1;
-                    var isStrikethrough = emphasis.DelimiterChar == '~';
-                    spans.AddRange(ExtractInlineSpans(
-                        emphasis,
-                        bold || isBold,
-                        italic || isItalic,
-                        strikethrough || isStrikethrough,
-                        code,
-                        hyperlinkUrl));
-                    break;
-                }
+                    {
+                        var isBold = (emphasis.DelimiterChar is '*' or '_') && emphasis.DelimiterCount >= 2;
+                        var isItalic = (emphasis.DelimiterChar is '*' or '_') && emphasis.DelimiterCount == 1;
+                        var isStrikethrough = emphasis.DelimiterChar == '~';
+                        spans.AddRange(ExtractInlineSpans(
+                            emphasis,
+                            bold || isBold,
+                            italic || isItalic,
+                            strikethrough || isStrikethrough,
+                            code,
+                            hyperlinkUrl));
+                        break;
+                    }
 
                 case LinkInline link when !link.IsImage:
                     spans.AddRange(ExtractInlineSpans(link, bold, italic, strikethrough, code, link.Url));
