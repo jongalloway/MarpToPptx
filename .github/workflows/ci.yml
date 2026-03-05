@@ -66,20 +66,16 @@ jobs:
       - name: Run PPTX Smoke Test
         shell: pwsh
         run: |
-          ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Configuration Release -CiSafe
-          ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/02-directives.md -Configuration Release -CiSafe
-          ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/03-theme-css.md -ThemeCss samples/03-theme.css -Configuration Release -CiSafe
-          ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/04-content-coverage.md -Configuration Release -CiSafe
+          ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe
 
       - name: Run Remote Asset Smoke Test
         if: github.event_name == 'push'
         shell: pwsh
         run: |
-          ./scripts/Invoke-PptxSmokeTest.ps1 `
-            -InputMarkdown samples/06-remote-assets.md `
+          ./scripts/Invoke-AllPptxSmokeTests.ps1 `
             -Configuration Release `
-            -AllowRemoteAssets `
-            -CiSafe
+            -CiSafe `
+            -OnlyRemoteSamples
 
       - name: Upload Smoke Test Artifacts
         if: always()
