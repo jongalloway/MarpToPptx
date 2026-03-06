@@ -2135,8 +2135,7 @@ public class PptxRendererTests
 
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.Single();
-        var fields = slidePart.Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum").ToArray();
-        Assert.Empty(fields);
+        Assert.DoesNotContain(slidePart.Slide!.Descendants<A.Field>(), f => f.Type == "slidenum");
     }
 
     [Fact]
@@ -2170,9 +2169,9 @@ public class PptxRendererTests
         var slideParts = document.PresentationPart!.SlideParts.ToArray();
 
         // Slide 1 and 3 should have slide numbers; slide 2 should not.
-        Assert.Single(slideParts[0].Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum"));
-        Assert.Empty(slideParts[1].Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum"));
-        Assert.Single(slideParts[2].Slide!.Descendants<A.Field>().Where(f => f.Type == "slidenum"));
+        Assert.Single(slideParts[0].Slide!.Descendants<A.Field>(), f => f.Type == "slidenum");
+        Assert.DoesNotContain(slideParts[1].Slide!.Descendants<A.Field>(), f => f.Type == "slidenum");
+        Assert.Single(slideParts[2].Slide!.Descendants<A.Field>(), f => f.Type == "slidenum");
     }
 
     [Fact]
