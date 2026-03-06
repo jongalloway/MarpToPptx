@@ -25,6 +25,9 @@ Opt-in integration smoke deck for real HTTP(S) image fetches using commit-pinned
 7. `07-presenter-notes.md`
 Dedicated smoke deck for presenter notes packaging, including note-bearing slides, a no-notes control slide, and a slide that mixes directive comments with presenter notes.
 
+8. `08-showcase.md`
+Speaker-style showcase deck generated from repo content, using `08-showcase.css` plus local Marp SVG assets to cover the Marp ecosystem, MarpToPptx capabilities, presenter notes, and the recommended VS Code task configuration.
+
 ## Running The Samples
 
 Run any sample with the published tool:
@@ -51,5 +54,6 @@ dotnet run --project src/MarpToPptx.Cli -- samples/03-theme-css.md --theme-css s
 - `04-content-coverage.md` depends on the small local media fixtures under `samples/assets/`.
 - `06-remote-assets.md` is intended for integration smoke testing and should be run with remote assets explicitly enabled.
 - `07-presenter-notes.md` is the explicit smoke deck for speaker notes and PowerPoint-open compatibility of emitted notes parts.
+- `08-showcase.md` is the branded speaker-style sample that exercises the batch smoke runner with a richer content deck and companion CSS.
 - The compatibility-gap sample is useful for validating current limitations without needing to invent ad hoc repros.
 - Output paths above target `artifacts/samples/`, but any writable location will work.

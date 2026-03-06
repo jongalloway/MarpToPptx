@@ -1,0 +1,141 @@
+/* @theme marp-showcase */
+
+:root {
+  font-family: "Segoe UI", "Aptos", sans-serif;
+  font-size: 29px;
+  color: #1B4D68;
+  background-color: #F5FBFE;
+  padding: 44px 58px;
+  line-height: 1.4;
+}
+
+h1,
+h2,
+h3 {
+  font-family: "Aptos Display", "Segoe UI", sans-serif;
+  letter-spacing: 0.4px;
+}
+
+h1 {
+  font-size: 54px;
+  color: #02669D;
+  margin-bottom: 0.25em;
+}
+
+h2 {
+  font-size: 36px;
+  color: #0277B7;
+  margin-bottom: 0.35em;
+}
+
+h3 {
+  font-size: 28px;
+  color: #0288D1;
+}
+
+strong {
+  color: #02669D;
+}
+
+em,
+mark {
+  color: #0277B7;
+  background: transparent;
+}
+
+a {
+  color: #02669D;
+}
+
+blockquote {
+  border-left: 6px solid #67B8E3;
+  padding-left: 18px;
+  color: #02669D;
+}
+
+table {
+  font-size: 22px;
+  border-collapse: collapse;
+}
+
+th {
+  background: #0288D1;
+  color: #FFFFFF;
+  font-weight: 700;
+}
+
+th,
+td {
+  border: 2px solid #67B8E3;
+  padding: 10px 12px;
+}
+
+pre,
+pre code {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 18px;
+  color: #F8FBFD;
+  background: #1B4D68;
+  line-height: 1.45;
+}
+
+code {
+  font-family: "Cascadia Mono", "Consolas", monospace;
+  font-size: 18px;
+  color: #1B4D68;
+  background: #D9EEF8;
+  padding: 2px 6px;
+}
+
+pre {
+  border: 3px solid #0288D1;
+  border-radius: 10px;
+  padding: 16px 18px;
+}
+
+section.lead {
+  background-color: #02669D;
+  color: #F5FBFE;
+}
+
+section.lead h1,
+section.lead strong {
+  color: #FFFFFF;
+}
+
+section.lead a,
+section.lead em,
+section.lead mark {
+  color: #67B8E3;
+}
+
+section.ecosystem {
+  background-color: #0288D1;
+  color: #F8FBFD;
+}
+
+section.ecosystem h2,
+section.ecosystem h3,
+section.ecosystem strong,
+section.ecosystem a {
+  color: #FFFFFF;
+}
+
+section.contrast {
+  background-color: #EAF7FC;
+  color: #1B4D68;
+}
+
+section.compact {
+  font-size: 22px;
+}
+
+section.compact h2 {
+  font-size: 30px;
+}
+
+section.compact pre,
+section.compact pre code {
+  font-size: 12px;
+  line-height: 1.15;
+}

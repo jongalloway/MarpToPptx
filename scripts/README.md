@@ -64,12 +64,24 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Ci
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/06-remote-assets.md -Configuration Release -AllowRemoteAssets -CiSafe
 ```
 
+### `Invoke-AllPptxSmokeTests.ps1`
+
+Run the smoke-test flow for each sample deck in `samples/`. By default, the script skips `samples/README.md`, the compatibility-gap repro sample, and remote-asset samples unless they are explicitly enabled.
+
+```powershell
+pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe
+pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -IncludeRemoteSamples
+pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -OnlyRemoteSamples
+pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -IncludeRemoteSamples -ContinueOnError
+```
+
 ## Notes
 
 - These scripts are intended for local Windows-based troubleshooting.
 - `Test-PowerPointOpen.ps1` requires Microsoft PowerPoint to be installed and available through COM interop.
 - `Generate-LocalPptx.ps1` is the preferred path for renderer debugging because it executes the current workspace code.
 - `Invoke-PptxSmokeTest.ps1` is the quickest end-to-end check before or after renderer/package changes.
+- `Invoke-AllPptxSmokeTests.ps1` is the quickest way to run the full local smoke suite across the sample directory.
 - `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus .NET-hosted Open XML validation on CI agents or other environments without PowerPoint.
 - Remote asset smoke coverage is opt-in in the sample-generation helpers so the default local flow stays deterministic when working offline.
 - The manual pre-release PowerPoint review checklist is documented in `doc/release-validation.md`.
