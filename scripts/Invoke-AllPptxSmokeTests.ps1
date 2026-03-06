@@ -71,7 +71,7 @@ $sampleFiles = Get-ChildItem -Path $resolvedSamplesDirectory -File -Filter *.md 
 Where-Object { $_.Name -ne "README.md" } |
 Sort-Object Name
 
-if ($sampleFiles.Count -eq 0) {
+if (-not $sampleFiles) {
     throw "No sample Markdown files were found in '$resolvedSamplesDirectory'."
 }
 
