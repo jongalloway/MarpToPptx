@@ -2,100 +2,148 @@
 theme: marp-showcase
 paginate: true
 lang: en-US
-header: Marp Ecosystem Showcase
-footer: MarpToPptx smoke sample
+header: MarpToPptx
+footer: github.com/jongalloway/MarpToPptx
 ---
 
 <!-- class: lead -->
 <!-- _backgroundImage: url(assets/marp.svg) -->
 <!-- _backgroundSize: contain -->
-# MarpToPptx Showcase
+# MarpToPptx
 
-Markdown authoring with editable PowerPoint output.
+✨ Turn your Marp Markdown into real, editable PowerPoint files.
 
-This sample is written like a short conference talk about the Marp ecosystem and where MarpToPptx fits.
+<!-- Speaker note: this is the title slide. Set the stage: you love writing slides in Markdown, but sometimes you need a real .pptx. -->
 
-<!-- Speaker framing: introduce the ecosystem first, then position MarpToPptx as the editable-PPTX path for teams that still want Marp-style authoring. -->
+---
+
+<!-- class: -->
+## Writing Slides in Markdown
+
+- It's **lightweight** — plain text, easy to diff and review
+- It's **versionable** — works naturally with Git
+- It's **AI-friendly** — great with Copilot and LLM-powered workflows
+- It's **fast** — focus on content, not clicking through menus
+
+So how do you actually do it?
+
+<!-- Speaker note: frame the value of Markdown-first authoring before introducing Marp. This resonates with developers and technical writers alike. -->
 
 ---
 
 <!-- class: ecosystem -->
-## What Marp Is
+## The Marp Ecosystem
 
-- **Marp** stands for **Markdown Presentation Ecosystem**.
-- It is built around a CommonMark-based authoring model with simple horizontal-rule slide breaks.
-- Marp adds directives, image shortcuts, built-in themes, and CSS theming.
-- The official toolset can export decks to HTML, PDF, and PowerPoint.
+- **Marp** — the Markdown Presentation Ecosystem (marp.app)
+- **Marp for VS Code** — live preview and export right in your editor
+- **Marp CLI** — command-line conversion to HTML, PDF, and PPTX
+- **awesome-marp** — community themes, tools, and examples
 
-The value proposition from the official Marp site is simple: create beautiful slide decks while staying focused on the story in Markdown.
+Marp is mature, open-source, and built on CommonMark with simple `---` slide breaks, front matter directives, and CSS theming.
 
-<!-- Speaker note: this is the framing slide for people who have heard the name but do not know the product boundaries yet. -->
-
----
-
-## The Marp Ecosystem In One Story
-
-- **Marpit** supplies the slide framework and plugin surface.
-- **Marp Core** adds practical authoring features and built-in themes.
-- **Marp for VS Code** makes the write-preview loop fast.
-- **Marp CLI** handles export, watch mode, and automation.
-- **MarpToPptx** adds editable PowerPoint handoff.
-
-The pitch to a speaker is simple: keep writing in Markdown, but hand off a deck that PowerPoint users can still edit slide by slide.
-
-<!-- Speaker note: emphasize coexistence rather than competition. The audience should hear that MarpToPptx is additive to existing Marp workflows. -->
-
----
-
-## Why The Ecosystem Works
-
-- The ecosystem is fully open-source and MIT licensed.
-- The tooling stays close to plain Markdown instead of inventing a separate slide language.
-- Theme CSS remains the main customization surface for design systems.
-- The official tools cover editing, preview, export, and automation.
-- The stack is composable enough for custom workflows and integrations.
+<!-- Speaker note: the audience should understand Marp is a real ecosystem, not a toy. Mention the VS Code extension for the live preview loop. -->
 
 ---
 
 <!-- class: contrast -->
-## What MarpToPptx Adds
+## The Problem
 
-- Keeps Markdown as the authoring source while producing editable PowerPoint shapes.
-- Maps theme, background, header, footer, and pagination intent into PPTX constructs.
-- Uses Open XML validation plus PowerPoint open checks as compatibility gates.
-- Fits teams that want Markdown discipline without giving up ordinary Office collaboration.
+When you need to **hand off a PowerPoint deck**:
 
-This is why the repo treats PowerPoint compatibility as the real success metric, not just schema-valid XML.
+- Conference submission requires `.pptx`
+- Colleague wants to edit a few slides
+- Corporate template needs to be applied
+- Marketing needs to tweak the wording
 
----
+Marp's built-in PPTX export produces **uneditable image-per-slide output** — you can't select, edit, or restyle anything.
 
-## Current Repo Structure
-
-- **MarpToPptx.Core**: parsing, theme extraction, slide model, and layout planning.
-- **MarpToPptx.Pptx**: Open XML rendering and presentation generation.
-- **MarpToPptx.Cli**: the marp2pptx command entrypoint.
-- **MarpToPptx.OpenXmlValidator**: package validation used by smoke tests and CI.
-- **MarpToPptx.Tests**: xUnit v3 coverage on Microsoft Testing Platform.
+<!-- Speaker note: this is the pain point. Let it land. Everyone in the audience has been asked to "just send the PowerPoint." -->
 
 ---
 
-## Capabilities Worth Showing Live
+<!-- class: lead -->
+## That's Where MarpToPptx Comes In 🎉
 
-1. Front matter and slide directives for themes, pagination, classes, backgrounds, headers, and footers.
-2. Built-in Marp ideas such as theme CSS, directive-driven layout changes, and Markdown-first authoring.
-3. Editable PPTX generation for headings, paragraphs, bullet lists, images, code blocks, native tables, and header/footer text.
-4. Local audio and video embedding for supported media formats.
-5. Template-copy workflow for reusing an existing `.pptx` theme or master.
-6. Local and CI-friendly smoke scripts for generation, validation, and PowerPoint-open checks.
+**Native Open XML PowerPoint files** where every heading, bullet, table, and code block is a real, selectable, editable shape.
 
-<!-- Speaker note: this slide is the “why should a team care?” moment. Tie these bullets back to handoff, review, and release workflows. -->
+No repair prompts. No surprises.
+
+<!-- Speaker note: the key message. Pause here and let the contrast with image-per-slide sink in. -->
+
+---
+
+<!-- class: -->
+## How It Works
+
+1. **Parse** — reads Marp-flavored Markdown, front matter, and directives
+2. **Theme** — applies CSS theme or `.pptx` template masters and layouts
+3. **Render** — generates native Open XML shapes for every content element
+4. **Validate** — checks against the Open XML spec before output
+
+The result opens cleanly in PowerPoint on any platform.
+
+<!-- Speaker note: keep this high-level. The audience cares that it works, not the implementation details. -->
+
+---
+
+## Quick Start
+
+No install needed — just .NET 10:
+
+```bash
+dnx MarpToPptx slides.md -o slides.pptx
+```
+
+Or install globally as a .NET tool:
+
+```bash
+dotnet tool install --global MarpToPptx
+marp2pptx slides.md -o slides.pptx
+```
+
+<!-- Speaker note: live demo moment. Show the command, open the resulting .pptx, click on a heading to prove it's editable. -->
+
+---
+
+## Themes and Templates
+
+Apply a CSS theme for Marp-style theming:
+
+```bash
+marp2pptx slides.md --theme-css brand.css -o slides.pptx
+```
+
+Or reuse an existing PowerPoint template:
+
+```bash
+marp2pptx slides.md --template corporate.pptx -o slides.pptx
+```
+
+Your organization's masters, layouts, fonts, and colors carry through.
 
 ---
 
 <!-- class: compact -->
-## VS Code Export Task
+## What's Supported
 
-The repo README shows this inside `tasks.json`:
+| Category | Details |
+|---|---|
+| **Slide structure** | Front matter, `---` splitting, presenter notes |
+| **Text** | Headings, paragraphs, lists, bold/italic/code spans |
+| **Rich content** | Images, syntax-highlighted code blocks, native tables |
+| **Media** | Embedded audio (MP3/M4A) and video |
+| **Theming** | CSS themes — fonts, colors, padding, backgrounds |
+| **Templates** | Copy masters and layouts from existing `.pptx` |
+| **Directives** | Background, header, footer, paginate, scoped overrides |
+
+<!-- Speaker note: scan through quickly. The point is breadth — this isn't a proof of concept. -->
+
+---
+
+<!-- class: -->
+## VS Code Integration
+
+Add a one-click export task to any content repository:
 
 ```json
 {
@@ -106,43 +154,36 @@ The repo README shows this inside `tasks.json`:
 }
 ```
 
-- Edit Markdown.
-- Preview in VS Code.
-- Run the task and hand off the PPTX.
+- Edit Markdown with live Marp preview
+- Run the task when you're ready
+- Hand off the `.pptx`
+
+<!-- Speaker note: this is the workflow slide. Show that it fits naturally into a VS Code content authoring setup. -->
 
 ---
 
-## Release And Validation Narrative
+## Roadmap
 
-- Unit tests catch parser and renderer regressions.
-- **Invoke-PptxSmokeTest.ps1** and **Invoke-AllPptxSmokeTests.ps1** provide end-to-end local validation.
-- The validator project checks Open XML correctness.
-- PowerPoint open and round-trip save remain the final compatibility gate.
+- Broader CSS coverage for advanced Marp theme features
+- Smarter layout heuristics for dense or designed slides
+- Multi-layout template mapping
+- Improved table styling fidelity
+- Expanded syntax highlighting themes
+- Remote asset support
 
-The repo’s release workflow separates fast CI coverage from heavier release-gate validation.
-
----
-
-## Marp Themes And Authoring Conventions
-
-- Marp ships with built-in themes such as **default**, **gaia**, and **uncover**.
-- Directives are YAML-shaped, so front matter and HTML comments fit naturally into ordinary Markdown workflows.
-- Theme CSS stays readable and close to normal web styling, which keeps decks maintainable.
-- The same authoring approach works well for previews, automation, and source control review.
-
-That design discipline is a big reason MarpToPptx can map source intent into a more editable PowerPoint structure.
+<!-- Speaker note: be honest about where it's headed. The audience appreciates transparency about what's next. -->
 
 ---
 
-## Roadmap To Mention In The Q&A
+<!-- class: lead -->
+## Get Started
 
-- Improve CSS coverage for more Marp theme features.
-- Refine layout heuristics for denser or more designed decks.
-- Expand template integration to map multiple layouts more intelligently.
-- Improve native PPTX table styling and layout fidelity.
-- Expand code block highlighting coverage and theme fidelity.
-- Support remote assets and additional image formats.
+```bash
+dnx MarpToPptx slides.md -o slides.pptx
+```
 
-Closing point: MarpToPptx is for teams that want Markdown authoring discipline without giving up editable PowerPoint deliverables.
+**github.com/jongalloway/MarpToPptx**
 
-<!-- Closing note: end with the interoperability message. The tool matters because it lets Markdown-authored decks participate in ordinary Office collaboration. -->
+Keep writing in Markdown. Hand off a deck anyone can edit.
+
+<!-- Speaker note: close with the one-liner and the repo link. Invite questions. -->

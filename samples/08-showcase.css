@@ -99,6 +99,7 @@ section.lead {
 }
 
 section.lead h1,
+section.lead h2,
 section.lead strong {
   color: #FFFFFF;
 }
