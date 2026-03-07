@@ -45,6 +45,13 @@ internal static class ImageMetadataReader
             return TryReadWebP(reader, out width, out height);
         }
 
+        // SVG: XML-based text format starting with '<' (possibly after UTF-8 BOM)
+        if (header[0] == 0x3C || (header[0] == 0xEF && header[1] == 0xBB && header[2] == 0xBF))
+        {
+            stream.Position = 0;
+            return TryReadSvg(stream, out width, out height);
+        }
+
         return false;
     }
 
@@ -256,6 +263,63 @@ internal static class ImageMetadataReader
             width = (cw[0] | (cw[1] << 8) | (cw[2] << 16)) + 1;
             height = (ch[0] | (ch[1] << 8) | (ch[2] << 16)) + 1;
             return width > 0 && height > 0;
+        }
+
+        return false;
+    }
+
+    private static bool TryReadSvg(Stream stream, out int width, out int height)
+    {
+        width = 0;
+        height = 0;
+
+        var bufferSize = (int)Math.Min(4096, stream.Length);
+        var buffer = new byte[bufferSize];
+        var read = stream.Read(buffer, 0, bufferSize);
+        var text = System.Text.Encoding.UTF8.GetString(buffer, 0, read);
+
+        if (!text.Contains("<svg", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+
+        // Try viewBox="minX minY width height"
+        var viewBoxMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"viewBox\s*=\s*[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (viewBoxMatch.Success)
+        {
+            var parts = viewBoxMatch.Groups[1].Value.Split(
+                [' ', ','], StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length >= 4 &&
+                double.TryParse(parts[2], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var vw) &&
+                double.TryParse(parts[3], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out var vh) &&
+                vw > 0 && vh > 0)
+            {
+                width = (int)Math.Ceiling(vw);
+                height = (int)Math.Ceiling(vh);
+                return true;
+            }
+        }
+
+        // Try explicit width/height attributes on <svg>
+        var wMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<svg[^>]+\bwidth\s*=\s*[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        var hMatch = System.Text.RegularExpressions.Regex.Match(
+            text, @"<svg[^>]+\bheight\s*=\s*[""']([^""']+)[""']", System.Text.RegularExpressions.RegexOptions.IgnoreCase);
+        if (wMatch.Success && hMatch.Success &&
+            double.TryParse(
+                new string(wMatch.Groups[1].Value.TakeWhile(static c => char.IsDigit(c) || c == '.').ToArray()),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var w) &&
+            double.TryParse(
+                new string(hMatch.Groups[1].Value.TakeWhile(static c => char.IsDigit(c) || c == '.').ToArray()),
+                System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var h) &&
+            w > 0 && h > 0)
+        {
+            width = (int)Math.Ceiling(w);
+            height = (int)Math.Ceiling(h);
+            return true;
         }
 
         return false;

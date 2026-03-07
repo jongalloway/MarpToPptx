@@ -28,6 +28,8 @@ public sealed record ThemeDefinition
 
     public TextStyle Code { get; init; } = new(18, "#F8FAFC", "Cascadia Mono", false, "#0F172A");
 
+    public TextStyle InlineCode { get; init; } = new(18, "#1F2937", "Cascadia Mono", false, "#E2E8F0");
+
     public IReadOnlyDictionary<int, TextStyle> Headings { get; init; } = new Dictionary<int, TextStyle>
     {
         [1] = new(30, "#0F172A", "Aptos Display", true),
