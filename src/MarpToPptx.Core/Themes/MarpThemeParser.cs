@@ -109,9 +109,28 @@ public static partial class MarpThemeParser
 
                         // When no explicit `pre` rule has been seen, `code` sets both
                         // inline and block code styles (the universal code selector).
+                        // Apply declarations independently to codeStyle from its own defaults
+                        // so block-code colours are preserved (dark bg/light text).
                         if (!preExplicitlySet)
                         {
-                            codeStyle = inlineCodeStyle;
+                            codeStyle = codeStyle with
+                            {
+                                FontFamily = monospace,
+                                FontSize = declarations.TryGetValue("font-size", out var blockCodeSize) ? ParseFontSize(blockCodeSize, codeStyle.FontSize) : codeStyle.FontSize,
+                                Color = declarations.TryGetValue("color", out var blockCodeColor) ? blockCodeColor : codeStyle.Color,
+                                BackgroundColor = declarations.TryGetValue("background-color", out var blockCodeBgColor) ? blockCodeBgColor : codeStyle.BackgroundColor,
+                                LineHeight = declarations.TryGetValue("line-height", out var blockCodeLineHeight) ? ParseLineHeight(blockCodeLineHeight) : codeStyle.LineHeight,
+                                LetterSpacing = declarations.TryGetValue("letter-spacing", out var blockCodeLetterSpacing) ? ParseFontSize(blockCodeLetterSpacing, 0) : codeStyle.LetterSpacing,
+                            };
+
+                            if (declarations.TryGetValue("background", out var blockCodeBg))
+                            {
+                                var extractedBlockColor = ExtractColor(blockCodeBg);
+                                if (!string.IsNullOrWhiteSpace(extractedBlockColor))
+                                {
+                                    codeStyle = codeStyle with { BackgroundColor = extractedBlockColor };
+                                }
+                            }
                         }
 
                         break;

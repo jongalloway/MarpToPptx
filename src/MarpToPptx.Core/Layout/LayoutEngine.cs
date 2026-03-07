@@ -62,10 +62,10 @@ public sealed class LayoutEngine
 
     private static Rect CreateCodeBlockFrame(CodeBlockElement code, ThemeDefinition theme, double x, double width, ref double y)
     {
-        var lineCount = code.Code.Split('\n').Length;
         var fontSize = theme.Code.FontSize;
         var lineHeight = theme.Code.LineHeight ?? 1.45;
-        var height = Math.Clamp(lineCount * fontSize * lineHeight + 24, 40, 400);
+        var estimatedHeight = EstimateTextHeight(code.Code, fontSize, width, lineHeight);
+        var height = Math.Clamp(estimatedHeight + 18, 40, 400); // +18 for code block padding/borders
         var frame = new Rect(x, y, width, height);
         y += height + 16;
         return frame;

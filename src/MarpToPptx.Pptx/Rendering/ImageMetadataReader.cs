@@ -45,11 +45,16 @@ internal static class ImageMetadataReader
             return TryReadWebP(reader, out width, out height);
         }
 
-        // SVG: XML-based text format starting with '<' (possibly after UTF-8 BOM)
-        if (header[0] == 0x3C || (header[0] == 0xEF && header[1] == 0xBB && header[2] == 0xBF))
+        // SVG: XML-based text format. Decode a small prefix, trim leading whitespace,
+        // then check for <?xml or <svg to handle BOM, leading newlines, and spaces.
         {
-            stream.Position = 0;
-            return TryReadSvg(stream, out width, out height);
+            var svgPrefix = System.Text.Encoding.UTF8.GetString(header).TrimStart();
+            if (svgPrefix.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)
+                || svgPrefix.StartsWith("<svg", StringComparison.OrdinalIgnoreCase))
+            {
+                stream.Position = 0;
+                return TryReadSvg(stream, out width, out height);
+            }
         }
 
         return false;
