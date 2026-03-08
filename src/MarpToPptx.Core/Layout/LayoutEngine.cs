@@ -107,7 +107,7 @@ public sealed class LayoutEngine
         return Math.Max(120, totalHeight);
     }
 
-    private static double EstimateTextHeight(string text, double fontSize, double width, double lineSpacing)
+    internal static double EstimateTextHeight(string text, double fontSize, double width, double lineSpacing)
     {
         var safeText = string.IsNullOrWhiteSpace(text) ? " " : text;
         var approxCharsPerLine = Math.Max(8, (int)(width / Math.Max(8, fontSize * 0.55)));

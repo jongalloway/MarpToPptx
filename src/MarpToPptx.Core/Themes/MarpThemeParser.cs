@@ -405,13 +405,22 @@ public static partial class MarpThemeParser
 
             code = code with
             {
-                FontFamily = inlineCode.FontFamily,
-                FontSize = inlineCode.FontSize,
-                Color = inlineCode.Color,
-                BackgroundColor = inlineCode.BackgroundColor,
-                LineHeight = inlineCode.LineHeight,
-                LetterSpacing = inlineCode.LetterSpacing,
+                FontFamily = declarations.TryGetValue("font-family", out var codeFont) ? NormalizeFontFamily(codeFont) : code.FontFamily,
+                FontSize = declarations.TryGetValue("font-size", out var codeSize) ? ParseFontSize(codeSize, code.FontSize) : code.FontSize,
+                Color = declarations.TryGetValue("color", out var codeColor) ? codeColor : code.Color,
+                BackgroundColor = declarations.TryGetValue("background-color", out var codeBgColor) ? codeBgColor : code.BackgroundColor,
+                LineHeight = declarations.TryGetValue("line-height", out var codeLineHeight) ? ParseLineHeight(codeLineHeight) : code.LineHeight,
+                LetterSpacing = declarations.TryGetValue("letter-spacing", out var codeLetterSpacing) ? ParseFontSize(codeLetterSpacing, 0) : code.LetterSpacing,
             };
+
+            if (declarations.TryGetValue("background", out var codeBg))
+            {
+                var extractedColor = ExtractColor(codeBg);
+                if (!string.IsNullOrWhiteSpace(extractedColor))
+                {
+                    code = code with { BackgroundColor = extractedColor };
+                }
+            }
 
             variant = variant with { InlineCode = inlineCode, Code = code };
         }

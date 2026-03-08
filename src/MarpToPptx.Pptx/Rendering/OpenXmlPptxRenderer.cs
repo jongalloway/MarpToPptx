@@ -747,7 +747,8 @@ public sealed class OpenXmlPptxRenderer
                     ? headerFillColor
                     : rowIndex % 2 == 0 ? bodyFillColor : bandFillColor;
                 var textColor = row.IsHeader ? headerTextColor : bodyTextColor;
-                aRow.Append(CreateTableCell(cellSpans, tableStyle with { Color = textColor }, row.IsHeader, alignment, fillColor, context.SlidePart, context.Theme.InlineCode, context.Language));
+                var cellCodeStyle = context.Theme.InlineCode is null ? null : context.Theme.InlineCode with { Color = textColor };
+                aRow.Append(CreateTableCell(cellSpans, tableStyle with { Color = textColor }, row.IsHeader, alignment, fillColor, context.SlidePart, cellCodeStyle, context.Language));
             }
 
             aTable.Append(aRow);
@@ -871,13 +872,8 @@ public sealed class OpenXmlPptxRenderer
 
     private static double EstimateTextBoxHeight(string text, double fontSize, double width, double lineSpacing)
     {
-        var safeText = string.IsNullOrWhiteSpace(text) ? " " : text;
-        var approxCharsPerLine = Math.Max(8, (int)(width / Math.Max(8, fontSize * 0.55)));
-        var lineCount = safeText
-            .Split('\n', StringSplitOptions.None)
-            .Sum(line => Math.Max(1, (int)Math.Ceiling((double)Math.Max(1, line.Length) / approxCharsPerLine)));
-
-        return lineCount * fontSize * lineSpacing + 6;
+        // Delegate to the shared layout engine heuristic to keep layout and rendering in sync.
+        return LayoutEngine.EstimateTextHeight(text, fontSize, width, lineSpacing);
     }
 
     private static string GetContrastingTextColor(string backgroundColor)
