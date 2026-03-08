@@ -1,0 +1,71 @@
+/* @theme community-wave */
+
+:root {
+  font-family: "Segoe UI", "Aptos", sans-serif;
+  font-size: 29px;
+  color: #123047;
+  background-color: #F4FAFD;
+  background-image: url("../assets/accent-wave.svg");
+  background-size: cover;
+  background-position: center;
+  padding: 46px 58px;
+  line-height: 1.42;
+}
+
+h1 {
+  font-family: "Aptos Display", "Segoe UI", sans-serif;
+  font-size: 58px;
+  color: #0E7490;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 38px;
+  color: #0F6A89;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 28px;
+  color: #155E75;
+  font-weight: 700;
+}
+
+pre,
+code {
+  font-family: "Cascadia Mono", monospace;
+  font-size: 18px;
+  color: #F0FDFF;
+  background: #164E63;
+  line-height: 1.45;
+}
+
+section.lead {
+  background-color: #0F6A89;
+  color: #F3FBFE;
+}
+
+section.lead h1 {
+  color: #FFFFFF;
+}
+
+section.band {
+  background-color: #DFF4F8;
+  color: #15435A;
+}
+
+section.band h2 {
+  color: #0F6A89;
+  font-size: 42px;
+}
+
+section.compact {
+  background-color: #F7FCFE;
+  color: #123047;
+  font-size: 22px;
+}
+
+section.compact h2 {
+  color: #0F6A89;
+  font-size: 30px;
+}

@@ -3,6 +3,7 @@ using MarpToPptx.Core;
 using MarpToPptx.Pptx.Rendering;
 using MarpToPptx.Pptx.Validation;
 using System.IO.Compression;
+using System.Xml.Linq;
 using A = DocumentFormat.OpenXml.Drawing;
 using P = DocumentFormat.OpenXml.Presentation;
 
@@ -189,6 +190,13 @@ public class PptxRendererTests
         using var contentTypesReader = new StreamReader(archive.GetEntry("[Content_Types].xml")!.Open());
         var contentTypes = contentTypesReader.ReadToEnd();
         Assert.Contains("image/svg+xml", contentTypes);
+
+        using var slideReader = new StreamReader(archive.GetEntry("ppt/slides/slide2.xml")!.Open());
+        var slideXml = slideReader.ReadToEnd();
+        var slideDocument = XDocument.Parse(slideXml);
+        var svgBlip = slideDocument.Descendants().SingleOrDefault(element => element.Name.LocalName == "svgBlip");
+        Assert.NotNull(svgBlip);
+        Assert.False(string.IsNullOrWhiteSpace(svgBlip!.Attributes().SingleOrDefault(attribute => attribute.Name.LocalName == "embed")?.Value));
     }
 
     [Fact]

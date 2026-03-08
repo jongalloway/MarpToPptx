@@ -10,6 +10,8 @@ public static partial class MarpThemeParser
             return theme;
         }
 
+        css = StripComments(css);
+
         var bodyStyle = theme.Body;
         var codeStyle = theme.Code;
         var inlineCodeStyle = theme.InlineCode;
@@ -178,6 +180,9 @@ public static partial class MarpThemeParser
             ClassVariants = classVariants,
         };
     }
+
+    private static string StripComments(string css)
+        => CommentRegex().Replace(css, " ");
 
     private static Dictionary<string, string> ParseDeclarations(string block)
     {
@@ -478,6 +483,9 @@ public static partial class MarpThemeParser
 
     [System.Text.RegularExpressions.GeneratedRegex(@"([^{}]+)\{([^}]*)\}")]
     private static partial System.Text.RegularExpressions.Regex RuleRegex();
+
+    [System.Text.RegularExpressions.GeneratedRegex(@"/\*.*?\*/", System.Text.RegularExpressions.RegexOptions.Singleline)]
+    private static partial System.Text.RegularExpressions.Regex CommentRegex();
 
     [System.Text.RegularExpressions.GeneratedRegex(@"#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})|rgba?\([^)]*\)")]
     private static partial System.Text.RegularExpressions.Regex ColorRegex();

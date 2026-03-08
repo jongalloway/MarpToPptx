@@ -1,6 +1,8 @@
 # Sample Decks
 
-This directory contains Marp-style sample decks for manual testing, debugging, and compatibility checks.
+This directory contains the default Marp-style sample decks for manual testing, debugging, and compatibility checks.
+
+Theme-oriented example decks live under `samples/themes/`. They are intentionally outside the default top-level sample scan so the current smoke scripts and CI behavior stay unchanged.
 
 ## Suggested Progression
 
@@ -27,6 +29,25 @@ Dedicated smoke deck for presenter notes packaging, including note-bearing slide
 
 8. `08-showcase.md`
 Speaker-style showcase deck generated from repo content, using `08-showcase.css` plus local Marp SVG assets to cover the Marp ecosystem, MarpToPptx capabilities, presenter notes, and the recommended VS Code task configuration.
+
+## Theme Decks
+
+These live under `samples/themes/` and are intended as a second-tier theme/example suite rather than part of the default root smoke set.
+
+1. `themes/09-community-beam.md`
+Academic-style smoke deck inspired by community Beam and Beamer-like Marp themes, using `themes/09-community-beam.css` to stress assertive headings, contrast slides, and appendix-style typography.
+
+2. `themes/10-community-graph-paper.md`
+Notebook-style smoke deck inspired by community Graph Paper themes, using `themes/10-community-graph-paper.css` plus a local SVG grid background to validate patterned backgrounds without remote assets.
+
+3. `themes/11-community-wave.md`
+Conference-talk smoke deck inspired by community Wave-style themes, using `themes/11-community-wave.css` plus local background art to exercise bold section bands and compact closing-slide typography.
+
+4. `themes/12-community-dracula.md`
+Dark-theme smoke deck inspired by the community Dracula theme, using `themes/12-community-dracula.css` to stress high-contrast text, saturated accents, and code-heavy slides.
+
+5. `themes/13-popular-gaia.md`
+Bright-theme smoke deck inspired by Marp's popular built-in Gaia direction, using `themes/13-popular-gaia.css` to exercise large-scale typography, clean surfaces, and bold section breaks.
 
 ## Running The Samples
 
@@ -55,5 +76,8 @@ dotnet run --project src/MarpToPptx.Cli -- samples/03-theme-css.md --theme-css s
 - `06-remote-assets.md` is intended for integration smoke testing and should be run with remote assets explicitly enabled.
 - `07-presenter-notes.md` is the explicit smoke deck for speaker notes and PowerPoint-open compatibility of emitted notes parts.
 - `08-showcase.md` is the branded speaker-style sample that exercises the batch smoke runner with a richer content deck and companion CSS.
+- `samples/themes/09-community-beam.md`, `samples/themes/10-community-graph-paper.md`, `samples/themes/11-community-wave.md`, and `samples/themes/12-community-dracula.md` are repo-authored fixtures inspired by themes listed in Awesome Marp's community themes section; they are not vendored copies of upstream sample decks.
+- `samples/themes/13-popular-gaia.md` is a repo-authored fixture inspired by Marp's built-in Gaia theme direction rather than a community theme listing.
+- The current generation and smoke scripts only scan top-level Markdown files under `samples/`, so `samples/themes/` stays out of the default CI/local smoke suite unless invoked explicitly.
 - The compatibility-gap sample is useful for validating current limitations without needing to invent ad hoc repros.
 - Output paths above target `artifacts/samples/`, but any writable location will work.

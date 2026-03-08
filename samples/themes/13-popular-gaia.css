@@ -1,0 +1,67 @@
+/* @theme popular-gaia */
+
+:root {
+  font-family: "Aptos", sans-serif;
+  font-size: 30px;
+  color: #334155;
+  background-color: #FFFFFF;
+  padding: 44px 60px;
+  line-height: 1.38;
+}
+
+h1 {
+  font-family: "Aptos Display", sans-serif;
+  font-size: 60px;
+  color: #0F766E;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 40px;
+  color: #0F766E;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 30px;
+  color: #0E7490;
+  font-weight: 700;
+}
+
+pre,
+code {
+  font-family: "Cascadia Mono", monospace;
+  font-size: 18px;
+  color: #F8FAFC;
+  background: #134E4A;
+  line-height: 1.45;
+}
+
+section.lead {
+  background-color: #ECFDF5;
+  color: #134E4A;
+}
+
+section.lead h1 {
+  color: #0F766E;
+}
+
+section.band {
+  background-color: #0F766E;
+  color: #F0FDFA;
+}
+
+section.band h2 {
+  color: #FFFFFF;
+}
+
+section.compact {
+  background-color: #F8FAFC;
+  color: #334155;
+  font-size: 22px;
+}
+
+section.compact h2 {
+  color: #0F766E;
+  font-size: 30px;
+}

@@ -18,6 +18,7 @@ public sealed class OpenXmlPptxRenderer
     private const long SlideHeightEmu = 6858000L;
     private const int LayoutScale = 12700;
     private const string DefaultTableStyleId = "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
+    private const string SvgBlipExtensionUri = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
     private static readonly byte[] MediaPlaceholderImage = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
 
@@ -908,6 +909,7 @@ public sealed class OpenXmlPptxRenderer
 
         var (x, y, width, height) = CalculateImagePlacement(frame, resolved, useFullBleed);
         var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
+        var blip = CreateImageBlip(contentType, relationshipId);
 
         var picture = new P.Picture(
             new P.NonVisualPictureProperties(
@@ -915,7 +917,7 @@ public sealed class OpenXmlPptxRenderer
                 new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
                 new P.ApplicationNonVisualDrawingProperties()),
             new P.BlipFill(
-                new A.Blip { Embed = relationshipId },
+                blip,
                 new A.Stretch(new A.FillRectangle())),
             new P.ShapeProperties(
                 new A.Transform2D(
@@ -924,6 +926,26 @@ public sealed class OpenXmlPptxRenderer
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         context.ShapeTree.Append(picture);
+    }
+
+    private static A.Blip CreateImageBlip(string contentType, string relationshipId)
+    {
+        if (!string.Equals(contentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase))
+        {
+            return new A.Blip { Embed = relationshipId };
+        }
+
+        var svgBlip = new DocumentFormat.OpenXml.Office2019.Drawing.SVG.SVGBlip
+        {
+            Embed = relationshipId,
+        };
+
+        return new A.Blip(
+            new A.BlipExtensionList(
+                new A.BlipExtension(svgBlip)
+                {
+                    Uri = SvgBlipExtensionUri,
+                }));
     }
 
     private static void AddVideo(SlideRenderContext context, Rect frame, string source, string altText)
