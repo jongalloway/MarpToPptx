@@ -2,7 +2,7 @@
 
 This directory contains the default Marp-style sample decks for manual testing, debugging, and compatibility checks.
 
-Theme-oriented example decks live under `samples/themes/`. They are intentionally outside the default top-level sample scan so the current smoke scripts and CI behavior stay unchanged.
+Theme-oriented example decks live under `samples/themes/`. They are intentionally outside the default top-level sample scan so the default smoke scripts and CI behavior stay unchanged, but release validation can opt in to them explicitly.
 
 ## Suggested Progression
 
@@ -19,7 +19,7 @@ Uses `03-theme.css` to exercise theme parsing for fonts, colors, padding, backgr
 Combines images, syntax-highlighted code blocks, local MP3/M4A audio, local video, ordered lists, unordered lists, and native tables in one deck.
 
 5. `05-compatibility-gaps.md`
-Intentionally includes Marp features that are not fully implemented yet so behavior gaps are easy to reproduce and discuss.
+Mixed compatibility and regression deck that keeps unsupported Marp features easy to reproduce while also checking recently implemented directive behavior.
 
 6. `06-remote-assets.md`
 Opt-in integration smoke deck for real HTTP(S) image fetches using commit-pinned raw GitHub URLs.
@@ -78,6 +78,6 @@ dotnet run --project src/MarpToPptx.Cli -- samples/03-theme-css.md --theme-css s
 - `08-showcase.md` is the branded speaker-style sample that exercises the batch smoke runner with a richer content deck and companion CSS.
 - `samples/themes/09-community-beam.md`, `samples/themes/10-community-graph-paper.md`, `samples/themes/11-community-wave.md`, and `samples/themes/12-community-dracula.md` are repo-authored fixtures inspired by themes listed in Awesome Marp's community themes section; they are not vendored copies of upstream sample decks.
 - `samples/themes/13-popular-gaia.md` is a repo-authored fixture inspired by Marp's built-in Gaia theme direction rather than a community theme listing.
-- The current generation and smoke scripts only scan top-level Markdown files under `samples/`, so `samples/themes/` stays out of the default CI/local smoke suite unless invoked explicitly.
-- The compatibility-gap sample is useful for validating current limitations without needing to invent ad hoc repros.
+- The current generation and smoke scripts only scan top-level Markdown files under `samples/` by default, so `samples/themes/` stays out of the default CI/local smoke suite unless a caller opts in explicitly.
+- The compatibility watchlist sample is useful for validating current limitations and guarding recently implemented compatibility features without needing ad hoc repro decks.
 - Output paths above target `artifacts/samples/`, but any writable location will work.

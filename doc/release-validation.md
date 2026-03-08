@@ -11,7 +11,7 @@ Workflow name: `Release Gate`
 Purpose:
 
 - run restore, build, tests, and packaging in the selected configuration
-- generate the full sample set, including the remote-assets sample
+- generate the full sample set, including the remote-assets sample and the opt-in theme fixtures under `samples/themes/`
 - validate every generated PPTX with the Open XML SDK helper
 - import every generated PPTX into LibreOffice Impress and export it to PDF
 - upload the generated PPTX, PDF, and package artifacts for manual inspection
@@ -34,7 +34,7 @@ Reason:
 From the repo root on a Windows machine with PowerPoint installed:
 
 ```powershell
-pwsh ./scripts/Generate-SamplePptxSet.ps1 -Configuration Release -OutputDirectory artifacts/manual-review -IncludeRemoteSamples -Force
+pwsh ./scripts/Generate-SamplePptxSet.ps1 -Configuration Release -OutputDirectory artifacts/manual-review -IncludeThemeSamples -IncludeRemoteSamples -Force
 ```
 
 If you want the standard Open XML validation at the same time for a specific deck, run the existing smoke helper:
@@ -65,9 +65,17 @@ Open each generated deck from `artifacts/manual-review/` in PowerPoint Desktop a
 - `02-directives.pptx`: front matter, carry-forward directives, background image and size behavior, headers, footers, paginate
 - `03-theme-css.pptx`: theme parsing, heading hierarchy, class variants, layout-sensitive typography
 - `04-content-coverage.pptx`: images, tables, code, MP3, M4A, video
-- `05-compatibility-gaps.pptx`: current non-goals and known-approximation behavior
+- `05-compatibility-gaps.pptx`: current non-goals, known-approximation behavior, and recently implemented compatibility regression checks
 - `06-remote-assets.pptx`: real HTTP(S) image fetches
 - `07-presenter-notes.pptx`: explicit presenter notes packaging and slide-to-notes attachment
+
+### Theme Fixture Focus Areas
+
+- `09-community-beam.pptx`: academic-style theme fixture with assertive heading and contrast-slide styling
+- `10-community-graph-paper.pptx`: local SVG patterned background fixture for theme background fidelity
+- `11-community-wave.pptx`: local SVG/art background fixture for bold section-band rendering
+- `12-community-dracula.pptx`: dark-theme fixture stressing contrast and code-heavy slide treatment
+- `13-popular-gaia.pptx`: bright-theme fixture stressing large-scale typography and clean-surface layout
 
 ## Current Exclusions
 

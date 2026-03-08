@@ -54,6 +54,7 @@ jobs:
                   ./scripts/Generate-SamplePptxSet.ps1 `
                     -Configuration ${{ inputs.configuration }} `
                     -OutputDirectory artifacts/release-gate/samples `
+                    -IncludeThemeSamples `
                     -IncludeRemoteSamples `
                     -Force
 
