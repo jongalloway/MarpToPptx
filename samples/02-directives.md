@@ -14,6 +14,17 @@ style: |
   section.contrast {
     color: #FFFFFF;
   }
+  section.contrast h1,
+  section.contrast h2,
+  section.contrast h3,
+  section.contrast h4,
+  section.contrast h5,
+  section.contrast h6 {
+    color: #FFFFFF;
+  }
+  section.contrast code {
+    color: #FFFFFF;
+  }
 ---
 
 <!-- class: lead -->
@@ -40,16 +51,17 @@ This slide has no directives of its own.
 ---
 
 <!-- backgroundColor: #102A43 -->
+<!-- backgroundImage: -->
 <!-- class: contrast -->
 # Per-Slide Background Color
 
-Both directives above are **local** — they apply here and carry forward.
+These directives are **local** — they apply here and carry forward.
 
 The following directive keys are supported in HTML comments (local and spot):
 
 | Key | Scope | Notes |
 | --- | --- | --- |
-| `theme` | local | Applies from this slide onward |
+| `theme` | local | Applies this slide onward |
 | `paginate` | local | `true` or `false` |
 | `class` | local | CSS class name from theme |
 | `backgroundImage` | local | `url(...)` or bare path |
@@ -67,15 +79,17 @@ Add a `_` prefix to any key to make it a **spot directive** (current slide only)
 No directives on this slide.
 
 - `class: contrast` and `backgroundColor: #102A43` from the previous slide carry forward.
+- `backgroundImage:` from the previous slide clears the global background image so the dark background remains visible.
 - Front-matter `header` and `footer` are still present.
 
 ---
 
+<!-- class: -->
 <!-- backgroundImage: url(assets/accent-wave.svg) -->
 <!-- backgroundSize: cover -->
 # Background Image Directive
 
-`backgroundImage` is a local directive, and `backgroundSize: cover` locally overrides the global `contain` behavior.
+`backgroundImage` is a local directive, `backgroundSize: cover` locally overrides the global `contain` behavior, and `class:` clears the inherited `contrast` class.
 
 ---
 
@@ -83,7 +97,7 @@ No directives on this slide.
 
 No directives on this slide.
 
-- `backgroundImage` and `backgroundSize: cover` from the previous slide carry forward.
+- `backgroundImage`, `backgroundSize: cover`, and the cleared `class` from the previous slide carry forward.
 - This verifies local override behavior on top of normalized front-matter defaults.
 
 ---
@@ -107,7 +121,7 @@ No directives on this slide.
 
 - `_paginate: false` does **not** carry forward — pagination is back on.
 - `_header` and `_footer` do **not** carry forward — original front-matter header/footer appear.
-- `class: contrast` and `backgroundColor: #102A43` from slide 3 still carry forward (they were local, not spot).
+- The cleared `class` and `backgroundImage: url(...)` from slide 5 still carry forward (they were local, not spot).
 
 ---
 
@@ -126,6 +140,6 @@ This slide uses spot directives for `_class` and `_backgroundColor`.
 
 No directives.
 
-- `class` reverts to `contrast` (last **local** directive, from slide 3).
+- `class` remains cleared (last **local** directive, from slide 5).
 - `backgroundColor` reverts to `#102A43` (last **local** directive, from slide 3).
 - `paginate`, `header`, `footer` reflect their last inherited values.

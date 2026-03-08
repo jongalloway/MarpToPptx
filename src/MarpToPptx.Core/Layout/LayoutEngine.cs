@@ -26,7 +26,7 @@ public sealed class LayoutEngine
                 VideoElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 AudioElement => CreateFixedFrame(contentX, contentWidth, ref y, 80),
                 CodeBlockElement code => CreateCodeBlockFrame(code, theme, contentX, contentWidth, ref y),
-                TableElement table => CreateFixedFrame(contentX, contentWidth, ref y, Math.Max(120, table.Rows.Count * 26 + 20)),
+                TableElement table => CreateTableFrame(table, theme, contentX, contentWidth, ref y),
                 _ => CreateFixedFrame(contentX, contentWidth, ref y, 80),
             };
 
@@ -69,6 +69,42 @@ public sealed class LayoutEngine
         var frame = new Rect(x, y, width, height);
         y += height + 16;
         return frame;
+    }
+
+    private static Rect CreateTableFrame(TableElement table, ThemeDefinition theme, double x, double width, ref double y)
+    {
+        var height = EstimateTableHeight(table, theme, width);
+        var frame = new Rect(x, y, width, height);
+        y += height + 16;
+        return frame;
+    }
+
+    private static double EstimateTableHeight(TableElement table, ThemeDefinition theme, double width)
+    {
+        if (table.Rows.Count == 0)
+        {
+            return 120;
+        }
+
+        var columnCount = Math.Max(1, table.Rows.Max(row => row.Cells.Count));
+        var tableFontSize = Math.Min(theme.Body.FontSize, 18);
+        var lineSpacing = theme.Body.LineHeight ?? 1.2;
+        var cellWidth = Math.Max(48, width / columnCount - 12);
+        var totalHeight = 8d;
+
+        foreach (var row in table.Rows)
+        {
+            var rowHeight = 0d;
+            foreach (var cell in row.Cells)
+            {
+                var cellText = string.Concat(cell.Select(span => span.Text));
+                rowHeight = Math.Max(rowHeight, EstimateTextHeight(cellText, tableFontSize, cellWidth, lineSpacing) + 10);
+            }
+
+            totalHeight += Math.Max(tableFontSize * 1.6, rowHeight);
+        }
+
+        return Math.Max(120, totalHeight);
     }
 
     private static double EstimateTextHeight(string text, double fontSize, double width, double lineSpacing)

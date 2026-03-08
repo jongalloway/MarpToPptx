@@ -152,7 +152,7 @@ public static partial class MarpThemeParser
                         }
                         else if (TryParseClassSelector(selector, out var className, out var subElement))
                         {
-                            ApplyClassVariant(classVariants, className!, subElement, declarations, bodyStyle, headingStyles);
+                            ApplyClassVariant(classVariants, className!, subElement, declarations, bodyStyle, headingStyles, inlineCodeStyle, codeStyle);
                         }
                         break;
                 }
@@ -333,8 +333,13 @@ public static partial class MarpThemeParser
         string? subElement,
         Dictionary<string, string> declarations,
         TextStyle baseBody,
-        Dictionary<int, TextStyle> baseHeadings)
+        Dictionary<int, TextStyle> baseHeadings,
+        TextStyle? baseInlineCode = null,
+        TextStyle? baseCode = null)
     {
+        baseInlineCode ??= ThemeDefinition.Default.InlineCode;
+        baseCode ??= ThemeDefinition.Default.Code;
+
         if (!variants.TryGetValue(className, out var variant))
         {
             variant = new ClassVariant();
@@ -373,6 +378,66 @@ public static partial class MarpThemeParser
                     Bold = declarations.TryGetValue("font-weight", out var bodyWeight) ? ParseFontWeight(bodyWeight) ?? body.Bold : body.Bold,
                 },
             };
+        }
+        else if (string.Equals(subElement, "code", StringComparison.OrdinalIgnoreCase))
+        {
+            var inlineCode = variant.InlineCode ?? baseInlineCode;
+            var code = variant.Code ?? baseCode;
+
+            inlineCode = inlineCode with
+            {
+                FontFamily = declarations.TryGetValue("font-family", out var inlineCodeFont) ? NormalizeFontFamily(inlineCodeFont) : inlineCode.FontFamily,
+                FontSize = declarations.TryGetValue("font-size", out var inlineCodeSize) ? ParseFontSize(inlineCodeSize, inlineCode.FontSize) : inlineCode.FontSize,
+                Color = declarations.TryGetValue("color", out var inlineCodeColor) ? inlineCodeColor : inlineCode.Color,
+                BackgroundColor = declarations.TryGetValue("background-color", out var inlineCodeBgColor) ? inlineCodeBgColor : inlineCode.BackgroundColor,
+                LineHeight = declarations.TryGetValue("line-height", out var inlineCodeLineHeight) ? ParseLineHeight(inlineCodeLineHeight) : inlineCode.LineHeight,
+                LetterSpacing = declarations.TryGetValue("letter-spacing", out var inlineCodeLetterSpacing) ? ParseFontSize(inlineCodeLetterSpacing, 0) : inlineCode.LetterSpacing,
+            };
+
+            if (declarations.TryGetValue("background", out var inlineCodeBg))
+            {
+                var extractedColor = ExtractColor(inlineCodeBg);
+                if (!string.IsNullOrWhiteSpace(extractedColor))
+                {
+                    inlineCode = inlineCode with { BackgroundColor = extractedColor };
+                }
+            }
+
+            code = code with
+            {
+                FontFamily = inlineCode.FontFamily,
+                FontSize = inlineCode.FontSize,
+                Color = inlineCode.Color,
+                BackgroundColor = inlineCode.BackgroundColor,
+                LineHeight = inlineCode.LineHeight,
+                LetterSpacing = inlineCode.LetterSpacing,
+            };
+
+            variant = variant with { InlineCode = inlineCode, Code = code };
+        }
+        else if (string.Equals(subElement, "pre", StringComparison.OrdinalIgnoreCase))
+        {
+            var code = variant.Code ?? baseCode;
+            code = code with
+            {
+                FontFamily = declarations.TryGetValue("font-family", out var codeFont) ? NormalizeFontFamily(codeFont) : code.FontFamily,
+                FontSize = declarations.TryGetValue("font-size", out var codeSize) ? ParseFontSize(codeSize, code.FontSize) : code.FontSize,
+                Color = declarations.TryGetValue("color", out var codeColor) ? codeColor : code.Color,
+                BackgroundColor = declarations.TryGetValue("background-color", out var codeBgColor) ? codeBgColor : code.BackgroundColor,
+                LineHeight = declarations.TryGetValue("line-height", out var codeLineHeight) ? ParseLineHeight(codeLineHeight) : code.LineHeight,
+                LetterSpacing = declarations.TryGetValue("letter-spacing", out var codeLetterSpacing) ? ParseFontSize(codeLetterSpacing, 0) : code.LetterSpacing,
+            };
+
+            if (declarations.TryGetValue("background", out var codeBg))
+            {
+                var extractedColor = ExtractColor(codeBg);
+                if (!string.IsNullOrWhiteSpace(extractedColor))
+                {
+                    code = code with { BackgroundColor = extractedColor };
+                }
+            }
+
+            variant = variant with { Code = code };
         }
         else if (subElement.StartsWith("h", StringComparison.OrdinalIgnoreCase) && subElement.Length == 2 && char.IsDigit(subElement[1]))
         {

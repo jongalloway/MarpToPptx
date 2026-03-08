@@ -63,6 +63,8 @@ public sealed record ThemeDefinition
         {
             BackgroundColor = classVariant.BackgroundColor ?? BackgroundColor,
             Body = classVariant.Body ?? Body,
+            Code = classVariant.Code ?? Code,
+            InlineCode = classVariant.InlineCode ?? InlineCode,
             Headings = headings,
         };
     }
@@ -80,6 +82,10 @@ public sealed record ClassVariant
     public string? BackgroundColor { get; init; }
 
     public TextStyle? Body { get; init; }
+
+    public TextStyle? Code { get; init; }
+
+    public TextStyle? InlineCode { get; init; }
 
     public IReadOnlyDictionary<int, TextStyle>? Headings { get; init; }
 }
