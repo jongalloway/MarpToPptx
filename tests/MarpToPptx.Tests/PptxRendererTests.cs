@@ -243,6 +243,84 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_TableUsesReadableColors_WhenSlideBodyUsesLightText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        const string themeCss = """
+        section.contrast { color: #FFFFFF; }
+        """;
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: custom
+            ---
+
+            <!-- class: contrast -->
+            # Table Slide
+
+            | Key | Scope |
+            | --- | --- |
+            | class | local |
+            | footer | local |
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeckWithTheme(markdownPath, outputPath, workspace.RootPath, themeCss);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var table = document.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<A.Table>()
+            .Single();
+
+        var rows = table.Elements<A.TableRow>().ToArray();
+        var bodyCell = rows[1].Elements<A.TableCell>().First();
+
+        Assert.True(GetTableCellFill(bodyCell) is "FFFFFF" or "F8FAFC");
+        Assert.Equal("1F2937", GetFirstRunColor(bodyCell));
+    }
+
+    [Fact]
+    public void Renderer_EmptyBackgroundImageDirective_ClearsInheritedBackgroundImage()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile(
+            "accent-wave.svg",
+            """
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+              <rect width="100" height="100" fill="#FDE68A" />
+            </svg>
+            """);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            backgroundImage: url(accent-wave.svg)
+            ---
+
+            # Slide One
+
+            ---
+
+            <!-- backgroundImage: -->
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slides = document.PresentationPart!.SlideParts.ToArray();
+
+        Assert.Single(slides[0].Slide!.Descendants<P.Picture>());
+        Assert.Empty(slides[1].Slide!.Descendants<P.Picture>());
+    }
+
+    [Fact]
     public void Renderer_ResolvesRemoteImage_WhenHttpHandlerReturnsImage()
     {
         using var workspace = TestWorkspace.Create();
@@ -2253,6 +2331,38 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_ClassVariant_AffectsInlineCodeColor()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        const string themeCss = """
+        section.contrast code { color: #FFFFFF; }
+        """;
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            theme: custom
+            ---
+
+            <!-- class: contrast -->
+            A paragraph with `inline code`.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeckWithTheme(markdownPath, outputPath, workspace.RootPath, themeCss);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var inlineCodeRun = document.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<A.Run>()
+            .First(run => run.Descendants<A.Text>().Any(text => text.Text == "inline code"));
+
+        var color = inlineCodeRun.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value;
+        Assert.Equal("FFFFFF", color);
+    }
+
+    [Fact]
     public void Renderer_ClassVariant_AffectsLayoutSizing()
     {
         using var workspace = TestWorkspace.Create();
@@ -2330,6 +2440,12 @@ public class PptxRendererTests
 
         return shape.ShapeProperties!.Transform2D!.Offset!.Y!.Value;
     }
+
+    private static string? GetFirstRunColor(A.TableCell cell)
+        => cell.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value;
+
+    private static string? GetTableCellFill(A.TableCell cell)
+        => cell.TableCellProperties?.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value;
 
     // ────────────────────────────────────────────────────────
     // Issue #44 – header, footer, backgroundSize rendering

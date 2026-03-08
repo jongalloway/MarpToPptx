@@ -714,7 +714,12 @@ public sealed class OpenXmlPptxRenderer
 
         var hasHeader = table.Rows.Any(row => row.IsHeader);
         var colWidth = ToEmu(frame.Width) / columnCount;
-        var rowHeight = ToEmu(Math.Round(style.FontSize * 1.8));
+        var tableStyle = CreateTableTextStyle(style);
+        var headerFillColor = NormalizeColor(context.Theme.AccentColor);
+        var headerTextColor = GetContrastingTextColor(headerFillColor);
+        const string bodyFillColor = "FFFFFF";
+        const string bandFillColor = "F8FAFC";
+        const string bodyTextColor = "1F2937";
 
         var tableProperties = new A.TableProperties { FirstRow = hasHeader, BandRow = true };
         tableProperties.Append(new A.TableStyleId(DefaultTableStyleId));
@@ -729,14 +734,21 @@ public sealed class OpenXmlPptxRenderer
         aTable.Append(tableProperties);
         aTable.Append(tableGrid);
 
-        foreach (var row in table.Rows)
+        for (var rowIndex = 0; rowIndex < table.Rows.Count; rowIndex++)
         {
+            var row = table.Rows[rowIndex];
+            var rowHeight = ToEmu(CalculateTableRowHeight(row, tableStyle, frame.Width, columnCount));
             var aRow = new A.TableRow { Height = rowHeight };
             for (var col = 0; col < columnCount; col++)
             {
                 var cellSpans = col < row.Cells.Count ? row.Cells[col] : Array.Empty<InlineSpan>();
                 var alignment = col < table.ColumnAlignments.Count ? table.ColumnAlignments[col] : null;
-                aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.InlineCode, context.Language));
+                var fillColor = row.IsHeader
+                    ? headerFillColor
+                    : rowIndex % 2 == 0 ? bodyFillColor : bandFillColor;
+                var textColor = row.IsHeader ? headerTextColor : bodyTextColor;
+                var cellCodeStyle = context.Theme.InlineCode is null ? null : context.Theme.InlineCode with { Color = textColor };
+                aRow.Append(CreateTableCell(cellSpans, tableStyle with { Color = textColor }, row.IsHeader, alignment, fillColor, context.SlidePart, cellCodeStyle, context.Language));
             }
 
             aTable.Append(aRow);
@@ -756,7 +768,7 @@ public sealed class OpenXmlPptxRenderer
         context.ShapeTree.Append(graphicFrame);
     }
 
-    private static A.TableCell CreateTableCell(IReadOnlyList<InlineSpan> spans, TextStyle style, bool isHeader, TableColumnAlignment? alignment, SlidePart slidePart, TextStyle? codeStyle, string language)
+    private static A.TableCell CreateTableCell(IReadOnlyList<InlineSpan> spans, TextStyle style, bool isHeader, TableColumnAlignment? alignment, string fillColor, SlidePart slidePart, TextStyle? codeStyle, string language)
     {
         var paragraph = new A.Paragraph();
         var paragraphProperties = new A.ParagraphProperties();
@@ -832,8 +844,46 @@ public sealed class OpenXmlPptxRenderer
 
         var cell = new A.TableCell();
         cell.Append(textBody);
-        cell.Append(new A.TableCellProperties());
+        cell.Append(new A.TableCellProperties(
+            new A.SolidFill(new A.RgbColorModelHex { Val = fillColor })));
         return cell;
+    }
+
+    private static TextStyle CreateTableTextStyle(TextStyle style)
+        => style with
+        {
+            FontSize = Math.Min(style.FontSize, 18),
+            LineHeight = style.LineHeight ?? 1.2,
+            BackgroundColor = null,
+        };
+
+    private static double CalculateTableRowHeight(TableRowModel row, TextStyle style, double tableWidth, int columnCount)
+    {
+        var cellWidth = Math.Max(48, tableWidth / Math.Max(1, columnCount) - 12);
+        var maxHeight = 0d;
+        foreach (var cell in row.Cells)
+        {
+            var text = string.Concat(cell.Select(span => span.Text));
+            maxHeight = Math.Max(maxHeight, EstimateTextBoxHeight(text, style.FontSize, cellWidth, style.LineHeight ?? 1.2) + 10);
+        }
+
+        return Math.Max(style.FontSize * 1.6, maxHeight);
+    }
+
+    private static double EstimateTextBoxHeight(string text, double fontSize, double width, double lineSpacing)
+    {
+        // Delegate to the shared layout engine heuristic to keep layout and rendering in sync.
+        return LayoutEngine.EstimateTextHeight(text, fontSize, width, lineSpacing);
+    }
+
+    private static string GetContrastingTextColor(string backgroundColor)
+    {
+        var normalized = NormalizeColor(backgroundColor);
+        var red = int.Parse(normalized[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        var green = int.Parse(normalized[2..4], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        var blue = int.Parse(normalized[4..6], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        var luminance = (0.299 * red) + (0.587 * green) + (0.114 * blue);
+        return luminance >= 160 ? "1F2937" : "FFFFFF";
     }
 
     private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, bool useFullBleed = false)

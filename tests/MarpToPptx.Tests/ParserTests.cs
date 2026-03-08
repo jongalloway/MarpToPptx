@@ -1036,6 +1036,62 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_EmptyBackgroundImage_ClearsInheritedImageAndCarriesForward()
+    {
+        var parser = new MarpMarkdownParser();
+
+        var deck = parser.Parse(
+            """
+            ---
+            backgroundImage: url(bg.jpg)
+            ---
+
+            # Slide 1
+
+            ---
+
+            <!-- backgroundImage: -->
+            # Slide 2
+
+            ---
+
+            # Slide 3
+            """);
+
+        Assert.Equal("bg.jpg", deck.Slides[0].Style.BackgroundImage);
+        Assert.Equal(string.Empty, deck.Slides[1].Style.BackgroundImage);
+        Assert.Equal(string.Empty, deck.Slides[2].Style.BackgroundImage);
+    }
+
+    [Fact]
+    public void Parser_EmptyClass_ClearsInheritedClassAndCarriesForward()
+    {
+        var parser = new MarpMarkdownParser();
+
+        var deck = parser.Parse(
+            """
+            ---
+            class: contrast
+            ---
+
+            # Slide 1
+
+            ---
+
+            <!-- class: -->
+            # Slide 2
+
+            ---
+
+            # Slide 3
+            """);
+
+        Assert.Equal("contrast", deck.Slides[0].Style.ClassName);
+        Assert.Equal(string.Empty, deck.Slides[1].Style.ClassName);
+        Assert.Equal(string.Empty, deck.Slides[2].Style.ClassName);
+    }
+
+    [Fact]
     public void Parser_SpotDirective_WithEmptyKeyAfterStrip_IsIgnored()
     {
         // A directive like <!-- _: value --> has an empty key after stripping the '_' prefix
@@ -1305,6 +1361,22 @@ public class ParserTests
         Assert.True(variant.Headings!.ContainsKey(1));
         Assert.Equal("#FFDD57", variant.Headings[1].Color);
         Assert.Equal(30, variant.Headings[1].FontSize); // 40px * 0.75 = 30pt
+    }
+
+    [Fact]
+    public void ThemeParser_ParsesSectionClassCodeSelector()
+    {
+        const string css = """
+        section.contrast code { color: #FFFFFF; background-color: #1E3A5F; }
+        """;
+
+        var theme = MarpThemeParser.Parse(css);
+
+        Assert.True(theme.ClassVariants.ContainsKey("contrast"));
+        var variant = theme.ClassVariants["contrast"];
+        Assert.Equal("#FFFFFF", variant.InlineCode?.Color);
+        Assert.Equal("#1E3A5F", variant.InlineCode?.BackgroundColor);
+        Assert.Equal("#FFFFFF", variant.Code?.Color);
     }
 
     [Fact]
