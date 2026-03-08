@@ -45,10 +45,16 @@ internal static class ImageMetadataReader
             return TryReadWebP(reader, out width, out height);
         }
 
-        // SVG: XML-based text format. Decode a small prefix, trim leading whitespace,
-        // then check for <?xml or <svg to handle BOM, leading newlines, and spaces.
+        // SVG: XML-based text format. Binary magic bytes don't apply; read a larger
+        // prefix (up to 512 bytes) so that files with many leading whitespace bytes,
+        // newlines, or a UTF-8 BOM before <?xml or <svg are still detected correctly.
         {
-            var svgPrefix = System.Text.Encoding.UTF8.GetString(header).TrimStart();
+            const int SvgProbeSize = 512;
+            var probeSize = stream.CanSeek ? Math.Min(SvgProbeSize, (int)stream.Length) : SvgProbeSize;
+            var probe = new byte[probeSize];
+            stream.Position = 0;
+            var probeRead = stream.Read(probe, 0, probe.Length);
+            var svgPrefix = System.Text.Encoding.UTF8.GetString(probe, 0, probeRead).TrimStart();
             if (svgPrefix.StartsWith("<?xml", StringComparison.OrdinalIgnoreCase)
                 || svgPrefix.StartsWith("<svg", StringComparison.OrdinalIgnoreCase))
             {
