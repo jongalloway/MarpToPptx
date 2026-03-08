@@ -5,63 +5,78 @@
 [![NuGet Downloads](https://img.shields.io/nuget/dt/MarpToPptx?logo=nuget)](https://www.nuget.org/packages/MarpToPptx/)
 [![.NET 10](https://img.shields.io/badge/.NET-10-512BD4?logo=dotnet)](https://dotnet.microsoft.com/)
 
-MarpToPptx is a .NET 10 CLI and library for compiling Marp-flavored Markdown into editable PowerPoint presentations.
+**✨ Turn your Marp Markdown into real, editable PowerPoint files.**
 
-For a precise description of how this repo defines and implements Marp-style Markdown, see `doc/marp-markdown.md`.
+So you'd like to write your presentation slides in Markdown? It's lightweight, easy to version, and works great with AI-powered workflows. The amazing [Marp](https://marp.app/) ecosystem has you covered with a mature, open-source solution for authoring beautiful slide decks in plain text:
 
-For renderer and PowerPoint package requirements and compatibility reference material, see `doc/pptx-compatibility-notes.md`.
+- [**Marp**](https://marp.app/) — the Markdown Presentation Ecosystem
+- [**Marp for VS Code**](https://marketplace.visualstudio.com/items?itemName=marp-team.marp-vscode) — live preview and export right in your editor
+- [**Marp CLI**](https://github.com/marp-team/marp-cli) — command-line conversion to HTML, PDF, and PPTX
+- [**awesome-marp**](https://github.com/marp-team/awesome-marp) — community themes, tools, and examples
 
-For the `DocumentFormat.OpenXml` `3.4.1` presentation-impact audit and related follow-up notes, see `doc/openxml-3.4.1-audit.md`.
+There's just one hangup. When you're asked to turn in a PowerPoint deck at a conference, need to share editable slides with a colleague, or want to integrate into an existing corporate deck — you need your slides in real PowerPoint format. Unfortunately, Marp's PPTX export produces uneditable image-per-slide output that you can't select, edit, or restyle.
 
-For integrating `MarpToPptx` into a VS Code authoring workflow in a content repository, see `doc/vscode-workflow.md`.
+**That's where MarpToPptx comes in. 🎉** It reads your Marp-flavored Markdown and produces native Open XML PowerPoint files where every heading, bullet, table, and code block is a real, selectable, editable PowerPoint shape. The output opens cleanly in PowerPoint — no repair prompts, no surprises.
 
-For pre-release validation, hosted LibreOffice gate coverage, and the manual PowerPoint review checklist, see `doc/release-validation.md`.
-
-## Current Structure
-
-- `src/MarpToPptx.Core`: semantic slide model, Markdown parsing, theme parsing, layout planning
-- `src/MarpToPptx.Pptx`: Open XML PPTX rendering and template-aware presentation generation
-- `src/MarpToPptx.Cli`: `marp2pptx` command-line entrypoint
-- `src/MarpToPptx.OpenXmlValidator`: small .NET validation helper used by smoke tests and CI
-- `scripts/`: PowerShell helpers for local generation, smoke tests, package inspection, and PowerPoint troubleshooting
-- `tests/MarpToPptx.Tests`: xUnit v3 tests running on Microsoft Testing Platform
-- `samples/`: Marp-style sample decks for smoke tests, feature coverage, theme parsing, and compatibility-gap repros
-- `.github/copilot-instructions.md`: concise repo-specific Copilot guidance for PPTX compatibility, testing flow, and reference sources
-- `.github/prompts/`: reusable prompts for PPTX compatibility investigation and implementation review workflows
-- `.github/workflows/ci.yml`: Ubuntu build/test/pack plus an Ubuntu CI-safe PPTX smoke-test job
-
-## Usage
-
-### Preferred: DNX
-
-`dnx` is the quickest way to run MarpToPptx without installing it as a persistent tool, but it requires .NET 10.
-
-```bash
-dnx MarpToPptx sample.md -o sample.pptx
-dnx MarpToPptx sample.md --template theme.pptx
-dnx MarpToPptx sample.md --theme-css theme.css
+```mermaid
+flowchart LR
+    A["📝 Marp Markdown"] --> B["⚙️ MarpToPptx"]
+    C["🎨 CSS Theme"] -.-> B
+    D["📊 .pptx Template"] -.-> B
+    B --> E["✅ Editable .pptx"]
+    style A fill:#4a9eff,color:#fff
+    style B fill:#7c3aed,color:#fff
+    style C fill:#f59e0b,color:#fff
+    style D fill:#f59e0b,color:#fff
+    style E fill:#10b981,color:#fff
 ```
 
-### Install As A .NET Tool
+## 🚀 Quick Start
 
-If you prefer a persistent command, install the tool from NuGet:
+MarpToPptx requires [.NET 10](https://dotnet.microsoft.com/download). The fastest way to try it — no install needed:
+
+```bash
+dnx MarpToPptx slides.md -o slides.pptx
+```
+
+Or install it globally as a .NET tool:
 
 ```bash
 dotnet tool install --global MarpToPptx
-marp2pptx sample.md -o sample.pptx
-marp2pptx sample.md --template theme.pptx
-marp2pptx sample.md --theme-css theme.css
+marp2pptx slides.md -o slides.pptx
 ```
 
-To update later:
+### Apply a Theme or Template
+
+Use a CSS theme file for Marp-style theming:
 
 ```bash
-dotnet tool update --global MarpToPptx
+marp2pptx slides.md --theme-css brand.css -o slides.pptx
 ```
 
-### VS Code Task
+Or reuse an existing PowerPoint template to inherit your organization's masters and layouts:
 
-Add a `.vscode/tasks.json` to your content repository to export the currently open file:
+```bash
+marp2pptx slides.md --template corporate.pptx -o slides.pptx
+```
+
+## 📋 Features
+
+| Category | What's supported |
+|---|---|
+| **Slide structure** | Front matter directives, `---` slide splitting, presenter notes |
+| **Text content** | Headings, paragraphs, ordered and unordered lists, bold/italic/code spans |
+| **Rich content** | Local images, syntax-highlighted code blocks, native tables |
+| **Media** | Embedded MP3/M4A audio, embedded video |
+| **Theming** | CSS-based Marp themes (fonts, colors, padding, backgrounds, typography) |
+| **Templates** | Copy masters and layouts from an existing `.pptx` |
+| **Directives** | `backgroundColor`, `backgroundImage`, `header`, `footer`, `paginate`, scoped overrides |
+| **Output quality** | Open XML validated, tested to open without repair prompts in PowerPoint |
+| **Platform** | Runs anywhere .NET 10 runs — CI-tested on Ubuntu, works on Windows and macOS |
+
+## 💻 VS Code Integration
+
+Add a one-click export task to any content repository with a `.vscode/tasks.json`:
 
 ```json
 {
@@ -85,97 +100,38 @@ Add a `.vscode/tasks.json` to your content repository to export the currently op
 }
 ```
 
-Run it from **Terminal → Run Task** while the Markdown file is open. The `.pptx` is written next to the source file.
+Run **Terminal → Run Task → Export to PPTX** while editing a Markdown file. The `.pptx` appears next to your source file.
 
-For template-based export, theme CSS, version pinning, team sharing, and the full edit / preview / export loop with the Marp for VS Code extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
+For template-based export, version pinning, team sharing, and integrating the Marp for VS Code preview extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
 
-### Run From Source
+## 🎯 Sample Decks
 
-If you are developing on the repo, you can still run the CLI project directly:
-
-```bash
-dotnet run --project src/MarpToPptx.Cli -- input.md -o output.pptx
-dotnet run --project src/MarpToPptx.Cli -- input.md --template theme.pptx
-dotnet run --project src/MarpToPptx.Cli -- input.md --theme-css theme.css
-```
-
-## Local Packaging
-
-Build a local tool package:
+The [`samples/`](samples/) directory contains ready-to-run Marp decks that exercise different features:
 
 ```bash
-dotnet pack src/MarpToPptx.Cli -c Release
+dnx MarpToPptx samples/01-minimal.md -o artifacts/samples/01-minimal.pptx
+dnx MarpToPptx samples/04-content-coverage.md -o artifacts/samples/04-content-coverage.pptx
+dnx MarpToPptx samples/03-theme-css.md --theme-css samples/03-theme.css -o artifacts/samples/03-theme-css.pptx
 ```
 
-That produces a tool package under `artifacts/nupkg/` with package ID `MarpToPptx` and command name `marp2pptx`.
+See [`samples/README.md`](samples/README.md) for the full list and suggested progression.
 
-Run it with `dnx` from the local package source:
+## 🗺️ Roadmap
 
-```bash
-dnx MarpToPptx --add-source ./artifacts/nupkg sample.md -o sample.pptx
-```
+- Broader CSS coverage for advanced Marp theme features
+- Smarter layout heuristics for dense or highly designed slides
+- Multi-layout template mapping
+- Improved table styling fidelity
+- Expanded syntax highlighting themes
+- Remote asset support
 
-You can also install it as a local tool from the package output:
+## 🤝 Contributing
 
-```bash
-dotnet new tool-manifest
-dotnet tool install MarpToPptx --add-source ./artifacts/nupkg
-dotnet tool run marp2pptx sample.md -o sample.pptx
-```
+See [`CONTRIBUTING.md`](CONTRIBUTING.md) for repository structure, conventions, building from source, packaging, and release process.
 
-## Releases
+## 📖 Documentation
 
-NuGet publishing is handled by `.github/workflows/publish.yml` using nuget.org Trusted Publishing with GitHub OIDC.
-
-Heavier pre-release validation is available separately through `.github/workflows/release-gate.yml`.
-
-- Versioning is tag-based via `MinVer`.
-- Stable release tags should use the form `v1.2.3`.
-- The publish workflow builds, tests, packs, and then pushes the tool package from `artifacts/nupkg/`.
-
-To cut a release:
-
-```bash
-git tag v1.2.3
-git push origin v1.2.3
-```
-
-After the workflow finishes and NuGet indexing completes, install or run the published tool with:
-
-```bash
-dotnet tool install --global MarpToPptx
-dnx MarpToPptx sample.md -o sample.pptx
-```
-
-## Repository Conventions
-
-- Solution format: `MarpToPptx.slnx`
-- Centralized package management: `Directory.Packages.props`
-- Test framework: xUnit v3
-- Test runner: Microsoft Testing Platform via `global.json`
-- CLI packaging direction: `marp2pptx` as a .NET tool, while preserving single-file publish as a deployment mode
-
-## Current Milestone
-
-- Marp-style front matter and directive parsing
-- Slide splitting on `---`
-- Semantic slide model independent from PPTX
-- Theme extraction for fonts, colors, padding, background images, and core typography settings
-- PPTX generation for headings, paragraphs, bullet lists, images, code blocks, native tables, and header/footer text
-- Local audio and video embedding for supported media formats
-- Template-copy workflow for reusing an existing `.pptx` theme/master
-
-## Steering Decisions
-
-- `ImageSharp` is intentionally not used for image sizing unless it is explicitly re-approved after licensing review
-- Intrinsic image sizing should prefer built-in platform capabilities or a minimal in-project metadata reader
-- Remaining roadmap work should be evaluated against the current implemented baseline rather than an empty starting point
-
-## Roadmap
-
-- Improve CSS coverage for more Marp theme features
-- Refine layout heuristics for denser or highly designed decks
-- Expand template integration to map multiple layouts intelligently
-- Improve native PPTX table styling and layout fidelity
-- Expand code block highlighting coverage and theme fidelity
-- Support remote assets and additional image formats
+- [Marp Markdown behavior and directives](doc/marp-markdown.md)
+- [PPTX compatibility notes](doc/pptx-compatibility-notes.md)
+- [VS Code workflow integration](doc/vscode-workflow.md)
+- [Release validation checklist](doc/release-validation.md)
