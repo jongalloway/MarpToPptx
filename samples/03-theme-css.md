@@ -26,7 +26,7 @@ The heading size hierarchy should reflect the CSS file, and the top-level headin
 
 ---
 
-<!-- class: expansive -->
+<!-- _class: expansive -->
 ## Class Variant: Layout Stress
 
 This slide uses a class variant that increases body and heading size enough to change placement.
@@ -46,10 +46,11 @@ The code block should use the theme's monospace font, dark background, and confi
 
 ---
 
-<!-- class: lead -->
+<!-- _backgroundImage: -->
+<!-- _class: lead -->
 # Class Variant: Lead
 
-This slide uses `class: lead` to select the `section.lead` class variant.
+This slide uses `_class: lead` to select the `section.lead` class variant for this slide only.
 
 - Background should be dark (#102A43).
 - Body text should be light (#F0F4F8).
@@ -57,10 +58,11 @@ This slide uses `class: lead` to select the `section.lead` class variant.
 
 ---
 
-<!-- class: invert -->
+<!-- _backgroundImage: -->
+<!-- _class: invert -->
 # Class Variant: Invert
 
-This slide uses `class: invert`.
+This slide uses `_class: invert` for this slide only.
 
 - Background should be dark (#1A1A2E).
 - Body text should be light (#E0E0E0).

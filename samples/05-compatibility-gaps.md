@@ -4,9 +4,11 @@ paginate: true
 headingDivider: 2
 ---
 
-# Compatibility Gaps
+# Compatibility Watchlist
 
-This deck intentionally uses upstream Marp features that are not fully implemented in `MarpToPptx` yet.
+This deck mixes current Marp compatibility gaps with targeted regression checks for features that were implemented recently.
+
+Use it to keep unsupported behavior easy to reproduce while also guarding against regressions in newly supported directives.
 
 ## Heading Divider
 
@@ -19,7 +21,7 @@ This deck intentionally uses upstream Marp features that are not fully implement
 
 The `_backgroundColor` syntax is now implemented here.
 
-This slide remains in the compatibility deck as a quick visual regression check that spot overrides still apply to a single slide only.
+This slide remains in the watchlist deck as a quick visual regression check that spot overrides still apply to a single slide only.
 
 ---
 

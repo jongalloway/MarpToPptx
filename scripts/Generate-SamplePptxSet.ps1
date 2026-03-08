@@ -4,6 +4,7 @@ param(
     [ValidateSet("Debug", "Release")]
     [string]$Configuration = "Debug",
     [string]$Template,
+    [switch]$IncludeThemeSamples,
     [switch]$IncludeRemoteSamples,
     [switch]$Force
 )
@@ -42,6 +43,31 @@ function Test-RequiresRemoteAssets {
     return $content -match 'https?://'
 }
 
+function Get-SampleMarkdownFiles {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$BaseSamplesDirectory,
+        [switch]$IncludeThemeSamples
+    )
+
+    $searchDirectories = [System.Collections.Generic.List[string]]::new()
+    $searchDirectories.Add($BaseSamplesDirectory)
+
+    if ($IncludeThemeSamples) {
+        $themeSamplesDirectory = Join-Path $BaseSamplesDirectory "themes"
+        if (Test-Path $themeSamplesDirectory) {
+            $searchDirectories.Add($themeSamplesDirectory)
+        }
+    }
+
+    return $searchDirectories |
+    ForEach-Object {
+        Get-ChildItem -Path $_ -File -Filter *.md
+    } |
+    Where-Object { $_.Name -ne "README.md" } |
+    Sort-Object DirectoryName, Name
+}
+
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $generateScript = Join-Path $PSScriptRoot "Generate-LocalPptx.ps1"
 $resolvedSamplesDirectory = [System.IO.Path]::GetFullPath($SamplesDirectory, $repoRoot)
@@ -53,9 +79,7 @@ if (-not (Test-Path $resolvedSamplesDirectory)) {
 
 New-Item -ItemType Directory -Path $resolvedOutputDirectory -Force | Out-Null
 
-$sampleFiles = Get-ChildItem -Path $resolvedSamplesDirectory -File -Filter *.md |
-Where-Object { $_.Name -ne "README.md" } |
-Sort-Object Name
+$sampleFiles = Get-SampleMarkdownFiles -BaseSamplesDirectory $resolvedSamplesDirectory -IncludeThemeSamples:$IncludeThemeSamples
 
 if ($sampleFiles.Count -eq 0) {
     throw "No sample Markdown files were found in '$resolvedSamplesDirectory'."
