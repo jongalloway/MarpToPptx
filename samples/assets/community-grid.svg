@@ -1,0 +1,45 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900">
+  <rect width="1600" height="900" fill="#f8fcff"/>
+  <g stroke="#d7eef5" stroke-width="1">
+    <path d="M0 60H1600"/>
+    <path d="M0 120H1600"/>
+    <path d="M0 180H1600"/>
+    <path d="M0 240H1600"/>
+    <path d="M0 300H1600"/>
+    <path d="M0 360H1600"/>
+    <path d="M0 420H1600"/>
+    <path d="M0 480H1600"/>
+    <path d="M0 540H1600"/>
+    <path d="M0 600H1600"/>
+    <path d="M0 660H1600"/>
+    <path d="M0 720H1600"/>
+    <path d="M0 780H1600"/>
+    <path d="M0 840H1600"/>
+    <path d="M80 0V900"/>
+    <path d="M160 0V900"/>
+    <path d="M240 0V900"/>
+    <path d="M320 0V900"/>
+    <path d="M400 0V900"/>
+    <path d="M480 0V900"/>
+    <path d="M560 0V900"/>
+    <path d="M640 0V900"/>
+    <path d="M720 0V900"/>
+    <path d="M800 0V900"/>
+    <path d="M880 0V900"/>
+    <path d="M960 0V900"/>
+    <path d="M1040 0V900"/>
+    <path d="M1120 0V900"/>
+    <path d="M1200 0V900"/>
+    <path d="M1280 0V900"/>
+    <path d="M1360 0V900"/>
+    <path d="M1440 0V900"/>
+    <path d="M1520 0V900"/>
+  </g>
+  <g stroke="#b6dfe9" stroke-width="2">
+    <path d="M0 300H1600"/>
+    <path d="M0 600H1600"/>
+    <path d="M400 0V900"/>
+    <path d="M800 0V900"/>
+    <path d="M1200 0V900"/>
+  </g>
+</svg>

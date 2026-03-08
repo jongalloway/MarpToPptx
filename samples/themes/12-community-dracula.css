@@ -1,0 +1,76 @@
+/* @theme community-dracula */
+
+:root {
+  font-family: "Segoe UI", "Aptos", sans-serif;
+  font-size: 29px;
+  color: #F8F8F2;
+  background-color: #282A36;
+  padding: 46px 58px;
+  line-height: 1.4;
+}
+
+h1 {
+  font-family: "Aptos Display", "Segoe UI", sans-serif;
+  font-size: 58px;
+  color: #FF79C6;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 40px;
+  color: #8BE9FD;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 30px;
+  color: #50FA7B;
+  font-weight: 700;
+}
+
+pre,
+code {
+  font-family: "Cascadia Mono", monospace;
+  font-size: 18px;
+  color: #F8F8F2;
+  background: #1E1F29;
+  line-height: 1.45;
+}
+
+section.lead {
+  background-color: #1F2230;
+  color: #F8F8F2;
+}
+
+section.lead h1 {
+  color: #BD93F9;
+}
+
+section.codefocus {
+  background-color: #232530;
+  color: #F8F8F2;
+}
+
+section.codefocus h2 {
+  color: #50FA7B;
+}
+
+section.accent {
+  background-color: #31243B;
+  color: #F8F8F2;
+}
+
+section.accent h2 {
+  color: #FFB86C;
+}
+
+section.compact {
+  background-color: #282A36;
+  color: #EDEDF0;
+  font-size: 22px;
+}
+
+section.compact h2 {
+  color: #8BE9FD;
+  font-size: 30px;
+}

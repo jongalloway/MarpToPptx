@@ -1,0 +1,70 @@
+/* @theme community-beam */
+
+:root {
+  font-family: "Cambria", "Aptos", sans-serif;
+  font-size: 28px;
+  color: #1F2937;
+  background-color: #F7F4EC;
+  padding: 40px 56px;
+  line-height: 1.35;
+}
+
+h1 {
+  font-family: "Cambria", "Aptos Display", sans-serif;
+  font-size: 56px;
+  color: #17324D;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 38px;
+  color: #1F4B70;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 28px;
+  color: #2D5C87;
+  font-weight: 700;
+}
+
+pre,
+code {
+  font-family: "Cascadia Mono", monospace;
+  font-size: 18px;
+  color: #F8FAFC;
+  background: #1E293B;
+  line-height: 1.4;
+}
+
+section.lead {
+  background-color: #17324D;
+  color: #F8F4E8;
+  font-size: 30px;
+}
+
+section.lead h1 {
+  color: #F7C948;
+  font-size: 60px;
+}
+
+section.statement {
+  background-color: #EEF4FA;
+  color: #16324A;
+}
+
+section.statement h2 {
+  color: #173F6B;
+  font-size: 42px;
+}
+
+section.appendix {
+  background-color: #FBFAF6;
+  color: #3C4657;
+  font-size: 22px;
+}
+
+section.appendix h2 {
+  font-size: 30px;
+  color: #4A5770;
+}

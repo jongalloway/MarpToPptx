@@ -1,0 +1,76 @@
+/* @theme community-graph-paper */
+
+:root {
+  font-family: "Aptos", sans-serif;
+  font-size: 28px;
+  color: #0F172A;
+  background-color: #F8FCFF;
+  background-image: url("../assets/community-grid.svg");
+  background-size: cover;
+  background-position: center;
+  padding: 48px 60px;
+  line-height: 1.4;
+}
+
+h1 {
+  font-family: "Aptos Display", sans-serif;
+  font-size: 54px;
+  color: #0B6E88;
+  font-weight: 700;
+}
+
+h2 {
+  font-size: 38px;
+  color: #0D7490;
+  font-weight: 700;
+}
+
+h3 {
+  font-size: 28px;
+  color: #155E75;
+  font-weight: 700;
+}
+
+pre,
+code {
+  font-family: "Cascadia Mono", monospace;
+  font-size: 18px;
+  color: #E2F3F7;
+  background: #164E63;
+  line-height: 1.45;
+}
+
+section.lead {
+  background-color: #E8F7FB;
+  color: #134152;
+}
+
+section.lead h1 {
+  color: #0A677D;
+}
+
+section.sketch {
+  background-color: #F5FDFF;
+  color: #134152;
+  font-size: 30px;
+}
+
+section.sketch h2 {
+  color: #0E7490;
+  font-size: 42px;
+}
+
+section.focus {
+  background-color: #083344;
+  color: #E6FFFB;
+}
+
+section.focus h2 {
+  color: #A5F3FC;
+}
+
+section.focus code,
+section.focus pre {
+  color: #ECFEFF;
+  background: #164E63;
+}
