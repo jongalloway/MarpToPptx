@@ -182,7 +182,7 @@ public static partial class MarpThemeParser
     }
 
     private static string StripComments(string css)
-        => CommentRegex().Replace(css, string.Empty);
+        => CommentRegex().Replace(css, " ");
 
     private static Dictionary<string, string> ParseDeclarations(string block)
     {
