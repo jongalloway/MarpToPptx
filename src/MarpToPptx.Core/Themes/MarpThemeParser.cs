@@ -12,6 +12,8 @@ public static partial class MarpThemeParser
 
         var bodyStyle = theme.Body;
         var codeStyle = theme.Code;
+        var inlineCodeStyle = theme.InlineCode;
+        var preExplicitlySet = false;
         var headingStyles = theme.Headings.ToDictionary(static pair => pair.Key, static pair => pair.Value);
         var background = theme.BackgroundColor;
         var backgroundImage = theme.BackgroundImage;
@@ -64,23 +66,70 @@ public static partial class MarpThemeParser
                         };
                         break;
                     case "pre":
-                    case "code":
-                        monospace = declarations.TryGetValue("font-family", out var codeFont) ? NormalizeFontFamily(codeFont) : monospace;
+                        preExplicitlySet = true;
+                        monospace = declarations.TryGetValue("font-family", out var preFont) ? NormalizeFontFamily(preFont) : monospace;
                         codeStyle = codeStyle with
                         {
                             FontFamily = monospace,
-                            FontSize = declarations.TryGetValue("font-size", out var codeSize) ? ParseFontSize(codeSize, codeStyle.FontSize) : codeStyle.FontSize,
-                            Color = declarations.TryGetValue("color", out var codeColor) ? codeColor : codeStyle.Color,
-                            BackgroundColor = declarations.TryGetValue("background-color", out var codeBgColor) ? codeBgColor : codeStyle.BackgroundColor,
-                            LineHeight = declarations.TryGetValue("line-height", out var codeLineHeight) ? ParseLineHeight(codeLineHeight) : codeStyle.LineHeight,
-                            LetterSpacing = declarations.TryGetValue("letter-spacing", out var codeLetterSpacing) ? ParseFontSize(codeLetterSpacing, 0) : codeStyle.LetterSpacing,
+                            FontSize = declarations.TryGetValue("font-size", out var preSize) ? ParseFontSize(preSize, codeStyle.FontSize) : codeStyle.FontSize,
+                            Color = declarations.TryGetValue("color", out var preColor) ? preColor : codeStyle.Color,
+                            BackgroundColor = declarations.TryGetValue("background-color", out var preBgColor) ? preBgColor : codeStyle.BackgroundColor,
+                            LineHeight = declarations.TryGetValue("line-height", out var preLineHeight) ? ParseLineHeight(preLineHeight) : codeStyle.LineHeight,
+                            LetterSpacing = declarations.TryGetValue("letter-spacing", out var preLetterSpacing) ? ParseFontSize(preLetterSpacing, 0) : codeStyle.LetterSpacing,
+                        };
+                        if (declarations.TryGetValue("background", out var preBg))
+                        {
+                            var extractedColor = ExtractColor(preBg);
+                            if (!string.IsNullOrWhiteSpace(extractedColor))
+                            {
+                                codeStyle = codeStyle with { BackgroundColor = extractedColor };
+                            }
+                        }
+
+                        break;
+                    case "code":
+                        monospace = declarations.TryGetValue("font-family", out var codeFont) ? NormalizeFontFamily(codeFont) : monospace;
+                        inlineCodeStyle = inlineCodeStyle with
+                        {
+                            FontFamily = monospace,
+                            FontSize = declarations.TryGetValue("font-size", out var codeSize) ? ParseFontSize(codeSize, inlineCodeStyle.FontSize) : inlineCodeStyle.FontSize,
+                            Color = declarations.TryGetValue("color", out var codeColor) ? codeColor : inlineCodeStyle.Color,
+                            BackgroundColor = declarations.TryGetValue("background-color", out var codeBgColor) ? codeBgColor : inlineCodeStyle.BackgroundColor,
+                            LineHeight = declarations.TryGetValue("line-height", out var codeLineHeight) ? ParseLineHeight(codeLineHeight) : inlineCodeStyle.LineHeight,
+                            LetterSpacing = declarations.TryGetValue("letter-spacing", out var codeLetterSpacing) ? ParseFontSize(codeLetterSpacing, 0) : inlineCodeStyle.LetterSpacing,
                         };
                         if (declarations.TryGetValue("background", out var codeBg))
                         {
                             var extractedColor = ExtractColor(codeBg);
                             if (!string.IsNullOrWhiteSpace(extractedColor))
                             {
-                                codeStyle = codeStyle with { BackgroundColor = extractedColor };
+                                inlineCodeStyle = inlineCodeStyle with { BackgroundColor = extractedColor };
+                            }
+                        }
+
+                        // When no explicit `pre` rule has been seen, `code` sets both
+                        // inline and block code styles (the universal code selector).
+                        // Apply declarations independently to codeStyle from its own defaults
+                        // so block-code colours are preserved (dark bg/light text).
+                        if (!preExplicitlySet)
+                        {
+                            codeStyle = codeStyle with
+                            {
+                                FontFamily = monospace,
+                                FontSize = declarations.TryGetValue("font-size", out var blockCodeSize) ? ParseFontSize(blockCodeSize, codeStyle.FontSize) : codeStyle.FontSize,
+                                Color = declarations.TryGetValue("color", out var blockCodeColor) ? blockCodeColor : codeStyle.Color,
+                                BackgroundColor = declarations.TryGetValue("background-color", out var blockCodeBgColor) ? blockCodeBgColor : codeStyle.BackgroundColor,
+                                LineHeight = declarations.TryGetValue("line-height", out var blockCodeLineHeight) ? ParseLineHeight(blockCodeLineHeight) : codeStyle.LineHeight,
+                                LetterSpacing = declarations.TryGetValue("letter-spacing", out var blockCodeLetterSpacing) ? ParseFontSize(blockCodeLetterSpacing, 0) : codeStyle.LetterSpacing,
+                            };
+
+                            if (declarations.TryGetValue("background", out var blockCodeBg))
+                            {
+                                var extractedBlockColor = ExtractColor(blockCodeBg);
+                                if (!string.IsNullOrWhiteSpace(extractedBlockColor))
+                                {
+                                    codeStyle = codeStyle with { BackgroundColor = extractedBlockColor };
+                                }
                             }
                         }
 
@@ -124,6 +173,7 @@ public static partial class MarpThemeParser
             SlidePadding = slidePadding,
             Body = bodyStyle,
             Code = codeStyle,
+            InlineCode = inlineCodeStyle,
             Headings = headingStyles,
             ClassVariants = classVariants,
         };

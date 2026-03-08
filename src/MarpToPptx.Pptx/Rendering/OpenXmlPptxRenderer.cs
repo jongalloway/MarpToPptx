@@ -343,10 +343,10 @@ public sealed class OpenXmlPptxRenderer
             switch (placed.Element)
             {
                 case HeadingElement heading:
-                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(effectiveTheme, heading.Level), effectiveTheme.Code, isTitle: heading.Level == 1 && ReferenceEquals(heading, firstElement));
+                    AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(effectiveTheme, heading.Level), effectiveTheme.InlineCode, isTitle: heading.Level == 1 && ReferenceEquals(heading, firstElement));
                     break;
                 case ParagraphElement paragraph:
-                    AddTextShape(context, frame, paragraph.Spans, bodyStyle, effectiveTheme.Code);
+                    AddTextShape(context, frame, paragraph.Spans, bodyStyle, effectiveTheme.InlineCode);
                     break;
                 case BulletListElement list:
                     AddBulletList(context, frame, list, bodyStyle);
@@ -397,8 +397,8 @@ public sealed class OpenXmlPptxRenderer
         var noteTextStyle = CreateNotesTextStyle(theme);
         var noteCodeStyle = noteTextStyle with
         {
-            Color = theme.Code.Color,
-            FontFamily = theme.Code.FontFamily,
+            Color = theme.InlineCode.Color,
+            FontFamily = theme.InlineCode.FontFamily,
         };
         var paragraphs = SplitSpansIntoParagraphs(effectiveNoteSpans)
             .Select(group => CreateParagraphFromSpans(group, noteTextStyle, noteCodeStyle, null, null, false, 1, language))
@@ -616,7 +616,7 @@ public sealed class OpenXmlPptxRenderer
     private static void AddBulletList(SlideRenderContext context, Rect frame, BulletListElement list, TextStyle style)
     {
         var paragraphs = list.Items
-            .Select((item, index) => CreateParagraphFromSpans(item.Spans, style, context.Theme.Code, context.SlidePart, item.Depth, list.Ordered, index + 1, context.Language))
+            .Select((item, index) => CreateParagraphFromSpans(item.Spans, style, context.Theme.InlineCode, context.SlidePart, item.Depth, list.Ordered, index + 1, context.Language))
             .ToArray();
 
         context.ShapeTree.Append(CreateTextShape(
@@ -736,7 +736,7 @@ public sealed class OpenXmlPptxRenderer
             {
                 var cellSpans = col < row.Cells.Count ? row.Cells[col] : Array.Empty<InlineSpan>();
                 var alignment = col < table.ColumnAlignments.Count ? table.ColumnAlignments[col] : null;
-                aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.Code, context.Language));
+                aRow.Append(CreateTableCell(cellSpans, style, row.IsHeader, alignment, context.SlidePart, context.Theme.InlineCode, context.Language));
             }
 
             aTable.Append(aRow);

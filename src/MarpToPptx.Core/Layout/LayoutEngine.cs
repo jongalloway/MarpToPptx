@@ -25,7 +25,7 @@ public sealed class LayoutEngine
                 ImageElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 VideoElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 AudioElement => CreateFixedFrame(contentX, contentWidth, ref y, 80),
-                CodeBlockElement => CreateFixedFrame(contentX, contentWidth, ref y, 160),
+                CodeBlockElement code => CreateCodeBlockFrame(code, theme, contentX, contentWidth, ref y),
                 TableElement table => CreateFixedFrame(contentX, contentWidth, ref y, Math.Max(120, table.Rows.Count * 26 + 20)),
                 _ => CreateFixedFrame(contentX, contentWidth, ref y, 80),
             };
@@ -55,6 +55,17 @@ public sealed class LayoutEngine
 
     private static Rect CreateFixedFrame(double x, double width, ref double y, double height)
     {
+        var frame = new Rect(x, y, width, height);
+        y += height + 16;
+        return frame;
+    }
+
+    private static Rect CreateCodeBlockFrame(CodeBlockElement code, ThemeDefinition theme, double x, double width, ref double y)
+    {
+        var fontSize = theme.Code.FontSize;
+        var lineHeight = theme.Code.LineHeight ?? 1.45;
+        var estimatedHeight = EstimateTextHeight(code.Code, fontSize, width, lineHeight);
+        var height = Math.Clamp(estimatedHeight + 18, 40, 400); // +18 for code block padding/borders
         var frame = new Rect(x, y, width, height);
         y += height + 16;
         return frame;
