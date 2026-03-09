@@ -1220,6 +1220,72 @@ public class ParserTests
     }
 
     [Fact]
+    public void LayoutFrontMatter_SetsDefaultContentLayout_WithoutForcingSlideOverride()
+    {
+        const string markdown = """
+        ---
+        layout: Comparison
+        paginate: true
+        lang: en-US
+        ---
+
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal("Comparison", deck.DefaultContentLayout);
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal("en-US", deck.Language);
+        Assert.True(deck.Slides[0].Style.Paginate);
+        Assert.True(deck.Slides[1].Style.Paginate);
+        Assert.Null(deck.Slides[0].Style.Layout);
+        Assert.Null(deck.Slides[1].Style.Layout);
+    }
+
+    [Fact]
+    public void LayoutDirectives_SupportStickyAndSpotOverrides()
+    {
+        const string markdown = """
+        ---
+        layout: Comparison
+        paginate: true
+        ---
+
+        <!-- layout: Section Header -->
+        # Slide One
+
+        ---
+
+        # Slide Two
+
+        ---
+
+        <!-- _layout: Title Slide -->
+        # Slide Three
+
+        ---
+
+        # Slide Four
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal("Comparison", deck.DefaultContentLayout);
+        Assert.Equal(4, deck.Slides.Count);
+        Assert.Equal("Section Header", deck.Slides[0].Style.Layout);
+        Assert.Equal("Section Header", deck.Slides[1].Style.Layout);
+        Assert.Equal("Title Slide", deck.Slides[2].Style.Layout);
+        Assert.Equal("Section Header", deck.Slides[3].Style.Layout);
+    }
+
+    [Fact]
     public void HeadingDivider_SplitsSlidesOnHeading()
     {
         const string markdown = """

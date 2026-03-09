@@ -60,6 +60,19 @@ Or reuse an existing PowerPoint template to inherit your organization's masters 
 marp2pptx slides.md --template corporate.pptx -o slides.pptx
 ```
 
+To target a specific template layout from markdown, use `layout` in front matter for the default content layout, or `layout` / `_layout` HTML-comment directives for sticky or single-slide overrides:
+
+```md
+---
+layout: Title and Content
+---
+
+<!-- _layout: Section Header -->
+# Agenda
+```
+
+See [doc/using-templates.md](doc/using-templates.md) for the quickstart and [doc/template-authoring-guidelines.md](doc/template-authoring-guidelines.md) for the technical details.
+
 ## 📋 Features
 
 | Category | What's supported |
@@ -70,7 +83,7 @@ marp2pptx slides.md --template corporate.pptx -o slides.pptx
 | **Media** | Embedded MP3/M4A audio, embedded video |
 | **Theming** | CSS-based Marp themes (fonts, colors, padding, backgrounds, typography) |
 | **Templates** | Copy masters and layouts from an existing `.pptx` |
-| **Directives** | `backgroundColor`, `backgroundImage`, `header`, `footer`, `paginate`, scoped overrides |
+| **Directives** | `backgroundColor`, `backgroundImage`, `header`, `footer`, `paginate`, `layout`, scoped overrides |
 | **Output quality** | Open XML validated, tested to open without repair prompts in PowerPoint |
 | **Platform** | Runs anywhere .NET 10 runs — CI-tested on Ubuntu, works on Windows and macOS |
 
@@ -131,7 +144,9 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for repository structure, conventions, 
 
 ## 📖 Documentation
 
+- [Using a PowerPoint template](doc/using-templates.md)
 - [Marp Markdown behavior and directives](doc/marp-markdown.md)
+- [Template authoring guidelines](doc/template-authoring-guidelines.md)
 - [PPTX compatibility notes](doc/pptx-compatibility-notes.md)
 - [VS Code workflow integration](doc/vscode-workflow.md)
 - [Release validation checklist](doc/release-validation.md)

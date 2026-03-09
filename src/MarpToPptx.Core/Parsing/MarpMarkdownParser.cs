@@ -34,6 +34,15 @@ public sealed class MarpMarkdownParser
             deck.FrontMatter[pair.Key] = pair.Value;
         }
 
+        if (frontMatter.TryGetValue("layout", out var defaultContentLayout))
+        {
+            defaultContentLayout = defaultContentLayout?.Trim();
+            if (!string.IsNullOrWhiteSpace(defaultContentLayout))
+            {
+                deck.DefaultContentLayout = defaultContentLayout;
+            }
+        }
+
         var defaultStyle = new SlideStyle();
         foreach (var pair in frontMatter)
         {
