@@ -303,7 +303,7 @@ public sealed class OpenXmlPptxRenderer
         }
         else
         {
-            slidePart = CloneTemplateSlidePart(presentationPart, templateSlide.SlidePart);
+            slidePart = CloneTemplateSlidePart(presentationPart, templateSlide);
             slidePart.Slide!.CommonSlideData ??= new P.CommonSlideData();
             shapeTree = slidePart.Slide.CommonSlideData.ShapeTree ??= new P.ShapeTree(
                 CreateRootGroupShapeProperties(),
@@ -1073,29 +1073,28 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private static SlidePart CloneTemplateSlidePart(PresentationPart presentationPart, SlidePart templateSlidePart)
+    private static SlidePart CloneTemplateSlidePart(PresentationPart presentationPart, TemplateSlideReference templateSlide)
     {
         var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
-        slidePart.Slide = (P.Slide)templateSlidePart.Slide!.CloneNode(true);
+        // Clone again from the pre-snapshotted ClonedSlide so that each rendered slide
+        // gets an independent DOM tree. This is necessary when the same Template[n]
+        // is used for multiple slides: the text-replacement pass modifies the DOM
+        // in-place, so each slide must start from a fresh copy.
+        slidePart.Slide = (P.Slide)templateSlide.ClonedSlide.CloneNode(true);
 
-        foreach (var relationship in templateSlidePart.Parts)
+        foreach (var (part, relId) in templateSlide.SubParts)
         {
-            if (relationship.OpenXmlPart is NotesSlidePart)
-            {
-                continue;
-            }
-
-            slidePart.AddPart(relationship.OpenXmlPart, relationship.RelationshipId);
+            slidePart.AddPart(part, relId);
         }
 
-        foreach (var externalRelationship in templateSlidePart.ExternalRelationships)
+        foreach (var (relType, uri, id) in templateSlide.ExternalRelationships)
         {
-            slidePart.AddExternalRelationship(externalRelationship.RelationshipType, externalRelationship.Uri, externalRelationship.Id);
+            slidePart.AddExternalRelationship(relType, uri, id);
         }
 
-        foreach (var hyperlinkRelationship in templateSlidePart.HyperlinkRelationships)
+        foreach (var (uri, isExternal, id) in templateSlide.HyperlinkRelationships)
         {
-            slidePart.AddHyperlinkRelationship(hyperlinkRelationship.Uri, hyperlinkRelationship.IsExternal, hyperlinkRelationship.Id);
+            slidePart.AddHyperlinkRelationship(uri, isExternal, id);
         }
 
         return slidePart;

@@ -6,10 +6,25 @@ using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Pptx.Rendering;
 
-/// <param name="SlideNumber">1-based position of the template slide.</param>
-/// <param name="SlidePart">The original template <see cref="SlidePart"/>; used to clone artwork and relationships into a new slide.</param>
-/// <param name="LayoutPart">The <see cref="SlideLayoutPart"/> captured eagerly at selector construction time, before the template slides are cleared from the slide list.</param>
-internal sealed record TemplateSlideReference(int SlideNumber, SlidePart SlidePart, SlideLayoutPart? LayoutPart);
+/// <summary>
+/// All data needed to clone a template slide, captured eagerly in the
+/// <see cref="SlideTemplateSelector"/> constructor — before <c>ClearSlides</c>
+/// removes the <c>&lt;p:sldId&gt;</c> XML references that cause the SDK to destroy
+/// the originating <see cref="SlidePart"/> in some runtime environments.
+/// </summary>
+/// <param name="SlideNumber">1-based position in the template presentation.</param>
+/// <param name="LayoutPart">The layout part used by this slide; drives <see cref="SelectedSlideLayout.LayoutPart"/>.</param>
+/// <param name="ClonedSlide">Deep clone of the slide's XML DOM, safe to use after the source part is destroyed.</param>
+/// <param name="SubParts">Sub-parts to copy onto the cloned slide (excludes <see cref="NotesSlidePart"/>).</param>
+/// <param name="ExternalRelationships">External relationships to replicate on the cloned slide.</param>
+/// <param name="HyperlinkRelationships">Hyperlink relationships to replicate on the cloned slide.</param>
+internal sealed record TemplateSlideReference(
+    int SlideNumber,
+    SlideLayoutPart? LayoutPart,
+    P.Slide ClonedSlide,
+    IReadOnlyList<(OpenXmlPart Part, string RelationshipId)> SubParts,
+    IReadOnlyList<(string RelationshipType, Uri Uri, string Id)> ExternalRelationships,
+    IReadOnlyList<(Uri Uri, bool IsExternal, string Id)> HyperlinkRelationships);
 
 internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle, TemplateSlideReference? TemplateSlide = null);
 
@@ -57,11 +72,32 @@ internal sealed class SlideTemplateSelector
     public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts, IReadOnlyList<SlidePart>? templateSlides = null)
     {
         _layouts = layouts;
-        // Eagerly capture SlideLayoutPart for each template slide while the parts are
-        // guaranteed alive (before ClearSlides removes their SlideId XML references,
-        // which can cause the SDK to orphan and destroy parts in some environments).
-        _templateSlides = templateSlides?.Select(
-            (sp, i) => new TemplateSlideReference(i + 1, sp, sp.SlideLayoutPart)).ToArray() ?? [];
+        // Eagerly snapshot all data needed from each template SlidePart while it is
+        // guaranteed alive — before ClearSlides removes the <p:sldId> XML references
+        // that can cause the SDK to destroy the parts in some runtime environments.
+        _templateSlides = templateSlides?
+            .Select((sp, i) =>
+            {
+                var clonedSlide = sp.Slide is null ? null : (P.Slide)sp.Slide.CloneNode(true);
+                if (clonedSlide is null) { return (TemplateSlideReference?)null; }
+
+                return new TemplateSlideReference(
+                    SlideNumber: i + 1,
+                    LayoutPart: sp.SlideLayoutPart,
+                    ClonedSlide: clonedSlide,
+                    SubParts: sp.Parts
+                        .Where(r => r.OpenXmlPart is not NotesSlidePart)
+                        .Select(r => (r.OpenXmlPart, r.RelationshipId))
+                        .ToArray(),
+                    ExternalRelationships: sp.ExternalRelationships
+                        .Select(r => (r.RelationshipType, r.Uri, r.Id))
+                        .ToArray(),
+                    HyperlinkRelationships: sp.HyperlinkRelationships
+                        .Select(r => (r.Uri, r.IsExternal, r.Id))
+                        .ToArray());
+            })
+            .OfType<TemplateSlideReference>()
+            .ToArray() ?? [];
     }
 
     /// <summary>
