@@ -1,9 +1,25 @@
 using DocumentFormat.OpenXml.Packaging;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
+using System.Xml.Linq;
 using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Pptx.Rendering;
+
+internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle);
+
+/// <summary>
+/// Identity of a placeholder shape on a template layout, captured by the
+/// <c>&lt;p:ph&gt;</c> element's <c>type</c> and optional <c>idx</c>. A slide-level
+/// placeholder shape with the same type+index inherits geometry and text
+/// styling from the layout and master.
+///
+/// A <c>null</c> <see cref="Type"/> represents a typeless placeholder
+/// (<c>&lt;p:ph idx="..."/&gt;</c>), which is the conventional form of an object/content
+/// placeholder on <c>obj</c>-type layouts such as "Title and Content". The slide-level
+/// echo must also omit the <c>type</c> attribute for inheritance to match.
+/// </summary>
+internal sealed record TemplatePlaceholder(P.PlaceholderValues? Type, uint? Index);
 
 /// <summary>
 /// Represents the semantic content type of a slide, used to select the most
@@ -70,10 +86,25 @@ internal sealed class SlideTemplateSelector
     }
 
     /// <summary>
-    /// Returns the most appropriate <see cref="SlideLayoutPart"/> for the given <paramref name="kind"/>.
-    /// Falls back to the first available layout when no exact match is found.
+    /// Returns the most appropriate <see cref="SlideLayoutPart"/> for the given slide.
+    /// A matching named layout enables template-first visual styling for that slide.
     /// </summary>
-    public SlideLayoutPart SelectLayout(SlideKind kind)
+    public SelectedSlideLayout SelectLayout(Slide slide, SlideKind kind, string? defaultContentLayout)
+    {
+        var requestedLayout = ResolveRequestedLayout(slide, kind, defaultContentLayout);
+        if (!string.IsNullOrWhiteSpace(requestedLayout))
+        {
+            var namedLayout = FindLayoutByName(requestedLayout);
+            if (namedLayout is not null)
+            {
+                return new SelectedSlideLayout(namedLayout, UseTemplateStyle: true);
+            }
+        }
+
+        return new SelectedSlideLayout(SelectAutoLayout(kind), UseTemplateStyle: false);
+    }
+
+    private SlideLayoutPart SelectAutoLayout(SlideKind kind)
         => kind switch
         {
             SlideKind.Title =>
@@ -104,6 +135,78 @@ internal sealed class SlideTemplateSelector
     public static Rect? GetBodyPlaceholderRect(SlideLayoutPart layoutPart)
         => GetPlaceholderRect(layoutPart, P.PlaceholderValues.Body, P.PlaceholderValues.SubTitle);
 
+    /// <summary>
+    /// Returns the title placeholder identity (<c>type</c>+<c>idx</c>) declared on the
+    /// given layout, or <c>null</c> if no title-like placeholder exists. Unlike
+    /// <see cref="GetTitlePlaceholderRect"/>, this does not require an explicit
+    /// transform; layouts commonly inherit placeholder geometry from the master.
+    /// </summary>
+    public static TemplatePlaceholder? GetTitlePlaceholder(SlideLayoutPart layoutPart)
+        => FindPlaceholder(layoutPart, P.PlaceholderValues.Title, P.PlaceholderValues.CenteredTitle);
+
+    /// <summary>
+    /// Returns the body placeholder identity (<c>type</c>+<c>idx</c>) declared on the
+    /// given layout, or <c>null</c> if no body-like placeholder exists.
+    ///
+    /// Falls back to the first typeless indexed placeholder (<c>&lt;p:ph idx="..."/&gt;</c>),
+    /// which is the conventional content placeholder on <c>obj</c> layouts such as
+    /// "Title and Content" and "Two Content".
+    /// </summary>
+    public static TemplatePlaceholder? GetBodyPlaceholder(SlideLayoutPart layoutPart)
+        => FindPlaceholder(layoutPart, P.PlaceholderValues.Body, P.PlaceholderValues.SubTitle)
+            ?? FindTypelessIndexedPlaceholder(layoutPart);
+
+    private static TemplatePlaceholder? FindPlaceholder(SlideLayoutPart layoutPart, params P.PlaceholderValues[] types)
+    {
+        var shapeTree = layoutPart.SlideLayout?.CommonSlideData?.ShapeTree;
+        if (shapeTree is null)
+        {
+            return null;
+        }
+
+        foreach (var shape in shapeTree.Elements<P.Shape>())
+        {
+            var ph = shape.NonVisualShapeProperties?
+                .ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>();
+            if (ph?.Type?.Value is not { } phType || !types.Any(t => phType == t))
+            {
+                continue;
+            }
+
+            return new TemplatePlaceholder(phType, ph.Index?.Value);
+        }
+
+        return null;
+    }
+
+    private static TemplatePlaceholder? FindTypelessIndexedPlaceholder(SlideLayoutPart layoutPart)
+    {
+        var shapeTree = layoutPart.SlideLayout?.CommonSlideData?.ShapeTree;
+        if (shapeTree is null)
+        {
+            return null;
+        }
+
+        foreach (var shape in shapeTree.Elements<P.Shape>())
+        {
+            var ph = shape.NonVisualShapeProperties?
+                .ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>();
+            // A <p:ph/> with no type attribute and a non-null idx is the generic
+            // object/content placeholder. Typed placeholders (dt, ftr, sldNum, title, ...)
+            // are excluded here because their Type is non-null.
+            if (ph is null || ph.Type is not null || ph.Index?.Value is not { } idx)
+            {
+                continue;
+            }
+
+            return new TemplatePlaceholder(Type: null, Index: idx);
+        }
+
+        return null;
+    }
+
     private SlideLayoutPart? FindLayout(P.SlideLayoutValues targetType)
     {
         foreach (var layoutPart in _layouts)
@@ -115,6 +218,63 @@ internal sealed class SlideTemplateSelector
         }
 
         return null;
+    }
+
+    private SlideLayoutPart? FindLayoutByName(string requestedLayout)
+    {
+        foreach (var layoutPart in _layouts)
+        {
+            foreach (var candidate in GetLayoutNames(layoutPart))
+            {
+                if (string.Equals(candidate, requestedLayout.Trim(), StringComparison.OrdinalIgnoreCase))
+                {
+                    return layoutPart;
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private static string? ResolveRequestedLayout(Slide slide, SlideKind kind, string? defaultContentLayout)
+    {
+        if (!string.IsNullOrWhiteSpace(slide.Style.Layout))
+        {
+            return slide.Style.Layout;
+        }
+
+        return kind == SlideKind.Content && !string.IsNullOrWhiteSpace(defaultContentLayout)
+            ? defaultContentLayout
+            : null;
+    }
+
+    private static IEnumerable<string> GetLayoutNames(SlideLayoutPart layoutPart)
+    {
+        var slideLayout = layoutPart.SlideLayout;
+        if (slideLayout is null)
+        {
+            yield break;
+        }
+
+        var document = XDocument.Parse(slideLayout.OuterXml);
+        var root = document.Root;
+        if (root is null)
+        {
+            yield break;
+        }
+
+        var matchingName = root.Attribute("matchingName")?.Value;
+        if (!string.IsNullOrWhiteSpace(matchingName))
+        {
+            yield return matchingName;
+        }
+
+        XNamespace presentationNamespace = "http://schemas.openxmlformats.org/presentationml/2006/main";
+        var commonSlideDataName = root.Element(presentationNamespace + "cSld")?.Attribute("name")?.Value;
+        if (!string.IsNullOrWhiteSpace(commonSlideDataName))
+        {
+            yield return commonSlideDataName;
+        }
     }
 
     private static Rect? GetPlaceholderRect(SlideLayoutPart layoutPart, params P.PlaceholderValues[] types)

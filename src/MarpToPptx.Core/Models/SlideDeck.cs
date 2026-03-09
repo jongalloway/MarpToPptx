@@ -10,6 +10,12 @@ public sealed class SlideDeck
 
     public List<Slide> Slides { get; } = [];
 
+    /// <summary>
+    /// Deck-level default template layout name for content slides when rendering with a PPTX template.
+    /// Per-slide <c>layout</c> or <c>_layout</c> directives override this value.
+    /// </summary>
+    public string? DefaultContentLayout { get; set; }
+
     public ThemeDefinition Theme { get; set; } = ThemeDefinition.Default;
 
     /// <summary>
@@ -35,6 +41,8 @@ public sealed class SlideStyle
     public string? ThemeName { get; init; }
 
     public bool? Paginate { get; init; }
+
+    public string? Layout { get; init; }
 
     public string? ClassName { get; init; }
 

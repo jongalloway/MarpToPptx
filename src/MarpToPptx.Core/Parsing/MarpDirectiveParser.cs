@@ -87,6 +87,7 @@ public static partial class MarpDirectiveParser
         {
             "theme" => Clone(style, themeName: value),
             "paginate" => Clone(style, paginate: bool.TryParse(value, out var p) ? p : null),
+            "layout" => Clone(style, layout: value),
             "class" => Clone(style, className: value),
             "backgroundimage" => Clone(style, backgroundImage: UnwrapUrl(value)),
             "backgroundsize" => Clone(style, backgroundSize: value),
@@ -101,6 +102,7 @@ public static partial class MarpDirectiveParser
         SlideStyle source,
         string? themeName = null,
         bool? paginate = null,
+        string? layout = null,
         string? className = null,
         string? backgroundImage = null,
         string? backgroundSize = null,
@@ -112,6 +114,7 @@ public static partial class MarpDirectiveParser
         {
             ThemeName = themeName ?? source.ThemeName,
             Paginate = paginate ?? source.Paginate,
+            Layout = layout ?? source.Layout,
             ClassName = className ?? source.ClassName,
             BackgroundImage = backgroundImage ?? source.BackgroundImage,
             BackgroundSize = backgroundSize ?? source.BackgroundSize,

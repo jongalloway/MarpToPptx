@@ -27,6 +27,7 @@ public sealed class OpenXmlPptxRenderer
     public void Render(SlideDeck deck, string outputPath, PptxRenderOptions? options = null)
     {
         options ??= new PptxRenderOptions();
+
         var outputDirectory = IOPath.GetDirectoryName(outputPath);
         if (!string.IsNullOrWhiteSpace(outputDirectory))
         {
@@ -54,8 +55,8 @@ public sealed class OpenXmlPptxRenderer
             foreach (var slideModel in deck.Slides)
             {
                 var slideKind = SlideTemplateSelector.Classify(slideModel);
-                var slideLayoutPart = templateSelector.SelectLayout(slideKind);
-                AddSlide(presentationPart, slideLayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, slideNumber, language);
+                var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout);
+                AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language);
                 slideNumber++;
             }
 
@@ -270,17 +271,11 @@ public sealed class OpenXmlPptxRenderer
 
         foreach (var slideId in slideIdList.Elements<P.SlideId>().ToList())
         {
-            if (!string.IsNullOrWhiteSpace(slideId.RelationshipId))
-            {
-                var slidePart = (SlidePart)presentationPart.GetPartById(slideId.RelationshipId!);
-                presentationPart.DeletePart(slidePart);
-            }
-
             slideId.Remove();
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, int slideNumber, string language)
+    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language)
     {
         var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
         slidePart.AddPart(slideLayoutPart, "rId1");
@@ -300,15 +295,35 @@ public sealed class OpenXmlPptxRenderer
         slidePart.Slide = slide;
         // Resolve class variant: when the slide has a className, look up overrides.
         ClassVariant? classVariant = null;
-        if (!string.IsNullOrWhiteSpace(slideModel.Style.ClassName))
+        if (!useTemplateStyle && !string.IsNullOrWhiteSpace(slideModel.Style.ClassName))
         {
             theme.ClassVariants.TryGetValue(slideModel.Style.ClassName!, out classVariant);
         }
 
-        var effectiveTheme = theme.ApplyClassVariant(classVariant);
-        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, language);
+        var effectiveTheme = useTemplateStyle
+            ? ThemeDefinition.Default
+            : theme.ApplyClassVariant(classVariant);
+        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, useTemplateStyle, language);
 
         AddBackground(slideModel.Style, context);
+
+        // Placeholder-based rendering: when a named layout matched, write text content
+        // into slide-level placeholder shapes that inherit geometry and text styling
+        // from the template layout. Non-text elements fall back to standalone shapes.
+        // If the layout lacks a title or body placeholder, that portion degrades to
+        // the standard standalone-shape path. See doc/template-authoring-guidelines.md.
+        if (useTemplateStyle &&
+            TryRenderIntoTemplatePlaceholders(context, slideLayoutPart, slideModel, effectiveTheme))
+        {
+            AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
+            slidePart.Slide.Save();
+            AppendSlideId(presentationPart, slidePart);
+            if (!string.IsNullOrWhiteSpace(slideModel.Notes))
+            {
+                AddNotesSlide(presentationPart, slidePart, slideModel.NoteSpans, slideModel.Notes!, effectiveTheme, language);
+            }
+            return;
+        }
 
         // Read placeholder bounds from the selected layout. When the title placeholder
         // carries an explicit transform, use it for the first top-level heading so that
@@ -383,6 +398,265 @@ public sealed class OpenXmlPptxRenderer
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
         => theme.GetHeadingStyle(level);
+
+    /// <summary>
+    /// Attempts to render slide content into template placeholder shapes. Returns
+    /// <c>true</c> when the placeholder path was taken (text content written into one
+    /// or both of the layout's title/body placeholders). Returns <c>false</c> when the
+    /// layout exposes neither a title-like nor a body-like placeholder, in which case
+    /// the caller should fall back to the standalone-shape path unchanged.
+    ///
+    /// Content mapping:
+    ///   - first level-1 heading -> title placeholder (title | ctrTitle)
+    ///   - remaining headings, paragraphs, bullet/numbered lists -> body placeholder
+    ///     (body | subTitle), collapsed into a single shape with multiple paragraphs
+    ///   - images, video, audio, code blocks, tables -> standalone positioned shapes
+    ///
+    /// Paragraphs emitted here deliberately omit font size, color, and font family so
+    /// the template's layout+master text styles cascade; only inline run formatting
+    /// (bold, italic, strike, hyperlink) and bullet level / nobullet are set.
+    /// </summary>
+    private bool TryRenderIntoTemplatePlaceholders(SlideRenderContext context, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition effectiveTheme)
+    {
+        var titlePlaceholder = SlideTemplateSelector.GetTitlePlaceholder(slideLayoutPart);
+        var bodyPlaceholder = SlideTemplateSelector.GetBodyPlaceholder(slideLayoutPart);
+        if (titlePlaceholder is null && bodyPlaceholder is null)
+        {
+            return false;
+        }
+
+        // Split elements into: optional title heading, body text, and non-text remainder.
+        // The title placeholder receives the very first element when it is a heading of
+        // any level. Level is intentionally ignored because a template-bound "Title and
+        // Content" slide typically uses an H2 for its per-slide heading and still wants
+        // it routed to the title placeholder.
+        HeadingElement? titleHeading = null;
+        var bodyTextElements = new List<ISlideElement>();
+        var nonTextElements = new List<ISlideElement>();
+        foreach (var element in slideModel.Elements)
+        {
+            if (titleHeading is null && titlePlaceholder is not null &&
+                element is HeadingElement h &&
+                bodyTextElements.Count == 0 && nonTextElements.Count == 0)
+            {
+                titleHeading = h;
+                continue;
+            }
+
+            switch (element)
+            {
+                case HeadingElement or ParagraphElement or BulletListElement:
+                    bodyTextElements.Add(element);
+                    break;
+                default:
+                    nonTextElements.Add(element);
+                    break;
+            }
+        }
+
+        // Title placeholder shape.
+        if (titleHeading is not null)
+        {
+            var titleParagraphs = SplitSpansIntoParagraphs(titleHeading.Spans)
+                .Select(group => CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language))
+                .ToArray();
+            context.ShapeTree.Append(CreateSlidePlaceholderShape(
+                context.NextShapeId(),
+                "Title",
+                titlePlaceholder!,
+                titleParagraphs));
+        }
+
+        // Body placeholder shape: collapse all body-text elements into one shape.
+        if (bodyPlaceholder is not null && bodyTextElements.Count > 0)
+        {
+            var bodyParagraphs = new List<A.Paragraph>();
+            foreach (var element in bodyTextElements)
+            {
+                switch (element)
+                {
+                    case HeadingElement heading:
+                        foreach (var group in SplitSpansIntoParagraphs(heading.Spans))
+                        {
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: true, context.Language));
+                        }
+                        break;
+                    case ParagraphElement paragraph:
+                        foreach (var group in SplitSpansIntoParagraphs(paragraph.Spans))
+                        {
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language));
+                        }
+                        break;
+                    case BulletListElement list:
+                        var orderNumber = 1;
+                        foreach (var item in list.Items)
+                        {
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(item.Spans, context.SlidePart, level: item.Depth, list.Ordered, forceBold: false, context.Language, orderNumber));
+                            orderNumber++;
+                        }
+                        break;
+                }
+            }
+
+            context.ShapeTree.Append(CreateSlidePlaceholderShape(
+                context.NextShapeId(),
+                "Content Placeholder",
+                bodyPlaceholder,
+                bodyParagraphs));
+        }
+        else if (bodyPlaceholder is null && bodyTextElements.Count > 0)
+        {
+            // Layout has no body placeholder: route body text back through the
+            // standalone path so content is not silently dropped.
+            nonTextElements.InsertRange(0, bodyTextElements);
+        }
+
+        // Non-text elements: render as standalone shapes using the layout engine for
+        // positioning, just as the non-placeholder path does.
+        if (nonTextElements.Count > 0)
+        {
+            var residualSlide = new MarpToPptx.Core.Models.Slide { Style = slideModel.Style };
+            residualSlide.Elements.AddRange(nonTextElements);
+            var plan = _layoutEngine.LayoutSlide(residualSlide, effectiveTheme);
+            var bodyStyle = effectiveTheme.Body;
+            foreach (var placed in plan.Elements)
+            {
+                switch (placed.Element)
+                {
+                    case HeadingElement heading:
+                        AddTextShape(context, placed.Frame, heading.Spans, ResolveHeadingStyle(effectiveTheme, heading.Level), effectiveTheme.InlineCode);
+                        break;
+                    case ParagraphElement paragraph:
+                        AddTextShape(context, placed.Frame, paragraph.Spans, bodyStyle, effectiveTheme.InlineCode);
+                        break;
+                    case BulletListElement list:
+                        AddBulletList(context, placed.Frame, list, bodyStyle);
+                        break;
+                    case ImageElement image:
+                        AddImage(context, placed.Frame, image.Source, image.AltText);
+                        break;
+                    case VideoElement video:
+                        AddVideo(context, placed.Frame, video.Source, video.AltText);
+                        break;
+                    case AudioElement audio:
+                        AddAudio(context, placed.Frame, audio.Source, audio.AltText);
+                        break;
+                    case CodeBlockElement code:
+                        AddCodeBlock(context, placed.Frame, code, effectiveTheme.Code);
+                        break;
+                    case TableElement table:
+                        AddTable(context, placed.Frame, table, bodyStyle);
+                        break;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
+    /// Creates a slide-level placeholder shape that inherits geometry and text styling
+    /// from the matching layout/master placeholder. The shape carries an empty
+    /// <c>&lt;p:spPr/&gt;</c> (no transform) and a text body with the supplied paragraphs.
+    /// </summary>
+    private static P.Shape CreateSlidePlaceholderShape(uint shapeId, string name, TemplatePlaceholder placeholder, IEnumerable<A.Paragraph> paragraphs)
+    {
+        // Echo the layout placeholder's identity exactly. For typeless content
+        // placeholders (<p:ph idx="..."/> on obj layouts such as "Title and Content"),
+        // the slide-level ph must ALSO omit the type attribute or PowerPoint may
+        // not resolve the inheritance chain.
+        var ph = new P.PlaceholderShape();
+        if (placeholder.Type is { } phType)
+        {
+            ph.Type = phType;
+        }
+        if (placeholder.Index is { } idx)
+        {
+            ph.Index = idx;
+        }
+
+        var textBody = new P.TextBody(new A.BodyProperties(), new A.ListStyle());
+        foreach (var paragraph in paragraphs)
+        {
+            textBody.Append(paragraph.CloneNode(true));
+        }
+
+        return new P.Shape(
+            new P.NonVisualShapeProperties(
+                new P.NonVisualDrawingProperties { Id = shapeId, Name = name },
+                new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                new P.ApplicationNonVisualDrawingProperties(ph)),
+            new P.ShapeProperties(),
+            textBody);
+    }
+
+    /// <summary>
+    /// Builds a paragraph for use inside a template placeholder shape. Unlike
+    /// <see cref="CreateParagraphFromSpans"/>, runs here omit font size, colour fill,
+    /// and font family so the layout/master text styles cascade. Plain (non-list)
+    /// paragraphs emit <c>&lt;a:buNone/&gt;</c> so they do not pick up the body
+    /// placeholder's default bullet.
+    /// </summary>
+    private static A.Paragraph CreateTemplateParagraphFromSpans(
+        IReadOnlyList<InlineSpan> spans,
+        SlidePart slidePart,
+        int? level,
+        bool ordered,
+        bool forceBold,
+        string language,
+        int orderNumber = 1)
+    {
+        var paragraph = new A.Paragraph();
+        var paragraphProperties = new A.ParagraphProperties();
+        if (level is not null)
+        {
+            paragraphProperties.Level = level.Value;
+            if (ordered)
+            {
+                paragraphProperties.Append(new A.AutoNumberedBullet { Type = A.TextAutoNumberSchemeValues.ArabicPeriod, StartAt = orderNumber });
+            }
+        }
+        else
+        {
+            paragraphProperties.Append(new A.NoBullet());
+        }
+        paragraph.Append(paragraphProperties);
+
+        foreach (var span in spans.Where(s => s.Text.Length > 0))
+        {
+            if (span.Text == "\n")
+            {
+                paragraph.Append(new A.Break());
+                continue;
+            }
+
+            var runProperties = new A.RunProperties { Language = language };
+            if (span.Bold || forceBold)
+            {
+                runProperties.Bold = true;
+            }
+            if (span.Italic)
+            {
+                runProperties.Italic = true;
+            }
+            if (span.Strikethrough)
+            {
+                runProperties.Strike = A.TextStrikeValues.SingleStrike;
+            }
+            if (span.HyperlinkUrl is not null &&
+                Uri.TryCreate(span.HyperlinkUrl, UriKind.Absolute, out var hlinkUri))
+            {
+                var hlinkRel = slidePart.AddHyperlinkRelationship(hlinkUri, true);
+                runProperties.Append(new A.HyperlinkOnClick { Id = hlinkRel.Id });
+            }
+
+            paragraph.Append(new A.Run(runProperties, new A.Text(span.Text)));
+        }
+
+        paragraph.Append(new A.EndParagraphRunProperties { Language = language });
+        return paragraph;
+    }
+
 
     private static void AddNotesSlide(PresentationPart presentationPart, SlidePart slidePart, IReadOnlyList<InlineSpan> noteSpans, string notes, ThemeDefinition theme, string language)
     {
@@ -556,6 +830,11 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddBackground(SlideStyle style, SlideRenderContext context)
     {
+        if (context.UseTemplateStyle)
+        {
+            return;
+        }
+
         var backgroundColor = style.BackgroundColor ?? context.Theme.BackgroundColor;
         if (!string.IsNullOrWhiteSpace(backgroundColor))
         {
@@ -1113,13 +1392,13 @@ public sealed class OpenXmlPptxRenderer
 
         var footerStyle = new TextStyle(10, bodyStyle.Color, bodyStyle.FontFamily, false);
 
-        if (!string.IsNullOrWhiteSpace(style.Header))
+        if (!context.UseTemplateStyle && !string.IsNullOrWhiteSpace(style.Header))
         {
             var headerWidth = slideWidth - (marginX * 2);
             AddTextShape(context, new Rect(marginX, headerY, headerWidth, headerHeight), style.Header!, footerStyle);
         }
 
-        if (!string.IsNullOrWhiteSpace(style.Footer))
+        if (!context.UseTemplateStyle && !string.IsNullOrWhiteSpace(style.Footer))
         {
             var footerWidth = style.Paginate == true
                 ? slideWidth - (marginX * 2) - pageNumWidth - 8.0
@@ -1986,9 +2265,12 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets, string language = "en-US")
+    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, string language = "en-US")
     {
-        private uint _shapeId = 1;
+        private uint _shapeId = shapeTree.Descendants<P.NonVisualDrawingProperties>()
+            .Select(properties => properties.Id?.Value ?? 0U)
+            .DefaultIfEmpty(0U)
+            .Max();
 
         public SlidePart SlidePart { get; } = slidePart;
 
@@ -1999,6 +2281,8 @@ public sealed class OpenXmlPptxRenderer
         public ThemeDefinition Theme { get; } = theme;
 
         public RemoteAssetResolver? RemoteAssets { get; } = remoteAssets;
+
+        public bool UseTemplateStyle { get; } = useTemplateStyle;
 
         public string Language { get; } = language;
 

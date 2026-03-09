@@ -968,9 +968,361 @@ public class PptxRendererTests
         Assert.Empty(validationErrors);
     }
 
+    [Fact]
+    public void Renderer_SelectsNamedTemplateLayout_FromSlideDirective()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultipleLayouts(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Comparison -->
+            # Title Slide
+
+            Body text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        Assert.Equal("/ppt/slideLayouts/slideLayout3.xml", slidePart.SlideLayoutPart?.Uri.ToString());
+        Assert.Null(GetBackgroundColor(slidePart));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_UsesFrontMatterLayout_AsDefaultForContentSlidesOnly()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultipleLayouts(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            layout: Comparison
+            backgroundColor: "#123456"
+            paginate: true
+            ---
+
+            # Title Slide
+
+            Intro text.
+
+            ---
+
+            ## Content Slide
+
+            Body text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+
+        Assert.Equal(2, slideParts.Length);
+        Assert.Equal("/ppt/slideLayouts/slideLayout1.xml", slideParts[0].SlideLayoutPart?.Uri.ToString());
+        Assert.Equal("/ppt/slideLayouts/slideLayout3.xml", slideParts[1].SlideLayoutPart?.Uri.ToString());
+        Assert.Equal("123456", GetBackgroundColor(slideParts[0]));
+        Assert.Null(GetBackgroundColor(slideParts[1]));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_WritesContentIntoTemplatePlaceholders_WhenNamedLayoutCarriesThem()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            # Slide Heading
+
+            Plain body paragraph with **bold** span.
+
+            - First bullet
+            - Second bullet
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Title placeholder shape: <p:ph type="title">, no transform, contains the H1 text.
+        var titleShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Title);
+        Assert.Null(titleShape.ShapeProperties?.Transform2D);
+        Assert.Contains(titleShape.Descendants<A.Text>(), t => t.Text == "Slide Heading");
+
+        // Title runs omit font size / colour fill / font family so layout styles cascade.
+        var titleRun = titleShape.Descendants<A.Run>().First();
+        Assert.Null(titleRun.RunProperties?.FontSize);
+        Assert.Empty(titleRun.RunProperties!.Descendants<A.SolidFill>());
+        Assert.Empty(titleRun.RunProperties!.Descendants<A.LatinFont>());
+
+        // Body placeholder shape: <p:ph type="body" idx="1">, echoes the layout's index.
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var bodyPh = bodyShape.NonVisualShapeProperties!.ApplicationNonVisualDrawingProperties!
+            .GetFirstChild<P.PlaceholderShape>()!;
+        Assert.Equal(1U, bodyPh.Index?.Value);
+        Assert.Null(bodyShape.ShapeProperties?.Transform2D);
+
+        // Body collapses paragraph + list into one shape: plain para gets <a:buNone/>,
+        // bullet items keep their level and inherit layout bullet styling (no explicit char).
+        var bodyParagraphs = bodyShape.TextBody!.Elements<A.Paragraph>().ToArray();
+        Assert.Equal(3, bodyParagraphs.Length);
+        Assert.NotNull(bodyParagraphs[0].ParagraphProperties?.GetFirstChild<A.NoBullet>());
+        Assert.Equal(0, bodyParagraphs[1].ParagraphProperties?.Level?.Value);
+        Assert.Null(bodyParagraphs[1].ParagraphProperties?.GetFirstChild<A.NoBullet>());
+        Assert.Null(bodyParagraphs[1].ParagraphProperties?.GetFirstChild<A.CharacterBullet>());
+
+        // Inline bold survives; bold span lives inside the plain paragraph.
+        var boldRun = bodyParagraphs[0].Elements<A.Run>()
+            .First(r => r.Descendants<A.Text>().Any(t => t.Text == "bold"));
+        Assert.True(boldRun.RunProperties?.Bold?.Value);
+
+        // Standalone-shape path was NOT taken (no shape named "Text").
+        Assert.DoesNotContain(slidePart.Slide!.Descendants<P.Shape>(),
+            s => s.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Text");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FallsBackToStandaloneShapes_WhenNamedLayoutLacksPlaceholders()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultipleLayouts(templatePath);
+
+        // "Comparison" layout in this template fixture has no <p:ph> shapes at all,
+        // so TryRenderIntoTemplatePlaceholders must return false and the slide must
+        // still carry its content via the standalone-text-box path.
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Comparison -->
+            # Heading
+
+            Body text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // No slide-level placeholder shapes were emitted.
+        Assert.DoesNotContain(slidePart.Slide!.Descendants<P.Shape>(), s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>() is not null);
+
+        // Standalone shapes carry the content.
+        Assert.Contains(slidePart.Slide!.Descendants<P.Shape>(),
+            s => s.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Title");
+        Assert.Contains(slidePart.Slide!.Descendants<P.Shape>(),
+            s => s.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Text");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+
     /// <summary>
-    /// Creates a minimal template PPTX with three layouts: Title (type="title"),
-    /// Text/Content (type="tx"), and Blank (type="blank").
+    /// Creates a minimal template PPTX with a single named layout that carries both a
+    /// title placeholder (no idx) and a body placeholder (idx=1). The layout has type
+    /// <c>tx</c> so auto-selection does not pick it for a Title-kind slide; it is
+    /// reached only via a <c>layout:</c> directive, keeping the placeholder-rendering
+    /// path isolated under test.
+    /// </summary>
+    private static void CreateTemplateWithPlaceholderLayout(string path)
+    {
+        using var doc = PresentationDocument.Create(path, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
+        var presentationPart = doc.AddPresentationPart();
+        var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
+
+        static P.Shape MakePh(uint id, string name, P.PlaceholderValues type, uint? idx)
+        {
+            var ph = new P.PlaceholderShape { Type = type };
+            if (idx is { } i) { ph.Index = i; }
+            return new P.Shape(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = name },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(ph)),
+                new P.ShapeProperties(),
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+        }
+
+        var layoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        layoutPart.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                MakePh(2U, "Title Placeholder", P.PlaceholderValues.Title, null),
+                MakePh(3U, "Body Placeholder", P.PlaceholderValues.Body, 1U))),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.Text,
+            MatchingName = "Placeholder Content",
+        };
+        layoutPart.SlideLayout.CommonSlideData!.Name = "Placeholder Content";
+        layoutPart.AddPart(slideMasterPart, "rId1");
+        layoutPart.SlideLayout.Save();
+
+        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId2");
+        themePart.Theme = new A.Theme
+        {
+            Name = "Test",
+            ThemeElements = new A.ThemeElements(
+                new A.ColorScheme(
+                    new A.Dark1Color(new A.SystemColor { Val = A.SystemColorValues.WindowText, LastColor = "000000" }),
+                    new A.Light1Color(new A.SystemColor { Val = A.SystemColorValues.Window, LastColor = "FFFFFF" }),
+                    new A.Dark2Color(new A.RgbColorModelHex { Val = "1F2937" }),
+                    new A.Light2Color(new A.RgbColorModelHex { Val = "F8FAFC" }),
+                    new A.Accent1Color(new A.RgbColorModelHex { Val = "0F766E" }),
+                    new A.Accent2Color(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.Accent3Color(new A.RgbColorModelHex { Val = "F59E0B" }),
+                    new A.Accent4Color(new A.RgbColorModelHex { Val = "DC2626" }),
+                    new A.Accent5Color(new A.RgbColorModelHex { Val = "7C3AED" }),
+                    new A.Accent6Color(new A.RgbColorModelHex { Val = "0891B2" }),
+                    new A.Hyperlink(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.FollowedHyperlinkColor(new A.RgbColorModelHex { Val = "7C3AED" }))
+                { Name = "Test" },
+                new A.FontScheme(
+                    new A.MajorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }),
+                    new A.MinorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }))
+                { Name = "Test" },
+                new A.FormatScheme(
+                    new A.FillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })),
+                    new A.LineStyleList(
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 6350 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 12700 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 19050 }),
+                    new A.EffectStyleList(
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList())),
+                    new A.BackgroundFillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })))
+                { Name = "Test" }),
+            ObjectDefaults = new A.ObjectDefaults(),
+            ExtraColorSchemeList = new A.ExtraColorSchemeList(),
+        };
+        themePart.Theme.Save();
+
+        slideMasterPart.SlideMaster = new P.SlideMaster(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })))),
+            new P.ColorMap
+            {
+                Background1 = A.ColorSchemeIndexValues.Light1,
+                Text1 = A.ColorSchemeIndexValues.Dark1,
+                Background2 = A.ColorSchemeIndexValues.Light2,
+                Text2 = A.ColorSchemeIndexValues.Dark2,
+                Accent1 = A.ColorSchemeIndexValues.Accent1,
+                Accent2 = A.ColorSchemeIndexValues.Accent2,
+                Accent3 = A.ColorSchemeIndexValues.Accent3,
+                Accent4 = A.ColorSchemeIndexValues.Accent4,
+                Accent5 = A.ColorSchemeIndexValues.Accent5,
+                Accent6 = A.ColorSchemeIndexValues.Accent6,
+                Hyperlink = A.ColorSchemeIndexValues.Hyperlink,
+                FollowedHyperlink = A.ColorSchemeIndexValues.FollowedHyperlink,
+            },
+            new P.SlideLayoutIdList(
+                new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(layoutPart) }),
+            new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
+        slideMasterPart.SlideMaster.Save();
+
+        presentationPart.Presentation = new P.Presentation(
+            new P.SlideMasterIdList(new P.SlideMasterId { Id = 2147483648U, RelationshipId = presentationPart.GetIdOfPart(slideMasterPart) }),
+            new P.SlideIdList(),
+            new P.SlideSize { Cx = 12192000, Cy = 6858000, Type = P.SlideSizeValues.Screen16x9 },
+            new P.NotesSize { Cx = 6858000, Cy = 9144000 },
+            new P.DefaultTextStyle());
+        presentationPart.Presentation.Save();
+
+        doc.Save();
+    }
+
+
+    /// <summary>
+    /// Creates a minimal template PPTX with four layouts: Title (type="title"),
+    /// two content layouts (type="tx"), and Blank (type="blank").
     /// </summary>
     private static void CreateTemplateWithMultipleLayouts(string path)
     {
@@ -992,7 +1344,11 @@ public class PptxRendererTests
                     new A.ChildOffset { X = 0L, Y = 0L },
                     new A.ChildExtents { Cx = 0L, Cy = 0L })))),
             new P.ColorMapOverride(new A.MasterColorMapping()))
-        { Type = P.SlideLayoutValues.Title };
+        {
+            Type = P.SlideLayoutValues.Title,
+            MatchingName = "Title Slide",
+        };
+        titleLayoutPart.SlideLayout.CommonSlideData!.Name = "Title Slide";
         titleLayoutPart.AddPart(slideMasterPart, "rId1");
         titleLayoutPart.SlideLayout.Save();
 
@@ -1009,7 +1365,11 @@ public class PptxRendererTests
                     new A.ChildOffset { X = 0L, Y = 0L },
                     new A.ChildExtents { Cx = 0L, Cy = 0L })))),
             new P.ColorMapOverride(new A.MasterColorMapping()))
-        { Type = P.SlideLayoutValues.Text };
+        {
+            Type = P.SlideLayoutValues.Text,
+            MatchingName = "Title and Content",
+        };
+        contentLayoutPart.SlideLayout.CommonSlideData!.Name = "Title and Content";
         contentLayoutPart.AddPart(slideMasterPart, "rId1");
         contentLayoutPart.SlideLayout.Save();
 
@@ -1024,16 +1384,39 @@ public class PptxRendererTests
                     new A.Offset { X = 0L, Y = 0L },
                     new A.Extents { Cx = 0L, Cy = 0L },
                     new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })))) ,
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.Text,
+            MatchingName = "Comparison",
+        };
+        blankLayoutPart.SlideLayout.CommonSlideData!.Name = "Comparison";
+        blankLayoutPart.AddPart(slideMasterPart, "rId1");
+        blankLayoutPart.SlideLayout.Save();
+
+        var emptyLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId4");
+        emptyLayoutPart.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
                     new A.ChildExtents { Cx = 0L, Cy = 0L })))),
             new P.ColorMapOverride(new A.MasterColorMapping()))
         {
             Type = P.SlideLayoutValues.Blank,
             Preserve = true,
+            MatchingName = "Blank",
         };
-        blankLayoutPart.AddPart(slideMasterPart, "rId1");
-        blankLayoutPart.SlideLayout.Save();
+        emptyLayoutPart.SlideLayout.CommonSlideData!.Name = "Blank";
+        emptyLayoutPart.AddPart(slideMasterPart, "rId1");
+        emptyLayoutPart.SlideLayout.Save();
 
-        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId4");
+        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId5");
         themePart.Theme = new A.Theme
         {
             Name = "Test",
@@ -1108,7 +1491,8 @@ public class PptxRendererTests
             new P.SlideLayoutIdList(
                 new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(titleLayoutPart) },
                 new P.SlideLayoutId { Id = 2147483650U, RelationshipId = slideMasterPart.GetIdOfPart(contentLayoutPart) },
-                new P.SlideLayoutId { Id = 2147483651U, RelationshipId = slideMasterPart.GetIdOfPart(blankLayoutPart) }),
+                new P.SlideLayoutId { Id = 2147483651U, RelationshipId = slideMasterPart.GetIdOfPart(blankLayoutPart) },
+                new P.SlideLayoutId { Id = 2147483652U, RelationshipId = slideMasterPart.GetIdOfPart(emptyLayoutPart) }),
             new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
         slideMasterPart.SlideMaster.Save();
 
