@@ -330,7 +330,10 @@ public sealed class OpenXmlPptxRenderer
         if (templateSlide is not null &&
             TryRenderIntoTemplateSlideTextShapes(context, slideModel, effectiveTheme))
         {
-            AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
+            if (!useTemplateStyle)
+            {
+                AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
+            }
             slidePart.Slide.Save();
             AppendSlideId(presentationPart, slidePart);
             if (!string.IsNullOrWhiteSpace(slideModel.Notes))
@@ -883,8 +886,44 @@ public sealed class OpenXmlPptxRenderer
             }
         }
 
-        shape.RemoveAllChildren<P.TextBody>();
-        shape.Append(replacementTextBody);
+        var existingTextBodyElement = shape.TextBody;
+        if (existingTextBodyElement is not null)
+        {
+            shape.ReplaceChild(replacementTextBody, existingTextBodyElement);
+        }
+        else
+        {
+            // Insert the TextBody at the correct position: after spPr/style and before extLst.
+            DocumentFormat.OpenXml.OpenXmlElement? insertAfter = null;
+            var shapeProperties = shape.GetFirstChild<P.ShapeProperties>();
+            var shapeStyle = shape.GetFirstChild<P.ShapeStyle>();
+
+            if (shapeStyle is not null)
+            {
+                insertAfter = shapeStyle;
+            }
+            else if (shapeProperties is not null)
+            {
+                insertAfter = shapeProperties;
+            }
+
+            if (insertAfter is not null)
+            {
+                shape.InsertAfter(replacementTextBody, insertAfter);
+            }
+            else
+            {
+                var extLst = shape.GetFirstChild<P.ExtensionList>();
+                if (extLst is not null)
+                {
+                    shape.InsertBefore(replacementTextBody, extLst);
+                }
+                else
+                {
+                    shape.Append(replacementTextBody);
+                }
+            }
+        }
     }
 
     private static A.Paragraph CreateTemplateSlideParagraphFromTemplate(A.Paragraph template, TemplateTextParagraph content, SlidePart slidePart, string language)
@@ -946,11 +985,28 @@ public sealed class OpenXmlPptxRenderer
         var candidates = new List<TemplateTextShapeCandidate>();
         foreach (var shape in shapeTree.Elements<P.Shape>())
         {
-            if (shape.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?.GetFirstChild<P.PlaceholderShape>() is not null ||
-                shape.TextBody is null ||
+            // Skip shapes without text or without valid bounds.
+            if (shape.TextBody is null ||
                 !TryGetShapeBounds(shape, out var x, out var y, out var cx, out var cy))
             {
                 continue;
+            }
+
+            // Allow most placeholder-based text boxes (e.g., title/content), but skip
+            // known non-content placeholders such as footer, date, and slide number.
+            var placeholder = shape.NonVisualShapeProperties
+                ?.ApplicationNonVisualDrawingProperties
+                ?.GetFirstChild<P.PlaceholderShape>();
+
+            if (placeholder is not null)
+            {
+                var placeholderType = placeholder.Type?.Value;
+                if (placeholderType == P.PlaceholderValues.Footer ||
+                    placeholderType == P.PlaceholderValues.DateAndTime ||
+                    placeholderType == P.PlaceholderValues.SlideNumber)
+                {
+                    continue;
+                }
             }
 
             candidates.Add(new TemplateTextShapeCandidate(shape, x, y, cx, cy));
