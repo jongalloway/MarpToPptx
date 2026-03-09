@@ -47,7 +47,19 @@ public sealed class OpenXmlPptxRenderer
             }
             var allLayouts = EnsurePresentationScaffold(presentationPart);
             var templateSlides = GetSlidesInPresentationOrder(presentationPart);
-            var templateSelector = new SlideTemplateSelector(allLayouts, templateSlides);
+
+            // Pre-clone all template slide parts before ClearSlides runs.
+            // In some SDK environments (e.g., DocumentFormat.OpenXml 3.x on .NET 10),
+            // removing a slide's <p:sldId> XML reference automatically destroys the
+            // SlidePart and ALL its sub-parts (images, layouts, etc.). By pre-cloning
+            // each template slide into a new SlidePart first, we add an extra OPC
+            // relationship from the pre-clone to every sub-part, keeping those sub-parts
+            // alive even after the original SlidePart is destroyed.
+            var preClonedTemplateSlides = templateSlides.Count > 0
+                ? templateSlides.Select(sp => PreCloneTemplateSlidePart(presentationPart, sp)).ToArray()
+                : [];
+
+            var templateSelector = new SlideTemplateSelector(allLayouts, preClonedTemplateSlides);
 
             ClearSlides(presentationPart);
 
@@ -62,6 +74,9 @@ public sealed class OpenXmlPptxRenderer
             }
 
             DeleteSlideParts(presentationPart, templateSlides);
+            // Remove pre-cloned orphaned slides. Shared sub-parts (images, layouts) are
+            // preserved because they are also referenced by the rendered slide parts.
+            DeleteSlideParts(presentationPart, preClonedTemplateSlides);
 
             EnsureDocumentProperties(document, deck, options.TemplatePath);
             presentationPart.Presentation!.Save();
@@ -303,7 +318,7 @@ public sealed class OpenXmlPptxRenderer
         }
         else
         {
-            slidePart = CloneTemplateSlidePart(presentationPart, templateSlide);
+            slidePart = CloneTemplateSlidePart(presentationPart, templateSlide.SlidePart);
             slidePart.Slide!.CommonSlideData ??= new P.CommonSlideData();
             shapeTree = slidePart.Slide.CommonSlideData.ShapeTree ??= new P.ShapeTree(
                 CreateRootGroupShapeProperties(),
@@ -1073,31 +1088,60 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private static SlidePart CloneTemplateSlidePart(PresentationPart presentationPart, TemplateSlideReference templateSlide)
+    private static SlidePart CloneTemplateSlidePart(PresentationPart presentationPart, SlidePart templateSlidePart)
     {
         var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
-        // Clone again from the pre-snapshotted ClonedSlide so that each rendered slide
-        // gets an independent DOM tree. This is necessary when the same Template[n]
-        // is used for multiple slides: the text-replacement pass modifies the DOM
-        // in-place, so each slide must start from a fresh copy.
-        slidePart.Slide = (P.Slide)templateSlide.ClonedSlide.CloneNode(true);
-
-        foreach (var (part, relId) in templateSlide.SubParts)
-        {
-            slidePart.AddPart(part, relId);
-        }
-
-        foreach (var (relType, uri, id) in templateSlide.ExternalRelationships)
-        {
-            slidePart.AddExternalRelationship(relType, uri, id);
-        }
-
-        foreach (var (uri, isExternal, id) in templateSlide.HyperlinkRelationships)
-        {
-            slidePart.AddHyperlinkRelationship(uri, isExternal, id);
-        }
-
+        // Clone the slide XML so that each rendered slide gets an independent DOM tree.
+        // This is necessary when the same Template[n] is used for multiple slides: the
+        // text-replacement pass modifies the DOM in-place, so each slide must start from
+        // a fresh copy.
+        slidePart.Slide = (P.Slide)templateSlidePart.Slide!.CloneNode(true);
+        CopySlidePartRelationships(templateSlidePart, slidePart);
         return slidePart;
+    }
+
+    /// <summary>
+    /// Creates a pre-clone of <paramref name="source"/> by adding a new <see cref="SlidePart"/>
+    /// to <paramref name="presentationPart"/> that shares all sub-parts of <paramref name="source"/>
+    /// (images, layouts, etc.). The pre-clone must be created <em>before</em> <c>ClearSlides</c>
+    /// runs, because in some SDK environments (e.g., DocumentFormat.OpenXml 3.x on .NET 10)
+    /// removing a slide's <c>&lt;p:sldId&gt;</c> XML reference also destroys the originating
+    /// <see cref="SlidePart"/> and all its sub-parts. By adding an extra OPC relationship to
+    /// each sub-part via the pre-clone, those sub-parts survive the original slide's destruction.
+    /// </summary>
+    private static SlidePart PreCloneTemplateSlidePart(PresentationPart presentationPart, SlidePart source)
+    {
+        var clone = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
+        clone.Slide = (P.Slide)source.Slide!.CloneNode(true);
+        CopySlidePartRelationships(source, clone);
+        return clone;
+    }
+
+    /// <summary>
+    /// Copies all non-notes sub-part relationships, external relationships, and hyperlink
+    /// relationships from <paramref name="source"/> to <paramref name="destination"/>.
+    /// </summary>
+    private static void CopySlidePartRelationships(SlidePart source, SlidePart destination)
+    {
+        foreach (var relationship in source.Parts)
+        {
+            if (relationship.OpenXmlPart is NotesSlidePart)
+            {
+                continue;
+            }
+
+            destination.AddPart(relationship.OpenXmlPart, relationship.RelationshipId);
+        }
+
+        foreach (var externalRelationship in source.ExternalRelationships)
+        {
+            destination.AddExternalRelationship(externalRelationship.RelationshipType, externalRelationship.Uri, externalRelationship.Id);
+        }
+
+        foreach (var hyperlinkRelationship in source.HyperlinkRelationships)
+        {
+            destination.AddHyperlinkRelationship(hyperlinkRelationship.Uri, hyperlinkRelationship.IsExternal, hyperlinkRelationship.Id);
+        }
     }
 
 
