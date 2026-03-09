@@ -6,7 +6,10 @@ using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Pptx.Rendering;
 
-internal sealed record TemplateSlideReference(int SlideNumber, SlidePart SlidePart);
+/// <param name="SlideNumber">1-based position of the template slide.</param>
+/// <param name="SlidePart">The original template <see cref="SlidePart"/>; used to clone artwork and relationships into a new slide.</param>
+/// <param name="LayoutPart">The <see cref="SlideLayoutPart"/> captured eagerly at selector construction time, before the template slides are cleared from the slide list.</param>
+internal sealed record TemplateSlideReference(int SlideNumber, SlidePart SlidePart, SlideLayoutPart? LayoutPart);
 
 internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle, TemplateSlideReference? TemplateSlide = null);
 
@@ -49,12 +52,16 @@ internal sealed class SlideTemplateSelector
     private const int LayoutScale = 12700;
 
     private readonly IReadOnlyList<SlideLayoutPart> _layouts;
-    private readonly IReadOnlyList<SlidePart> _templateSlides;
+    private readonly IReadOnlyList<TemplateSlideReference> _templateSlides;
 
     public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts, IReadOnlyList<SlidePart>? templateSlides = null)
     {
         _layouts = layouts;
-        _templateSlides = templateSlides ?? [];
+        // Eagerly capture SlideLayoutPart for each template slide while the parts are
+        // guaranteed alive (before ClearSlides removes their SlideId XML references,
+        // which can cause the SDK to orphan and destroy parts in some environments).
+        _templateSlides = templateSlides?.Select(
+            (sp, i) => new TemplateSlideReference(i + 1, sp, sp.SlideLayoutPart)).ToArray() ?? [];
     }
 
     /// <summary>
@@ -99,7 +106,7 @@ internal sealed class SlideTemplateSelector
         if (!string.IsNullOrWhiteSpace(requestedLayout))
         {
             if (TryResolveTemplateSlide(requestedLayout, out var templateSlide) &&
-                templateSlide.SlidePart.SlideLayoutPart is { } templateSlideLayout)
+                templateSlide.LayoutPart is { } templateSlideLayout)
             {
                 return new SelectedSlideLayout(templateSlideLayout, UseTemplateStyle: true, templateSlide);
             }
@@ -268,7 +275,7 @@ internal sealed class SlideTemplateSelector
             return false;
         }
 
-        templateSlide = new TemplateSlideReference(slideNumber, _templateSlides[slideNumber - 1]);
+        templateSlide = _templateSlides[slideNumber - 1];
         return true;
     }
 
