@@ -1373,8 +1373,8 @@ public class PptxRendererTests
         contentLayoutPart.AddPart(slideMasterPart, "rId1");
         contentLayoutPart.SlideLayout.Save();
 
-        var blankLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId3");
-        blankLayoutPart.SlideLayout = new P.SlideLayout(
+        var comparisonLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId3");
+        comparisonLayoutPart.SlideLayout = new P.SlideLayout(
             new P.CommonSlideData(new P.ShapeTree(
                 new P.NonVisualGroupShapeProperties(
                     new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
@@ -1390,12 +1390,12 @@ public class PptxRendererTests
             Type = P.SlideLayoutValues.Text,
             MatchingName = "Comparison",
         };
-        blankLayoutPart.SlideLayout.CommonSlideData!.Name = "Comparison";
-        blankLayoutPart.AddPart(slideMasterPart, "rId1");
-        blankLayoutPart.SlideLayout.Save();
+        comparisonLayoutPart.SlideLayout.CommonSlideData!.Name = "Comparison";
+        comparisonLayoutPart.AddPart(slideMasterPart, "rId1");
+        comparisonLayoutPart.SlideLayout.Save();
 
-        var emptyLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId4");
-        emptyLayoutPart.SlideLayout = new P.SlideLayout(
+        var blankLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId4");
+        blankLayoutPart.SlideLayout = new P.SlideLayout(
             new P.CommonSlideData(new P.ShapeTree(
                 new P.NonVisualGroupShapeProperties(
                     new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
@@ -1412,9 +1412,9 @@ public class PptxRendererTests
             Preserve = true,
             MatchingName = "Blank",
         };
-        emptyLayoutPart.SlideLayout.CommonSlideData!.Name = "Blank";
-        emptyLayoutPart.AddPart(slideMasterPart, "rId1");
-        emptyLayoutPart.SlideLayout.Save();
+        blankLayoutPart.SlideLayout.CommonSlideData!.Name = "Blank";
+        blankLayoutPart.AddPart(slideMasterPart, "rId1");
+        blankLayoutPart.SlideLayout.Save();
 
         var themePart = slideMasterPart.AddNewPart<ThemePart>("rId5");
         themePart.Theme = new A.Theme
@@ -1491,8 +1491,8 @@ public class PptxRendererTests
             new P.SlideLayoutIdList(
                 new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(titleLayoutPart) },
                 new P.SlideLayoutId { Id = 2147483650U, RelationshipId = slideMasterPart.GetIdOfPart(contentLayoutPart) },
-                new P.SlideLayoutId { Id = 2147483651U, RelationshipId = slideMasterPart.GetIdOfPart(blankLayoutPart) },
-                new P.SlideLayoutId { Id = 2147483652U, RelationshipId = slideMasterPart.GetIdOfPart(emptyLayoutPart) }),
+                new P.SlideLayoutId { Id = 2147483651U, RelationshipId = slideMasterPart.GetIdOfPart(comparisonLayoutPart) },
+                new P.SlideLayoutId { Id = 2147483652U, RelationshipId = slideMasterPart.GetIdOfPart(blankLayoutPart) }),
             new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
         slideMasterPart.SlideMaster.Save();
 

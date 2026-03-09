@@ -1,7 +1,6 @@
 using DocumentFormat.OpenXml.Packaging;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
-using System.Xml.Linq;
 using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Pptx.Rendering;
@@ -256,21 +255,13 @@ internal sealed class SlideTemplateSelector
             yield break;
         }
 
-        var document = XDocument.Parse(slideLayout.OuterXml);
-        var root = document.Root;
-        if (root is null)
-        {
-            yield break;
-        }
-
-        var matchingName = root.Attribute("matchingName")?.Value;
+        var matchingName = slideLayout.MatchingName?.Value;
         if (!string.IsNullOrWhiteSpace(matchingName))
         {
             yield return matchingName;
         }
 
-        XNamespace presentationNamespace = "http://schemas.openxmlformats.org/presentationml/2006/main";
-        var commonSlideDataName = root.Element(presentationNamespace + "cSld")?.Attribute("name")?.Value;
+        var commonSlideDataName = slideLayout.CommonSlideData?.Name?.Value;
         if (!string.IsNullOrWhiteSpace(commonSlideDataName))
         {
             yield return commonSlideDataName;

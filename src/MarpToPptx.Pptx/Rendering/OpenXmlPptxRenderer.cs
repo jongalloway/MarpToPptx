@@ -266,11 +266,28 @@ public sealed class OpenXmlPptxRenderer
         if (slideIdList is null)
         {
             presentationPart.Presentation!.SlideIdList = new P.SlideIdList();
+
+            foreach (var slidePart in presentationPart.SlideParts.ToList())
+            {
+                presentationPart.DeletePart(slidePart);
+            }
+
             return;
         }
 
+        // For each slide ID, delete the underlying SlidePart (and its dependent parts)
+        // before removing the slide ID entry to avoid leaving orphaned parts in the package.
         foreach (var slideId in slideIdList.Elements<P.SlideId>().ToList())
         {
+            var relId = slideId.RelationshipId?.Value;
+            if (!string.IsNullOrEmpty(relId))
+            {
+                if (presentationPart.TryGetPartById(relId, out var part) && part is SlidePart slidePart)
+                {
+                    presentationPart.DeletePart(slidePart);
+                }
+            }
+
             slideId.Remove();
         }
     }
@@ -407,7 +424,7 @@ public sealed class OpenXmlPptxRenderer
     /// the caller should fall back to the standalone-shape path unchanged.
     ///
     /// Content mapping:
-    ///   - first level-1 heading -> title placeholder (title | ctrTitle)
+    ///   - first heading (any level: #, ##, etc.) -> title placeholder (title | ctrTitle)
     ///   - remaining headings, paragraphs, bullet/numbered lists -> body placeholder
     ///     (body | subTitle), collapsed into a single shape with multiple paragraphs
     ///   - images, video, audio, code blocks, tables -> standalone positioned shapes
@@ -1406,7 +1423,10 @@ public sealed class OpenXmlPptxRenderer
             AddTextShape(context, new Rect(marginX, footerY, footerWidth, footerHeight), style.Footer!, footerStyle);
         }
 
-        if (style.Paginate == true)
+        // For template-bound slides, rely on the template's own sldNum placeholder for slide
+        // numbering and styling; emitting an explicit standalone number shape would duplicate
+        // the counter and force the default MarpToPptx theme colors onto the slide number.
+        if (!context.UseTemplateStyle && style.Paginate == true)
         {
             var pageNumX = slideWidth - marginX - pageNumWidth;
             var fieldId = Guid.NewGuid().ToString("B").ToUpperInvariant();
