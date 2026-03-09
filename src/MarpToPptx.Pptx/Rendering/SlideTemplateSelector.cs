@@ -6,7 +6,9 @@ using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Pptx.Rendering;
 
-internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle);
+internal sealed record TemplateSlideReference(int SlideNumber, SlidePart SlidePart);
+
+internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle, TemplateSlideReference? TemplateSlide = null);
 
 /// <summary>
 /// Identity of a placeholder shape on a template layout, captured by the
@@ -47,10 +49,12 @@ internal sealed class SlideTemplateSelector
     private const int LayoutScale = 12700;
 
     private readonly IReadOnlyList<SlideLayoutPart> _layouts;
+    private readonly IReadOnlyList<SlidePart> _templateSlides;
 
-    public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts)
+    public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts, IReadOnlyList<SlidePart>? templateSlides = null)
     {
         _layouts = layouts;
+        _templateSlides = templateSlides ?? [];
     }
 
     /// <summary>
@@ -94,6 +98,12 @@ internal sealed class SlideTemplateSelector
         var requestedLayout = ResolveRequestedLayout(slide, kind, defaultContentLayout);
         if (!string.IsNullOrWhiteSpace(requestedLayout))
         {
+            if (TryResolveTemplateSlide(requestedLayout, out var templateSlide) &&
+                templateSlide.SlidePart.SlideLayoutPart is { } templateSlideLayout)
+            {
+                return new SelectedSlideLayout(templateSlideLayout, UseTemplateStyle: true, templateSlide);
+            }
+
             var namedLayout = FindLayoutByName(requestedLayout);
             if (namedLayout is not null)
             {
@@ -246,6 +256,40 @@ internal sealed class SlideTemplateSelector
         return kind == SlideKind.Content && !string.IsNullOrWhiteSpace(defaultContentLayout)
             ? defaultContentLayout
             : null;
+    }
+
+    private bool TryResolveTemplateSlide(string requestedLayout, out TemplateSlideReference templateSlide)
+    {
+        templateSlide = null!;
+
+        if (!TryParseTemplateSlideNumber(requestedLayout, out var slideNumber) ||
+            slideNumber < 1 || slideNumber > _templateSlides.Count)
+        {
+            return false;
+        }
+
+        templateSlide = new TemplateSlideReference(slideNumber, _templateSlides[slideNumber - 1]);
+        return true;
+    }
+
+    private static bool TryParseTemplateSlideNumber(string requestedLayout, out int slideNumber)
+    {
+        slideNumber = 0;
+        var trimmed = requestedLayout.Trim();
+
+        if (trimmed.StartsWith("Template[", StringComparison.OrdinalIgnoreCase) &&
+            trimmed.EndsWith("]", StringComparison.Ordinal))
+        {
+            return int.TryParse(trimmed[9..^1].Trim(), out slideNumber);
+        }
+
+        const string templateSlidePrefix = "Template Slide ";
+        if (trimmed.StartsWith(templateSlidePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return int.TryParse(trimmed[templateSlidePrefix.Length..].Trim(), out slideNumber);
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> GetLayoutNames(SlideLayoutPart layoutPart)
