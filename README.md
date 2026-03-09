@@ -71,6 +71,12 @@ layout: Title and Content
 # Agenda
 ```
 
+If the template's branded title slide is authored as slide content instead of a reusable layout, target the actual template slide directly:
+
+```md
+<!-- _layout: Template[1] -->
+```
+
 See [doc/using-templates.md](doc/using-templates.md) for the quickstart and [doc/template-authoring-guidelines.md](doc/template-authoring-guidelines.md) for the technical details.
 
 ## 📋 Features

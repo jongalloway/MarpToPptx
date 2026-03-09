@@ -63,6 +63,22 @@ Leave the underscore off and the change **sticks** until you change it again:
 ## Back to normal
 ```
 
+## 5. Use a specific slide from the template
+
+Some templates put the fancy title treatment on slide 1 itself instead of on a
+reusable layout. In that case, point MarpToPptx at the authored template slide:
+
+```markdown
+<!-- _layout: Template[1] -->
+```
+
+That clones template slide 1, keeps its background/artwork, and replaces its
+text boxes with your content. This is mainly useful for branded title slides.
+
+Use this only when the template's special title slide is not exposed as a real
+layout in PowerPoint. If you do see a normal layout name like `Title Slide` in
+the **Layout** dropdown, prefer that first.
+
 ## A complete minimal example
 
 ```markdown
@@ -89,6 +105,13 @@ Author Name · Conference 2026
 <!-- _layout: Section Header -->
 
 ## Part One
+```
+
+If your template's fancy title page is slide-authored instead of layout-authored,
+swap that first override for:
+
+```markdown
+<!-- _layout: Template[1] -->
 ```
 
 Run it with:

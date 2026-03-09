@@ -5,7 +5,18 @@ using P = DocumentFormat.OpenXml.Presentation;
 
 namespace MarpToPptx.Pptx.Rendering;
 
-internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle);
+/// <summary>
+/// A reference to a pre-cloned template slide part, created before <c>ClearSlides</c>
+/// removes the original slide's <c>&lt;p:sldId&gt;</c> XML reference. The pre-clone
+/// is a proper package member whose sub-parts (images, etc.) remain alive even after
+/// the original template slide and its parts are destroyed by the SDK.
+/// </summary>
+/// <param name="SlideNumber">1-based position of the template slide in the original presentation.</param>
+/// <param name="SlidePart">The pre-cloned <see cref="SlidePart"/>; alive for the lifetime of the rendering operation.</param>
+/// <param name="LayoutPart">The <see cref="SlideLayoutPart"/> captured from the pre-clone; safe to access at any time.</param>
+internal sealed record TemplateSlideReference(int SlideNumber, SlidePart SlidePart, SlideLayoutPart? LayoutPart);
+
+internal sealed record SelectedSlideLayout(SlideLayoutPart LayoutPart, bool UseTemplateStyle, TemplateSlideReference? TemplateSlide = null);
 
 /// <summary>
 /// Identity of a placeholder shape on a template layout, captured by the
@@ -46,10 +57,16 @@ internal sealed class SlideTemplateSelector
     private const int LayoutScale = 12700;
 
     private readonly IReadOnlyList<SlideLayoutPart> _layouts;
+    private readonly IReadOnlyList<TemplateSlideReference> _templateSlides;
 
-    public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts)
+    public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts, IReadOnlyList<SlidePart>? templateSlides = null)
     {
         _layouts = layouts;
+        // The caller (OpenXmlPptxRenderer.Render) passes pre-cloned SlidePart objects that
+        // were created before ClearSlides ran. Eagerly capture LayoutPart here so
+        // SelectLayout never needs to access it lazily through the SlidePart reference.
+        _templateSlides = templateSlides?.Select(
+            (sp, i) => new TemplateSlideReference(i + 1, sp, sp.SlideLayoutPart)).ToArray() ?? [];
     }
 
     /// <summary>
@@ -93,6 +110,12 @@ internal sealed class SlideTemplateSelector
         var requestedLayout = ResolveRequestedLayout(slide, kind, defaultContentLayout);
         if (!string.IsNullOrWhiteSpace(requestedLayout))
         {
+            if (TryResolveTemplateSlide(requestedLayout, out var templateSlide) &&
+                templateSlide.LayoutPart is { } templateSlideLayout)
+            {
+                return new SelectedSlideLayout(templateSlideLayout, UseTemplateStyle: true, templateSlide);
+            }
+
             var namedLayout = FindLayoutByName(requestedLayout);
             if (namedLayout is not null)
             {
@@ -245,6 +268,40 @@ internal sealed class SlideTemplateSelector
         return kind == SlideKind.Content && !string.IsNullOrWhiteSpace(defaultContentLayout)
             ? defaultContentLayout
             : null;
+    }
+
+    private bool TryResolveTemplateSlide(string requestedLayout, out TemplateSlideReference templateSlide)
+    {
+        templateSlide = null!;
+
+        if (!TryParseTemplateSlideNumber(requestedLayout, out var slideNumber) ||
+            slideNumber < 1 || slideNumber > _templateSlides.Count)
+        {
+            return false;
+        }
+
+        templateSlide = _templateSlides[slideNumber - 1];
+        return true;
+    }
+
+    private static bool TryParseTemplateSlideNumber(string requestedLayout, out int slideNumber)
+    {
+        slideNumber = 0;
+        var trimmed = requestedLayout.Trim();
+
+        if (trimmed.StartsWith("Template[", StringComparison.OrdinalIgnoreCase) &&
+            trimmed.EndsWith("]", StringComparison.Ordinal))
+        {
+            return int.TryParse(trimmed[9..^1].Trim(), out slideNumber);
+        }
+
+        const string templateSlidePrefix = "Template Slide ";
+        if (trimmed.StartsWith(templateSlidePrefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return int.TryParse(trimmed[templateSlidePrefix.Length..].Trim(), out slideNumber);
+        }
+
+        return false;
     }
 
     private static IEnumerable<string> GetLayoutNames(SlideLayoutPart layoutPart)

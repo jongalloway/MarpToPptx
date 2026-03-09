@@ -39,6 +39,11 @@ If the named layout has no title or body placeholder, the renderer falls
 back to standalone positioned text boxes for that content. The slide still
 opens cleanly, but template text styling will not apply.
 
+There is one separate path for authored template slides: `<!-- _layout: Template[1] -->`
+clones template slide 1 itself, preserves its existing slide artwork, and replaces
+its standalone text boxes heuristically. Use that when a template's branded title
+slide is not actually represented by a reusable PowerPoint layout.
+
 ## Checklist for a template you receive
 
 Work through this before committing to a template. The goal is to know which
@@ -172,6 +177,10 @@ Names vary per template; verify with the inspection snippet above. The
   ("Two Content", "Comparison") receive all text content in the first one.
   Body-placeholder search order: explicit `body`/`subTitle` first, then
   the first typeless `idx`-only placeholder (skipping `ftr`/`dt`/`sldNum`).
+- `Template[n]` slide cloning is heuristic, not semantic. It keeps the slide's
+  existing artwork, picks the largest upper-half text box as the title box, and
+  fills the remaining text boxes top-to-bottom. It is intended for title-slide-like
+  cases, not arbitrary multi-slot slide templating.
 - Picture placeholders (`type="pic"`) are not yet targeted; images render
   as standalone positioned shapes.
 - Slide-number, date, and footer placeholders are inherited from the

@@ -46,7 +46,20 @@ public sealed class OpenXmlPptxRenderer
                 EnsureRelationshipId(document, presentationPart, "rId1");
             }
             var allLayouts = EnsurePresentationScaffold(presentationPart);
-            var templateSelector = new SlideTemplateSelector(allLayouts);
+            var templateSlides = GetSlidesInPresentationOrder(presentationPart);
+
+            // Pre-clone all template slide parts before ClearSlides runs.
+            // In some SDK environments (e.g., DocumentFormat.OpenXml 3.x on .NET 10),
+            // removing a slide's <p:sldId> XML reference automatically destroys the
+            // SlidePart and ALL its sub-parts (images, layouts, etc.). By pre-cloning
+            // each template slide into a new SlidePart first, we add an extra OPC
+            // relationship from the pre-clone to every sub-part, keeping those sub-parts
+            // alive even after the original SlidePart is destroyed.
+            var preClonedTemplateSlides = templateSlides.Count > 0
+                ? templateSlides.Select(sp => PreCloneTemplateSlidePart(presentationPart, sp)).ToArray()
+                : [];
+
+            var templateSelector = new SlideTemplateSelector(allLayouts, preClonedTemplateSlides);
 
             ClearSlides(presentationPart);
 
@@ -56,9 +69,14 @@ public sealed class OpenXmlPptxRenderer
             {
                 var slideKind = SlideTemplateSelector.Classify(slideModel);
                 var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout);
-                AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language);
+                AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language, selectedLayout.TemplateSlide);
                 slideNumber++;
             }
+
+            DeleteSlideParts(presentationPart, templateSlides);
+            // Remove pre-cloned orphaned slides. Shared sub-parts (images, layouts) are
+            // preserved because they are also referenced by the rendered slide parts.
+            DeleteSlideParts(presentationPart, preClonedTemplateSlides);
 
             EnsureDocumentProperties(document, deck, options.TemplatePath);
             presentationPart.Presentation!.Save();
@@ -292,24 +310,41 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language)
+    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language, TemplateSlideReference? templateSlide = null)
     {
-        var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
-        slidePart.AddPart(slideLayoutPart, "rId1");
+        SlidePart slidePart;
+        P.ShapeTree shapeTree;
+        if (templateSlide is null)
+        {
+            slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
+            slidePart.AddPart(slideLayoutPart, "rId1");
 
-        var shapeTree = new P.ShapeTree(
-            CreateRootGroupShapeProperties(),
-            new P.GroupShapeProperties(new A.TransformGroup(
-                new A.Offset { X = 0L, Y = 0L },
-                new A.Extents { Cx = 0L, Cy = 0L },
-                new A.ChildOffset { X = 0L, Y = 0L },
-                new A.ChildExtents { Cx = 0L, Cy = 0L })));
+            shapeTree = new P.ShapeTree(
+                CreateRootGroupShapeProperties(),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })));
 
-        var slide = new P.Slide(
-            new P.CommonSlideData(shapeTree),
-            new P.ColorMapOverride(new A.MasterColorMapping()));
+            var slide = new P.Slide(
+                new P.CommonSlideData(shapeTree),
+                new P.ColorMapOverride(new A.MasterColorMapping()));
 
-        slidePart.Slide = slide;
+            slidePart.Slide = slide;
+        }
+        else
+        {
+            slidePart = CloneTemplateSlidePart(presentationPart, templateSlide.SlidePart);
+            slidePart.Slide!.CommonSlideData ??= new P.CommonSlideData();
+            shapeTree = slidePart.Slide.CommonSlideData.ShapeTree ??= new P.ShapeTree(
+                CreateRootGroupShapeProperties(),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })));
+        }
         // Resolve class variant: when the slide has a className, look up overrides.
         ClassVariant? classVariant = null;
         if (!useTemplateStyle && !string.IsNullOrWhiteSpace(slideModel.Style.ClassName))
@@ -323,6 +358,22 @@ public sealed class OpenXmlPptxRenderer
         var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, useTemplateStyle, language);
 
         AddBackground(slideModel.Style, context);
+
+        if (templateSlide is not null &&
+            TryRenderIntoTemplateSlideTextShapes(context, slideModel, effectiveTheme))
+        {
+            if (!useTemplateStyle)
+            {
+                AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
+            }
+            slidePart.Slide.Save();
+            AppendSlideId(presentationPart, slidePart);
+            if (!string.IsNullOrWhiteSpace(slideModel.Notes))
+            {
+                AddNotesSlide(presentationPart, slidePart, slideModel.NoteSpans, slideModel.Notes!, effectiveTheme, language);
+            }
+            return;
+        }
 
         // Placeholder-based rendering: when a named layout matched, write text content
         // into slide-level placeholder shapes that inherit geometry and text styling
@@ -572,6 +623,121 @@ public sealed class OpenXmlPptxRenderer
     }
 
     /// <summary>
+    /// Reuses a real template slide as the slide base, preserving authored artwork and
+    /// replacing the existing text boxes with slide content.
+    /// </summary>
+    private bool TryRenderIntoTemplateSlideTextShapes(SlideRenderContext context, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition effectiveTheme)
+    {
+        var textShapes = GetTemplateSlideTextShapes(context.ShapeTree);
+        if (textShapes.Count == 0)
+        {
+            return false;
+        }
+
+        var titleShape = SelectTemplateSlideTitleShape(textShapes);
+        var bodyShapes = textShapes
+            .Where(candidate => !ReferenceEquals(candidate.Shape, titleShape?.Shape))
+            .OrderBy(candidate => candidate.Y)
+            .ThenBy(candidate => candidate.X)
+            .ToArray();
+
+        HeadingElement? titleHeading = null;
+        var bodyTextElements = new List<ISlideElement>();
+        var nonTextElements = new List<ISlideElement>();
+        foreach (var element in slideModel.Elements)
+        {
+            if (titleHeading is null && titleShape is not null &&
+                element is HeadingElement heading &&
+                bodyTextElements.Count == 0 && nonTextElements.Count == 0)
+            {
+                titleHeading = heading;
+                continue;
+            }
+
+            switch (element)
+            {
+                case HeadingElement or ParagraphElement or BulletListElement:
+                    bodyTextElements.Add(element);
+                    break;
+                default:
+                    nonTextElements.Add(element);
+                    break;
+            }
+        }
+
+        if (titleShape is not null)
+        {
+            var titleParagraphs = titleHeading is null
+                ? []
+                : SplitSpansIntoParagraphs(titleHeading.Spans)
+                    .Select(group => new TemplateTextParagraph(group, ForceBold: false))
+                    .ToArray();
+            ReplaceTemplateSlideTextShape(titleShape.Shape, titleParagraphs, context.SlidePart, context.Language);
+        }
+        else if (titleHeading is not null)
+        {
+            bodyTextElements.Insert(0, titleHeading);
+        }
+
+        if (bodyShapes.Length > 0)
+        {
+            var bodyAssignments = AssignElementsToTemplateSlideTextShapes(bodyTextElements, bodyShapes.Length);
+            for (var index = 0; index < bodyShapes.Length; index++)
+            {
+                ReplaceTemplateSlideTextShape(
+                    bodyShapes[index].Shape,
+                    BuildTemplateSlideParagraphs(bodyAssignments[index]),
+                    context.SlidePart,
+                    context.Language);
+            }
+        }
+        else if (bodyTextElements.Count > 0)
+        {
+            nonTextElements.InsertRange(0, bodyTextElements);
+        }
+
+        if (nonTextElements.Count > 0)
+        {
+            var residualSlide = new MarpToPptx.Core.Models.Slide { Style = slideModel.Style };
+            residualSlide.Elements.AddRange(nonTextElements);
+            var plan = _layoutEngine.LayoutSlide(residualSlide, effectiveTheme);
+            var bodyStyle = effectiveTheme.Body;
+            foreach (var placed in plan.Elements)
+            {
+                switch (placed.Element)
+                {
+                    case HeadingElement heading:
+                        AddTextShape(context, placed.Frame, heading.Spans, ResolveHeadingStyle(effectiveTheme, heading.Level), effectiveTheme.InlineCode);
+                        break;
+                    case ParagraphElement paragraph:
+                        AddTextShape(context, placed.Frame, paragraph.Spans, bodyStyle, effectiveTheme.InlineCode);
+                        break;
+                    case BulletListElement list:
+                        AddBulletList(context, placed.Frame, list, bodyStyle);
+                        break;
+                    case ImageElement image:
+                        AddImage(context, placed.Frame, image.Source, image.AltText);
+                        break;
+                    case VideoElement video:
+                        AddVideo(context, placed.Frame, video.Source, video.AltText);
+                        break;
+                    case AudioElement audio:
+                        AddAudio(context, placed.Frame, audio.Source, audio.AltText);
+                        break;
+                    case CodeBlockElement code:
+                        AddCodeBlock(context, placed.Frame, code, effectiveTheme.Code);
+                        break;
+                    case TableElement table:
+                        AddTable(context, placed.Frame, table, bodyStyle);
+                        break;
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /// <summary>
     /// Creates a slide-level placeholder shape that inherits geometry and text styling
     /// from the matching layout/master placeholder. The shape carries an empty
     /// <c>&lt;p:spPr/&gt;</c> (no transform) and a text body with the supplied paragraphs.
@@ -672,6 +838,327 @@ public sealed class OpenXmlPptxRenderer
 
         paragraph.Append(new A.EndParagraphRunProperties { Language = language });
         return paragraph;
+    }
+
+    private static IReadOnlyList<List<ISlideElement>> AssignElementsToTemplateSlideTextShapes(IReadOnlyList<ISlideElement> elements, int shapeCount)
+    {
+        var assignments = Enumerable.Range(0, shapeCount)
+            .Select(_ => new List<ISlideElement>())
+            .ToArray();
+
+        if (shapeCount == 0)
+        {
+            return assignments;
+        }
+
+        for (var index = 0; index < elements.Count; index++)
+        {
+            var targetIndex = shapeCount == 1 || index < shapeCount - 1
+                ? Math.Min(index, shapeCount - 1)
+                : shapeCount - 1;
+            assignments[targetIndex].Add(elements[index]);
+        }
+
+        return assignments;
+    }
+
+    private static IReadOnlyList<TemplateTextParagraph> BuildTemplateSlideParagraphs(IEnumerable<ISlideElement> elements)
+    {
+        var paragraphs = new List<TemplateTextParagraph>();
+        foreach (var element in elements)
+        {
+            switch (element)
+            {
+                case HeadingElement heading:
+                    paragraphs.AddRange(SplitSpansIntoParagraphs(heading.Spans)
+                        .Select(group => new TemplateTextParagraph(group, ForceBold: true)));
+                    break;
+                case ParagraphElement paragraph:
+                    paragraphs.AddRange(SplitSpansIntoParagraphs(paragraph.Spans)
+                        .Select(group => new TemplateTextParagraph(group, ForceBold: false)));
+                    break;
+                case BulletListElement list:
+                    var orderNumber = 1;
+                    foreach (var item in list.Items)
+                    {
+                        var prefix = list.Ordered ? $"{orderNumber}. " : "• ";
+                        paragraphs.Add(new TemplateTextParagraph([new InlineSpan(prefix), .. item.Spans], ForceBold: false));
+                        orderNumber++;
+                    }
+                    break;
+            }
+        }
+
+        return paragraphs;
+    }
+
+    private static void ReplaceTemplateSlideTextShape(P.Shape shape, IReadOnlyList<TemplateTextParagraph> paragraphs, SlidePart slidePart, string language)
+    {
+        var existingTextBody = shape.TextBody ?? new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties()));
+        var paragraphTemplates = existingTextBody.Elements<A.Paragraph>().ToArray();
+        if (paragraphTemplates.Length == 0)
+        {
+            paragraphTemplates = [new A.Paragraph(new A.EndParagraphRunProperties())];
+        }
+
+        var replacementTextBody = new P.TextBody(
+            existingTextBody.BodyProperties is null ? new A.BodyProperties() : (A.BodyProperties)existingTextBody.BodyProperties.CloneNode(true),
+            existingTextBody.ListStyle is null ? new A.ListStyle() : (A.ListStyle)existingTextBody.ListStyle.CloneNode(true));
+
+        if (paragraphs.Count == 0)
+        {
+            replacementTextBody.Append(CreateTemplateSlideParagraphFromTemplate(paragraphTemplates[0], new TemplateTextParagraph([], ForceBold: false), slidePart, language));
+        }
+        else
+        {
+            for (var index = 0; index < paragraphs.Count; index++)
+            {
+                var template = paragraphTemplates[Math.Min(index, paragraphTemplates.Length - 1)];
+                replacementTextBody.Append(CreateTemplateSlideParagraphFromTemplate(template, paragraphs[index], slidePart, language));
+            }
+        }
+
+        var existingTextBodyElement = shape.TextBody;
+        if (existingTextBodyElement is not null)
+        {
+            shape.ReplaceChild(replacementTextBody, existingTextBodyElement);
+        }
+        else
+        {
+            // Insert the TextBody at the correct position: after spPr/style and before extLst.
+            DocumentFormat.OpenXml.OpenXmlElement? insertAfter = null;
+            var shapeProperties = shape.GetFirstChild<P.ShapeProperties>();
+            var shapeStyle = shape.GetFirstChild<P.ShapeStyle>();
+
+            if (shapeStyle is not null)
+            {
+                insertAfter = shapeStyle;
+            }
+            else if (shapeProperties is not null)
+            {
+                insertAfter = shapeProperties;
+            }
+
+            if (insertAfter is not null)
+            {
+                shape.InsertAfter(replacementTextBody, insertAfter);
+            }
+            else
+            {
+                var extLst = shape.GetFirstChild<P.ExtensionList>();
+                if (extLst is not null)
+                {
+                    shape.InsertBefore(replacementTextBody, extLst);
+                }
+                else
+                {
+                    shape.Append(replacementTextBody);
+                }
+            }
+        }
+    }
+
+    private static A.Paragraph CreateTemplateSlideParagraphFromTemplate(A.Paragraph template, TemplateTextParagraph content, SlidePart slidePart, string language)
+    {
+        var paragraph = new A.Paragraph();
+        if (template.ParagraphProperties is not null)
+        {
+            paragraph.Append((A.ParagraphProperties)template.ParagraphProperties.CloneNode(true));
+        }
+
+        var runTemplate = template.Elements<A.Run>().FirstOrDefault()?.RunProperties;
+        foreach (var span in content.Spans.Where(span => span.Text.Length > 0))
+        {
+            if (span.Text == "\n")
+            {
+                paragraph.Append(new A.Break());
+                continue;
+            }
+
+            var runProperties = runTemplate is null
+                ? new A.RunProperties()
+                : (A.RunProperties)runTemplate.CloneNode(true);
+            runProperties.Language = language;
+
+            if (content.ForceBold || span.Bold)
+            {
+                runProperties.Bold = true;
+            }
+            if (span.Italic)
+            {
+                runProperties.Italic = true;
+            }
+            if (span.Strikethrough)
+            {
+                runProperties.Strike = A.TextStrikeValues.SingleStrike;
+            }
+
+            runProperties.RemoveAllChildren<A.HyperlinkOnClick>();
+            if (span.HyperlinkUrl is not null && Uri.TryCreate(span.HyperlinkUrl, UriKind.Absolute, out var hyperlinkUri))
+            {
+                var hyperlinkRelationship = slidePart.AddHyperlinkRelationship(hyperlinkUri, true);
+                runProperties.Append(new A.HyperlinkOnClick { Id = hyperlinkRelationship.Id });
+            }
+
+            paragraph.Append(new A.Run(runProperties, new A.Text(span.Text)));
+        }
+
+        var templateEndParagraphRunProperties = template.Elements<A.EndParagraphRunProperties>().FirstOrDefault();
+        var endParagraphRunProperties = templateEndParagraphRunProperties is null
+            ? new A.EndParagraphRunProperties()
+            : (A.EndParagraphRunProperties)templateEndParagraphRunProperties.CloneNode(true);
+        endParagraphRunProperties.Language = language;
+        paragraph.Append(endParagraphRunProperties);
+        return paragraph;
+    }
+
+    private static IReadOnlyList<TemplateTextShapeCandidate> GetTemplateSlideTextShapes(P.ShapeTree shapeTree)
+    {
+        var candidates = new List<TemplateTextShapeCandidate>();
+        foreach (var shape in shapeTree.Elements<P.Shape>())
+        {
+            // Skip shapes without text or without valid bounds.
+            if (shape.TextBody is null ||
+                !TryGetShapeBounds(shape, out var x, out var y, out var cx, out var cy))
+            {
+                continue;
+            }
+
+            // Allow most placeholder-based text boxes (e.g., title/content), but skip
+            // known non-content placeholders such as footer, date, and slide number.
+            var placeholder = shape.NonVisualShapeProperties
+                ?.ApplicationNonVisualDrawingProperties
+                ?.GetFirstChild<P.PlaceholderShape>();
+
+            if (placeholder is not null)
+            {
+                var placeholderType = placeholder.Type?.Value;
+                if (placeholderType == P.PlaceholderValues.Footer ||
+                    placeholderType == P.PlaceholderValues.DateAndTime ||
+                    placeholderType == P.PlaceholderValues.SlideNumber)
+                {
+                    continue;
+                }
+            }
+
+            candidates.Add(new TemplateTextShapeCandidate(shape, x, y, cx, cy));
+        }
+
+        return candidates;
+    }
+
+    private static TemplateTextShapeCandidate? SelectTemplateSlideTitleShape(IReadOnlyList<TemplateTextShapeCandidate> textShapes)
+    {
+        return textShapes
+            .Where(shape => shape.Y + (shape.Cy / 2) <= SlideHeightEmu / 2)
+            .OrderByDescending(shape => shape.Cx * shape.Cy)
+            .ThenBy(shape => shape.Y)
+            .FirstOrDefault()
+            ?? textShapes.OrderByDescending(shape => shape.Cx * shape.Cy)
+                .ThenBy(shape => shape.Y)
+                .FirstOrDefault();
+    }
+
+    private static bool TryGetShapeBounds(P.Shape shape, out long x, out long y, out long cx, out long cy)
+    {
+        x = 0L;
+        y = 0L;
+        cx = 0L;
+        cy = 0L;
+
+        var transform = shape.ShapeProperties?.Transform2D;
+        if (transform?.Offset is null || transform.Extents is null)
+        {
+            return false;
+        }
+
+        x = transform.Offset.X?.Value ?? 0L;
+        y = transform.Offset.Y?.Value ?? 0L;
+        cx = transform.Extents.Cx?.Value ?? 0L;
+        cy = transform.Extents.Cy?.Value ?? 0L;
+        return cx > 0L && cy > 0L;
+    }
+
+    private static IReadOnlyList<SlidePart> GetSlidesInPresentationOrder(PresentationPart presentationPart)
+    {
+        var slideIds = presentationPart.Presentation?.SlideIdList?.Elements<P.SlideId>()
+            .Where(slideId => !string.IsNullOrWhiteSpace(slideId.RelationshipId))
+            .ToArray();
+        if (slideIds is null || slideIds.Length == 0)
+        {
+            return [];
+        }
+
+        return slideIds
+            .Select(slideId => (SlidePart)presentationPart.GetPartById(slideId.RelationshipId!))
+            .ToArray();
+    }
+
+    private static void DeleteSlideParts(PresentationPart presentationPart, IReadOnlyList<SlidePart> slideParts)
+    {
+        foreach (var slidePart in slideParts)
+        {
+            if (presentationPart.Parts.Any(part => ReferenceEquals(part.OpenXmlPart, slidePart)))
+            {
+                presentationPart.DeletePart(slidePart);
+            }
+        }
+    }
+
+    private static SlidePart CloneTemplateSlidePart(PresentationPart presentationPart, SlidePart templateSlidePart)
+    {
+        var slidePart = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
+        // Clone the slide XML so that each rendered slide gets an independent DOM tree.
+        // This is necessary when the same Template[n] is used for multiple slides: the
+        // text-replacement pass modifies the DOM in-place, so each slide must start from
+        // a fresh copy.
+        slidePart.Slide = (P.Slide)templateSlidePart.Slide!.CloneNode(true);
+        CopySlidePartRelationships(templateSlidePart, slidePart);
+        return slidePart;
+    }
+
+    /// <summary>
+    /// Creates a pre-clone of <paramref name="source"/> by adding a new <see cref="SlidePart"/>
+    /// to <paramref name="presentationPart"/> that shares all sub-parts of <paramref name="source"/>
+    /// (images, layouts, etc.). The pre-clone must be created <em>before</em> <c>ClearSlides</c>
+    /// runs, because in some SDK environments (e.g., DocumentFormat.OpenXml 3.x on .NET 10)
+    /// removing a slide's <c>&lt;p:sldId&gt;</c> XML reference also destroys the originating
+    /// <see cref="SlidePart"/> and all its sub-parts. By adding an extra OPC relationship to
+    /// each sub-part via the pre-clone, those sub-parts survive the original slide's destruction.
+    /// </summary>
+    private static SlidePart PreCloneTemplateSlidePart(PresentationPart presentationPart, SlidePart source)
+    {
+        var clone = presentationPart.AddNewPart<SlidePart>(GetNextRelationshipId(presentationPart));
+        clone.Slide = (P.Slide)source.Slide!.CloneNode(true);
+        CopySlidePartRelationships(source, clone);
+        return clone;
+    }
+
+    /// <summary>
+    /// Copies all non-notes sub-part relationships, external relationships, and hyperlink
+    /// relationships from <paramref name="source"/> to <paramref name="destination"/>.
+    /// </summary>
+    private static void CopySlidePartRelationships(SlidePart source, SlidePart destination)
+    {
+        foreach (var relationship in source.Parts)
+        {
+            if (relationship.OpenXmlPart is NotesSlidePart)
+            {
+                continue;
+            }
+
+            destination.AddPart(relationship.OpenXmlPart, relationship.RelationshipId);
+        }
+
+        foreach (var externalRelationship in source.ExternalRelationships)
+        {
+            destination.AddExternalRelationship(externalRelationship.RelationshipType, externalRelationship.Uri, externalRelationship.Id);
+        }
+
+        foreach (var hyperlinkRelationship in source.HyperlinkRelationships)
+        {
+            destination.AddHyperlinkRelationship(hyperlinkRelationship.Uri, hyperlinkRelationship.IsExternal, hyperlinkRelationship.Id);
+        }
     }
 
 
@@ -2284,6 +2771,10 @@ public sealed class OpenXmlPptxRenderer
             return null;
         }
     }
+
+    private sealed record TemplateTextParagraph(IReadOnlyList<InlineSpan> Spans, bool ForceBold);
+
+    private sealed record TemplateTextShapeCandidate(P.Shape Shape, long X, long Y, long Cx, long Cy);
 
     private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, string language = "en-US")
     {

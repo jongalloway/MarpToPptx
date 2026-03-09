@@ -61,7 +61,7 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 | Marp Core | Safer HTML defaults | Controlled HTML allowlist | Not explicitly implemented | Behavior comes mostly from Markdig parsing choices, not Marp Core compatibility logic. |
 | Marp CLI / tooling | Metadata directives | `title`, `description`, `author`, etc. | Not supported | Front matter values are preserved generically, but not interpreted as output metadata. |
 | Marp CLI / tooling | Theme loading | `--theme`, theme sets, theme resolution | Partial equivalent | `--theme-css` loads a CSS file for minimal theme extraction. |
-| Marp CLI / tooling | Template layout selection | Choose named `.pptx` layouts from markdown | Supported | Front matter `layout` sets the default content layout; `layout` and `_layout` comment directives select named template layouts per slide. Matching a named layout suppresses theme/class/background/header/footer styling for that slide so the template can dominate. |
+| Marp CLI / tooling | Template layout selection | Choose named `.pptx` layouts or a specific template slide from markdown | Supported | Front matter `layout` sets the default content layout; `layout` and `_layout` comment directives select named template layouts per slide. `Template[n]` targets an authored template slide directly. Matching a named layout or template slide suppresses theme/class/background/header/footer styling for that slide so the template can dominate. |
 | Marp CLI / tooling | Output conversion modes | HTML, PDF, PPTX, images, notes | Not supported | This tool produces editable PPTX only. |
 | Marp CLI / tooling | Browser-based rendering behavior | Preview, browser output, local-file rules | Not supported | `MarpToPptx` does not use a browser renderer. |
 | MarpToPptx-specific | PPTX template reuse | Copy masters/themes from an existing deck | Supported | `--template` copies an existing `.pptx` before rendering slides. |
@@ -172,7 +172,7 @@ Console.WriteLine("notes code block");
 - Letter spacing applied from CSS `letter-spacing`
 - Text transform applied from CSS `text-transform` (`uppercase`, `lowercase`, `capitalize`)
 - Optional template-copy workflow via `--template`
-- Named template layout selection via front matter `layout` and comment directives `layout` / `_layout`
+- Named template layout selection via front matter `layout`, comment directives `layout` / `_layout`, and authored template-slide selection via `Template[n]`
 
 ### Not Yet Supported
 
