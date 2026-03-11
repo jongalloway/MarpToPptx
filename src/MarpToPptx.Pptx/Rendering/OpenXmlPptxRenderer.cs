@@ -1466,11 +1466,19 @@ public sealed class OpenXmlPptxRenderer
         }
         catch (DiagramParseException ex)
         {
+            // Keep the fallback code block and error label within the original frame.
+            // If the frame is too small for both (edge case), the code block gets zero height
+            // and only the error label is shown.
+            var reservedForLabel = MermaidErrorLabelVerticalGap + MermaidErrorLabelHeight;
+            var availableCodeHeight = Math.Max(0, frame.Height - reservedForLabel);
+            var codeFrame = new Rect(frame.X, frame.Y, frame.Width, availableCodeHeight);
             var fallbackCode = new CodeBlockElement("mermaid", diagram.Source);
-            AddCodeBlock(context, frame, fallbackCode, fallbackStyle);
+            AddCodeBlock(context, codeFrame, fallbackCode, fallbackStyle);
+
+            var labelY = frame.Y + frame.Height - MermaidErrorLabelHeight;
             AddTextShape(
                 context,
-                new Rect(frame.X, frame.Y + frame.Height + MermaidErrorLabelVerticalGap, frame.Width, MermaidErrorLabelHeight),
+                new Rect(frame.X, labelY, frame.Width, MermaidErrorLabelHeight),
                 $"Mermaid parse error: {ex.Message}",
                 fallbackStyle);
             return;
@@ -1478,9 +1486,33 @@ public sealed class OpenXmlPptxRenderer
 
         const string svgContentType = "image/svg+xml";
         var imagePart = context.SlidePart.AddImagePart(svgContentType);
-        using (var stream = new MemoryStream(System.Text.Encoding.UTF8.GetBytes(svg)))
+        var svgBytes = System.Text.Encoding.UTF8.GetBytes(svg);
+        using (var stream = new MemoryStream(svgBytes, writable: false))
         {
             imagePart.FeedData(stream);
+        }
+
+        // Preserve the SVG's intrinsic aspect ratio using the same contain-fit
+        // logic as regular images rather than stretching to fill the frame.
+        double x, y, width, height;
+        if (ImageMetadataReader.TryReadSvgBytesSize(svgBytes, out var svgW, out var svgH) && svgW > 0 && svgH > 0)
+        {
+            var imageAspect = (double)svgW / svgH;
+            var frameAspect = frame.Width / frame.Height;
+            if (imageAspect > frameAspect)
+            {
+                var fittedHeight = frame.Width / imageAspect;
+                (x, y, width, height) = (frame.X, frame.Y + ((frame.Height - fittedHeight) / 2), frame.Width, fittedHeight);
+            }
+            else
+            {
+                var fittedWidth = frame.Height * imageAspect;
+                (x, y, width, height) = (frame.X + ((frame.Width - fittedWidth) / 2), frame.Y, fittedWidth, frame.Height);
+            }
+        }
+        else
+        {
+            (x, y, width, height) = (frame.X, frame.Y, frame.Width, frame.Height);
         }
 
         var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
@@ -1496,8 +1528,8 @@ public sealed class OpenXmlPptxRenderer
                 new A.Stretch(new A.FillRectangle())),
             new P.ShapeProperties(
                 new A.Transform2D(
-                    new A.Offset { X = ToEmu(frame.X), Y = ToEmu(frame.Y) },
-                    new A.Extents { Cx = ToEmu(frame.Width), Cy = ToEmu(frame.Height) }),
+                    new A.Offset { X = ToEmu(x), Y = ToEmu(y) },
+                    new A.Extents { Cx = ToEmu(width), Cy = ToEmu(height) }),
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         context.ShapeTree.Append(picture);

@@ -67,6 +67,28 @@ internal static class ImageMetadataReader
     }
 
     /// <summary>
+    /// Reads the intrinsic size of an SVG document supplied as a string (e.g., an in-memory rendered SVG).
+    /// Returns <c>true</c> and sets <paramref name="width"/>/<paramref name="height"/> when the
+    /// <c>viewBox</c> or explicit <c>width</c>/<c>height</c> attributes can be parsed.
+    /// </summary>
+    public static bool TryReadSvgStringSize(string svgText, out int width, out int height)
+    {
+        var bytes = System.Text.Encoding.UTF8.GetBytes(svgText);
+        return TryReadSvgBytesSize(bytes, out width, out height);
+    }
+
+    /// <summary>
+    /// Reads the intrinsic size of an SVG document supplied as a UTF-8 byte array.
+    /// Returns <c>true</c> and sets <paramref name="width"/>/<paramref name="height"/> when the
+    /// <c>viewBox</c> or explicit <c>width</c>/<c>height</c> attributes can be parsed.
+    /// </summary>
+    public static bool TryReadSvgBytesSize(byte[] svgBytes, out int width, out int height)
+    {
+        using var stream = new MemoryStream(svgBytes, writable: false);
+        return TryReadSvg(stream, out width, out height);
+    }
+
+    /// <summary>
     /// Detects the MIME content type of the image from its magic bytes.
     /// Returns null if the format is not recognized.
     /// </summary>
