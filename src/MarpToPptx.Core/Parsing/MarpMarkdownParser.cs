@@ -129,6 +129,9 @@ public sealed class MarpMarkdownParser
                 case ListBlock list:
                     elements.Add(new BulletListElement(FlattenListItems(list).ToArray(), list.IsOrdered));
                     break;
+                case FencedCodeBlock fencedCode when string.Equals(fencedCode.Info, "mermaid", StringComparison.OrdinalIgnoreCase):
+                    elements.Add(new MermaidDiagramElement(fencedCode.Lines.ToString() ?? string.Empty));
+                    break;
                 case FencedCodeBlock fencedCode:
                     elements.Add(new CodeBlockElement(fencedCode.Info ?? string.Empty, fencedCode.Lines.ToString() ?? string.Empty));
                     break;

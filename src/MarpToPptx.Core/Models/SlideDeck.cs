@@ -100,6 +100,11 @@ public sealed record AudioElement(string Source, string AltText) : ISlideElement
 
 public sealed record CodeBlockElement(string Language, string Code) : ISlideElement;
 
+/// <summary>
+/// A Mermaid diagram fenced code block that should be rendered to SVG and placed on the slide.
+/// </summary>
+public sealed record MermaidDiagramElement(string Source) : ISlideElement;
+
 public sealed record TableElement(IReadOnlyList<TableRowModel> Rows, IReadOnlyList<TableColumnAlignment?> ColumnAlignments) : ISlideElement
 {
     public TableElement(IReadOnlyList<TableRowModel> Rows) : this(Rows, []) { }

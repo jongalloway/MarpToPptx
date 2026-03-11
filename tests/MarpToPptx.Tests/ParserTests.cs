@@ -1612,4 +1612,63 @@ public class ParserTests
         Assert.Equal("Special Header", deck.Slides[1].Style.Header);
         Assert.Equal("Default Header", deck.Slides[2].Style.Header);
     }
+
+    [Fact]
+    public void Parser_ParsesMermaidFencedBlock_AsMermaidDiagramElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ```mermaid
+        flowchart LR
+          A --> B
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var diagram = Assert.Single(slide.Elements.OfType<MermaidDiagramElement>());
+        Assert.Contains("flowchart LR", diagram.Source);
+    }
+
+    [Fact]
+    public void Parser_ParsesMermaidFencedBlock_CaseInsensitive()
+    {
+        const string markdown = """
+        # Slide
+
+        ```MERMAID
+        flowchart LR
+          A --> B
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Single(slide.Elements.OfType<MermaidDiagramElement>());
+    }
+
+    [Fact]
+    public void Parser_NonMermaidFencedBlock_RemainsCodeBlockElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ```csharp
+        var x = 1;
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var codeBlock = Assert.Single(slide.Elements.OfType<CodeBlockElement>());
+        Assert.Equal("csharp", codeBlock.Language);
+        Assert.Empty(slide.Elements.OfType<MermaidDiagramElement>());
+    }
 }
