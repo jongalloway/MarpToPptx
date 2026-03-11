@@ -1,5 +1,7 @@
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Office2010.PowerPoint;
+using DiagramForge;
+using DiagramForge.Abstractions;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
 using MarpToPptx.Core.Themes;
@@ -19,8 +21,11 @@ public sealed class OpenXmlPptxRenderer
     private const int LayoutScale = 12700;
     private const string DefaultTableStyleId = "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
     private const string SvgBlipExtensionUri = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
+    private const double MermaidErrorLabelVerticalGap = 4;
+    private const double MermaidErrorLabelHeight = 20;
     private static readonly byte[] MediaPlaceholderImage = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+    private static readonly DiagramRenderer _diagramRenderer = new();
 
     private readonly LayoutEngine _layoutEngine = new();
 
@@ -447,6 +452,9 @@ public sealed class OpenXmlPptxRenderer
                 case CodeBlockElement code:
                     AddCodeBlock(context, frame, code, effectiveTheme.Code);
                     break;
+                case MermaidDiagramElement mermaid:
+                    AddMermaidDiagram(context, frame, mermaid, effectiveTheme.Code);
+                    break;
                 case TableElement table:
                     AddTable(context, frame, table, bodyStyle);
                     break;
@@ -612,6 +620,9 @@ public sealed class OpenXmlPptxRenderer
                     case CodeBlockElement code:
                         AddCodeBlock(context, placed.Frame, code, effectiveTheme.Code);
                         break;
+                    case MermaidDiagramElement mermaid:
+                        AddMermaidDiagram(context, placed.Frame, mermaid, effectiveTheme.Code);
+                        break;
                     case TableElement table:
                         AddTable(context, placed.Frame, table, bodyStyle);
                         break;
@@ -726,6 +737,9 @@ public sealed class OpenXmlPptxRenderer
                         break;
                     case CodeBlockElement code:
                         AddCodeBlock(context, placed.Frame, code, effectiveTheme.Code);
+                        break;
+                    case MermaidDiagramElement mermaid:
+                        AddMermaidDiagram(context, placed.Frame, mermaid, effectiveTheme.Code);
                         break;
                     case TableElement table:
                         AddTable(context, placed.Frame, table, bodyStyle);
@@ -1441,6 +1455,84 @@ public sealed class OpenXmlPptxRenderer
             noFill: false,
             fillColor: NormalizeColor(style.BackgroundColor ?? "#0F172A"),
             lineColor: NormalizeColor(context.Theme.AccentColor)));
+    }
+
+    private static void AddMermaidDiagram(SlideRenderContext context, Rect frame, MermaidDiagramElement diagram, TextStyle fallbackStyle)
+    {
+        string svg;
+        try
+        {
+            svg = _diagramRenderer.Render(diagram.Source);
+        }
+        catch (DiagramParseException ex)
+        {
+            // Keep the fallback code block and error label within the original frame.
+            // If the frame is too small for both (edge case), the code block gets zero height
+            // and only the error label is shown.
+            var reservedForLabel = MermaidErrorLabelVerticalGap + MermaidErrorLabelHeight;
+            var availableCodeHeight = Math.Max(0, frame.Height - reservedForLabel);
+            var codeFrame = new Rect(frame.X, frame.Y, frame.Width, availableCodeHeight);
+            var fallbackCode = new CodeBlockElement("mermaid", diagram.Source);
+            AddCodeBlock(context, codeFrame, fallbackCode, fallbackStyle);
+
+            var labelY = frame.Y + frame.Height - MermaidErrorLabelHeight;
+            AddTextShape(
+                context,
+                new Rect(frame.X, labelY, frame.Width, MermaidErrorLabelHeight),
+                $"Mermaid parse error: {ex.Message}",
+                fallbackStyle);
+            return;
+        }
+
+        const string svgContentType = "image/svg+xml";
+        var imagePart = context.SlidePart.AddImagePart(svgContentType);
+        var svgBytes = System.Text.Encoding.UTF8.GetBytes(svg);
+        using (var stream = new MemoryStream(svgBytes, writable: false))
+        {
+            imagePart.FeedData(stream);
+        }
+
+        // Preserve the SVG's intrinsic aspect ratio using the same contain-fit
+        // logic as regular images rather than stretching to fill the frame.
+        double x, y, width, height;
+        if (ImageMetadataReader.TryReadSvgBytesSize(svgBytes, out var svgW, out var svgH) && svgW > 0 && svgH > 0)
+        {
+            var imageAspect = (double)svgW / svgH;
+            var frameAspect = frame.Width / frame.Height;
+            if (imageAspect > frameAspect)
+            {
+                var fittedHeight = frame.Width / imageAspect;
+                (x, y, width, height) = (frame.X, frame.Y + ((frame.Height - fittedHeight) / 2), frame.Width, fittedHeight);
+            }
+            else
+            {
+                var fittedWidth = frame.Height * imageAspect;
+                (x, y, width, height) = (frame.X + ((frame.Width - fittedWidth) / 2), frame.Y, fittedWidth, frame.Height);
+            }
+        }
+        else
+        {
+            (x, y, width, height) = (frame.X, frame.Y, frame.Width, frame.Height);
+        }
+
+        var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
+        var blip = CreateImageBlip(svgContentType, relationshipId);
+
+        var picture = new P.Picture(
+            new P.NonVisualPictureProperties(
+                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = "Mermaid Diagram", Description = "Mermaid diagram" },
+                new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
+                new P.ApplicationNonVisualDrawingProperties()),
+            new P.BlipFill(
+                blip,
+                new A.Stretch(new A.FillRectangle())),
+            new P.ShapeProperties(
+                new A.Transform2D(
+                    new A.Offset { X = ToEmu(x), Y = ToEmu(y) },
+                    new A.Extents { Cx = ToEmu(width), Cy = ToEmu(height) }),
+                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
+
+        context.ShapeTree.Append(picture);
     }
 
     private static A.Paragraph CreateHighlightedParagraph(IReadOnlyList<TokenizedRun> runs, TextStyle style, string language)

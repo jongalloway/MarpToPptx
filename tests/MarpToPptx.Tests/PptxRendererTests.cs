@@ -3326,6 +3326,108 @@ public class PptxRendererTests
         Assert.Empty(validationErrors);
     }
 
+    [Fact]
+    public void Renderer_PlacesMermaidDiagramAsPictureShape_OnSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide with Diagram
+
+            ```mermaid
+            flowchart LR
+              A[Write] --> B[Build]
+              B --> C{Tests pass?}
+              C -->|yes| D[Ship]
+              C -->|no| A
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        var imageParts = slidePart.ImageParts.ToArray();
+        Assert.NotEmpty(imageParts);
+
+        var svgPart = imageParts.FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(svgPart);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_MermaidDiagram_SvgContainsExpectedContent()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ```mermaid
+            flowchart LR
+              NodeA --> NodeB
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var svgPart = slidePart.ImageParts
+            .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(svgPart);
+
+        using var stream = svgPart!.GetStream();
+        var svg = new System.IO.StreamReader(stream).ReadToEnd();
+        Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Renderer_InvalidMermaidInput_FallsBackToCodeBlock()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ```mermaid
+            this is not valid mermaid syntax @@@###
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        // Should not throw; falls back gracefully
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Fallback renders as text shape (code block), not a picture
+        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.NotEmpty(textRuns);
+
+        // Error label should contain the "Mermaid parse error:" prefix
+        Assert.Contains(textRuns, t => t.StartsWith("Mermaid parse error:", StringComparison.Ordinal));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
     /// <summary>
     /// Creates a minimal valid PNG file with the specified dimensions.
     /// </summary>

@@ -74,3 +74,17 @@ The local M4A should embed as a PowerPoint audio object using the explicit conte
 | Current rendering | Native PPTX table |
 | Header row | Bold text with first-row table styling |
 | Alignment | Markdown column alignment should carry through |
+
+---
+
+## Mermaid Diagrams
+
+```mermaid
+flowchart LR
+  A[Write] --> B[Build]
+  B --> C{Tests pass?}
+  C -->|yes| D[Ship]
+  C -->|no| A
+```
+
+Mermaid fenced code blocks are detected and rendered to SVG via DiagramForge, then embedded as a picture on the slide.
