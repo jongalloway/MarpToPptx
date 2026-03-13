@@ -130,7 +130,10 @@ public sealed class MarpMarkdownParser
                     elements.Add(new BulletListElement(FlattenListItems(list).ToArray(), list.IsOrdered));
                     break;
                 case FencedCodeBlock fencedCode when string.Equals(fencedCode.Info, "mermaid", StringComparison.OrdinalIgnoreCase):
-                    elements.Add(new MermaidDiagramElement(fencedCode.Lines.ToString() ?? string.Empty));
+                    elements.Add(new MermaidDiagramElement(NormalizeDiagramSource(fencedCode.Lines.ToString() ?? string.Empty)));
+                    break;
+                case FencedCodeBlock fencedCode when string.Equals(fencedCode.Info, "diagram", StringComparison.OrdinalIgnoreCase):
+                    elements.Add(new DiagramElement(NormalizeDiagramSource(fencedCode.Lines.ToString() ?? string.Empty)));
                     break;
                 case FencedCodeBlock fencedCode:
                     elements.Add(new CodeBlockElement(fencedCode.Info ?? string.Empty, fencedCode.Lines.ToString() ?? string.Empty));
@@ -148,6 +151,48 @@ public sealed class MarpMarkdownParser
         }
 
         return elements;
+    }
+
+    private static string NormalizeDiagramSource(string source)
+    {
+        var lines = source.Replace("\r\n", "\n").Split('\n');
+
+        var start = 0;
+        while (start < lines.Length && string.IsNullOrWhiteSpace(lines[start]))
+        {
+            start++;
+        }
+
+        var end = lines.Length - 1;
+        while (end >= start && string.IsNullOrWhiteSpace(lines[end]))
+        {
+            end--;
+        }
+
+        if (start > end)
+        {
+            return string.Empty;
+        }
+
+        var trimmed = lines[start..(end + 1)];
+
+        var minIndent = trimmed
+            .Where(line => !string.IsNullOrWhiteSpace(line))
+            .Select(line => line.TakeWhile(char.IsWhiteSpace).Count())
+            .DefaultIfEmpty(0)
+            .Min();
+
+        if (minIndent <= 0)
+        {
+            return string.Join('\n', trimmed);
+        }
+
+        return string.Join('\n', trimmed.Select(line =>
+            string.IsNullOrWhiteSpace(line)
+                ? string.Empty
+                : line.Length >= minIndent
+                    ? line[minIndent..]
+                    : line.TrimStart()));
     }
 
     private IReadOnlyList<InlineSpan> ParseNoteSpans(string? notes)

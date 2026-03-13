@@ -86,6 +86,23 @@ The result opens cleanly in PowerPoint on any platform.
 
 ---
 
+## Mermaid Diagrams Too
+
+```mermaid
+flowchart LR
+  Author[Markdown Authoring] --> Parse[Parse Markdown]
+  Parse --> Theme[Apply Theme or Template]
+  Theme --> Render[Render Open XML Shapes]
+  Render --> Deck[Editable PPTX]
+  Render -. includes .-> Diagram[Mermaid Diagram as SVG]
+```
+
+Mermaid fenced blocks render as diagrams, and the diagram palette is tuned to match the deck instead of falling back to the library default colors.
+
+<!-- Speaker note: this is a good proof slide because it mixes Markdown source with a visual output element. Call out that the colors are intentionally aligned with the deck theme. -->
+
+---
+
 ## Quick Start
 
 No install needed — just .NET 10:

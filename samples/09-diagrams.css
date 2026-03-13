@@ -1,0 +1,37 @@
+/* @theme diagram-showcase */
+
+:root {
+    font-family: "Aptos", sans-serif;
+    font-size: 28px;
+    color: #E2E8F0;
+    background-color: #0F172A;
+    padding: 44px 60px;
+    line-height: 1.4;
+}
+
+h1 {
+    font-family: "Aptos Display", sans-serif;
+    font-size: 60px;
+    color: #F8FAFC;
+    font-weight: 700;
+}
+
+h2 {
+    font-size: 38px;
+    color: #7DD3FC;
+    font-weight: 700;
+}
+
+h3 {
+    font-size: 28px;
+    color: #67E8F9;
+}
+
+pre,
+code {
+    font-family: "Cascadia Mono", monospace;
+    font-size: 18px;
+    color: #E2E8F0;
+    background: #1E293B;
+    line-height: 1.45;
+}

@@ -18,6 +18,8 @@ There's just one hangup. When you're asked to turn in a PowerPoint deck at a con
 
 **That's where MarpToPptx comes in. 🎉** It reads your Marp-flavored Markdown and produces native Open XML PowerPoint files where every heading, bullet, table, and code block is a real, selectable, editable PowerPoint shape. The output opens cleanly in PowerPoint — no repair prompts, no surprises.
 
+> Diagram support: MarpToPptx renders both `mermaid` fences and `diagram` fences through [DiagramForge](https://github.com/jongalloway/DiagramForge), so Mermaid subsets plus conceptual layouts like matrix and pyramid can be embedded directly in your deck source.
+
 ```mermaid
 flowchart LR
     A["📝 Marp Markdown"] --> B["⚙️ MarpToPptx"]
@@ -85,7 +87,7 @@ See [doc/using-templates.md](doc/using-templates.md) for the quickstart and [doc
 |---|---|
 | **Slide structure** | Front matter directives, `---` slide splitting, presenter notes |
 | **Text content** | Headings, paragraphs, ordered and unordered lists, bold/italic/code spans |
-| **Rich content** | Local images, syntax-highlighted code blocks, native tables |
+| **Rich content** | Local images, syntax-highlighted code blocks, native tables, Mermaid and DiagramForge diagram fences |
 | **Media** | Embedded MP3/M4A audio, embedded video |
 | **Theming** | CSS-based Marp themes (fonts, colors, padding, backgrounds, typography) |
 | **Templates** | Copy masters and layouts from an existing `.pptx` |
@@ -131,6 +133,7 @@ The [`samples/`](samples/) directory contains ready-to-run Marp decks that exerc
 dnx MarpToPptx samples/01-minimal.md -o artifacts/samples/01-minimal.pptx
 dnx MarpToPptx samples/04-content-coverage.md -o artifacts/samples/04-content-coverage.pptx
 dnx MarpToPptx samples/03-theme-css.md --theme-css samples/03-theme.css -o artifacts/samples/03-theme-css.pptx
+dnx MarpToPptx samples/09-diagrams.md --theme-css samples/09-diagrams.css -o artifacts/samples/09-diagrams.pptx
 ```
 
 See [`samples/README.md`](samples/README.md) for the full list and suggested progression.

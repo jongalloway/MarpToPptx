@@ -30,6 +30,9 @@ Dedicated smoke deck for presenter notes packaging, including note-bearing slide
 8. `08-showcase.md`
 Speaker-style showcase deck generated from repo content, using `08-showcase.css` plus local Marp SVG assets to cover the Marp ecosystem, MarpToPptx capabilities, presenter notes, and the recommended VS Code task configuration.
 
+9. `09-diagrams.md`
+Diagram-focused sample deck that mixes Mermaid fences and `diagram` fences to exercise DiagramForge-backed flowchart, block, state, mindmap, matrix, and pyramid output with the companion `09-diagrams.css` theme.
+
 ## Theme Decks
 
 These live under `samples/themes/` and are intended as a second-tier theme/example suite rather than part of the default root smoke set.
@@ -76,6 +79,7 @@ dotnet run --project src/MarpToPptx.Cli -- samples/03-theme-css.md --theme-css s
 - `06-remote-assets.md` is intended for integration smoke testing and should be run with remote assets explicitly enabled.
 - `07-presenter-notes.md` is the explicit smoke deck for speaker notes and PowerPoint-open compatibility of emitted notes parts.
 - `08-showcase.md` is the branded speaker-style sample that exercises the batch smoke runner with a richer content deck and companion CSS.
+- `09-diagrams.md` is the focused DiagramForge sample deck for Mermaid plus conceptual diagram coverage using the companion `09-diagrams.css` theme.
 - `samples/themes/09-community-beam.md`, `samples/themes/10-community-graph-paper.md`, `samples/themes/11-community-wave.md`, and `samples/themes/12-community-dracula.md` are repo-authored fixtures inspired by themes listed in Awesome Marp's community themes section; they are not vendored copies of upstream sample decks.
 - `samples/themes/13-popular-gaia.md` is a repo-authored fixture inspired by Marp's built-in Gaia theme direction rather than a community theme listing.
 - The current generation and smoke scripts only scan top-level Markdown files under `samples/` by default, so `samples/themes/` stays out of the default CI/local smoke suite unless a caller opts in explicitly.
