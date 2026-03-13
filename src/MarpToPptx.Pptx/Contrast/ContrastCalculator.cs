@@ -16,11 +16,18 @@ internal static class ContrastCalculator
         if (hex.Length != 6)
             throw new ArgumentException($"Expected a 6-digit hex color, got: '{hexColor}'.", nameof(hexColor));
 
-        var r = Convert.ToInt32(hex[0..2], 16) / 255.0;
-        var g = Convert.ToInt32(hex[2..4], 16) / 255.0;
-        var b = Convert.ToInt32(hex[4..6], 16) / 255.0;
+        try
+        {
+            var r = Convert.ToInt32(hex[0..2], 16) / 255.0;
+            var g = Convert.ToInt32(hex[2..4], 16) / 255.0;
+            var b = Convert.ToInt32(hex[4..6], 16) / 255.0;
 
-        return 0.2126 * Linearize(r) + 0.7152 * Linearize(g) + 0.0722 * Linearize(b);
+            return 0.2126 * Linearize(r) + 0.7152 * Linearize(g) + 0.0722 * Linearize(b);
+        }
+        catch (Exception ex) when (ex is FormatException or OverflowException)
+        {
+            throw new ArgumentException($"'{hexColor}' is not a valid 6-digit hex color.", nameof(hexColor), ex);
+        }
     }
 
     /// <summary>

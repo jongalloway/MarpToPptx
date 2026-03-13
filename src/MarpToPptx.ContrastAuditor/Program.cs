@@ -22,6 +22,14 @@ try
 
     if (failures.Count == 0)
     {
+        if (results.Count == 0)
+        {
+            Console.WriteLine(
+                $"Contrast audit found no auditable color pairs in '{pptxPath}'. " +
+                "The presentation may use theme or inherited colors that cannot be resolved from solid fills alone.");
+            return 0;
+        }
+
         Console.WriteLine($"Contrast audit passed for '{pptxPath}'. {results.Count} color pair(s) checked.");
         return 0;
     }

@@ -12,9 +12,10 @@ public class ContrastAuditorTests
     // ─────────────────────────────────────────────────────────────
 
     [Fact]
-    public void ContrastAuditor_BlackOnWhite_Is21To1()
+    public void ContrastAuditor_DefaultTheme_AllColorPairsPass()
     {
-        // Black text on white background is the maximum contrast (21:1).
+        // Default theme uses dark gray (#1F2937) text on a white (#FFFFFF) background,
+        // which is well above the 4.5:1 WCAG 2.1 normal-text threshold.
         using var workspace = TestWorkspace.Create();
         var pptxPath = RenderGoodContrastDeck(workspace);
 

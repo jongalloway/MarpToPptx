@@ -65,7 +65,7 @@ public sealed class ContrastAuditor
         if (slide is null)
             return;
 
-        var slideBackground = ResolveSlideBackground(slide);
+        var slideBackground = ResolveSlideBackground(slidePart);
 
         // Audit regular (non-table) shapes
         foreach (var shape in slide.Descendants<P.Shape>())
@@ -77,7 +77,7 @@ public sealed class ContrastAuditor
             if (shapeName == "Background")
                 continue;
 
-            var shapeFill = GetSolidFillFromElement(shape.ShapeProperties);
+            var shapeFill = GetSolidFill(shape.ShapeProperties);
             var effectiveBg = shapeFill ?? slideBackground ?? DefaultBackgroundColor;
 
             var textBody = shape.TextBody;
@@ -160,28 +160,50 @@ public sealed class ContrastAuditor
     // ─────────────────────────────────────────────────────────────
 
     /// <summary>
-    /// Resolves the slide-level background color.
-    /// First checks for the renderer-emitted "Background" rectangle shape,
-    /// then falls back to the CSld.Background element.
+    /// Resolves the effective background color for a slide by walking the slide →
+    /// layout → master inheritance chain. Returns the first solid RGB fill found,
+    /// or null when no solid-fill background can be resolved.
     /// </summary>
-    private static string? ResolveSlideBackground(Slide slide)
+    private static string? ResolveSlideBackground(SlidePart slidePart)
     {
-        // The renderer places a filled rectangle named "Background" in the shape tree.
-        foreach (var shape in slide.Descendants<P.Shape>())
+        var slide = slidePart.Slide;
+        if (slide is not null)
         {
-            if (shape.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Background")
+            // The renderer places a filled rectangle named "Background" in the shape tree.
+            foreach (var shape in slide.Descendants<P.Shape>())
             {
-                var color = GetSolidFillFromElement(shape.ShapeProperties);
+                if (shape.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Background")
+                {
+                    var color = GetSolidFill(shape.ShapeProperties);
+                    if (color is not null)
+                        return color;
+                }
+            }
+
+            // Fall back to the OOXML Background element on the common slide data.
+            var bgPr = slide.CommonSlideData?.Background?.BackgroundProperties;
+            if (bgPr is not null)
+            {
+                var color = GetSolidFill(bgPr);
                 if (color is not null)
                     return color;
             }
         }
 
-        // Fall back to the OOXML Background element on the common slide data.
-        var cSld = slide.CommonSlideData;
-        if (cSld?.Background?.BackgroundProperties is { } bgPr)
+        // Fall back to the slide layout background.
+        var layoutBgPr = slidePart.SlideLayoutPart?.SlideLayout?.CommonSlideData?.Background?.BackgroundProperties;
+        if (layoutBgPr is not null)
         {
-            var color = GetSolidFillFromElement(bgPr);
+            var color = GetSolidFill(layoutBgPr);
+            if (color is not null)
+                return color;
+        }
+
+        // Fall back to the slide master background.
+        var masterBgPr = slidePart.SlideLayoutPart?.SlideMasterPart?.SlideMaster?.CommonSlideData?.Background?.BackgroundProperties;
+        if (masterBgPr is not null)
+        {
+            var color = GetSolidFill(masterBgPr);
             if (color is not null)
                 return color;
         }
@@ -190,18 +212,18 @@ public sealed class ContrastAuditor
     }
 
     /// <summary>
-    /// Returns the hex color string (no '#') from the first SolidFill > RgbColorModelHex
-    /// child of the given element, or null if none exists.
+    /// Returns the hex color string (no '#') from a direct <c>a:solidFill</c> child
+    /// of the given element, or null if the element has no such child or it does not
+    /// contain an <c>a:srgbClr</c> hex value. Using a direct-child lookup avoids
+    /// accidentally reading colors from nested outline (<c>a:ln</c>) fills.
     /// </summary>
-    private static string? GetSolidFillFromElement(DocumentFormat.OpenXml.OpenXmlElement? element)
+    private static string? GetSolidFill(DocumentFormat.OpenXml.OpenXmlElement? element)
     {
         if (element is null)
             return null;
 
-        return element
-            .Descendants<A.SolidFill>()
-            .Select(sf => sf.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value)
-            .FirstOrDefault(v => v is not null);
+        var solidFill = element.GetFirstChild<A.SolidFill>();
+        return solidFill?.GetFirstChild<A.RgbColorModelHex>()?.Val?.Value;
     }
 
     /// <summary>
@@ -210,13 +232,7 @@ public sealed class ContrastAuditor
     private static string? GetTableCellFill(A.TableCell cell)
     {
         var tcPr = cell.TableCellProperties;
-        if (tcPr is null)
-            return null;
-
-        return tcPr
-            .Descendants<A.SolidFill>()
-            .Select(sf => sf.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value)
-            .FirstOrDefault(v => v is not null);
+        return tcPr is null ? null : GetSolidFill(tcPr);
     }
 
     /// <summary>
@@ -225,13 +241,7 @@ public sealed class ContrastAuditor
     private static string? GetRunColor(A.Run run)
     {
         var rPr = run.RunProperties;
-        if (rPr is null)
-            return null;
-
-        return rPr
-            .Descendants<A.SolidFill>()
-            .Select(sf => sf.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value)
-            .FirstOrDefault(v => v is not null);
+        return rPr is null ? null : GetSolidFill(rPr);
     }
 
     // ─────────────────────────────────────────────────────────────
