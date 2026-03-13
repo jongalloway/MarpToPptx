@@ -544,10 +544,10 @@ public sealed class OpenXmlPptxRenderer
         {
             "fade" => new P.FadeTransition(),
             "cut" => new P.CutTransition(),
-            "push" => BuildPushOrWipeTransition(new P.PushTransition(), transition.Direction),
-            "wipe" => BuildPushOrWipeTransition(new P.WipeTransition(), transition.Direction),
-            "cover" => BuildCoverOrPullTransition(new P.CoverTransition(), transition.Direction),
-            "pull" => BuildCoverOrPullTransition(new P.PullTransition(), transition.Direction),
+            "push" => ApplySlideDirection(new P.PushTransition(), transition.Direction),
+            "wipe" => ApplySlideDirection(new P.WipeTransition(), transition.Direction),
+            "cover" => ApplyCoverPullDirection(new P.CoverTransition(), transition.Direction),
+            "pull" => ApplyCoverPullDirection(new P.PullTransition(), transition.Direction),
             "random-bar" => BuildRandomBarTransition(transition.Direction),
             // Morph requires an mc:AlternateContent wrapper with a p16:morph element.
             // Emit fade as a compatible fallback until the full AlternateContent path is implemented.
@@ -563,15 +563,28 @@ public sealed class OpenXmlPptxRenderer
         return pt;
     }
 
-    private static OpenXmlElement BuildPushOrWipeTransition(OpenXmlLeafElement element, string? direction)
+    private static P.PushTransition ApplySlideDirection(P.PushTransition element, string? direction)
     {
-        // PushTransition and WipeTransition both expose Direction as EnumValue<TransitionSlideDirectionValues>.
-        if (direction is null)
+        if (direction is not null)
         {
-            return element;
+            element.Direction = MapSlideDirection(direction);
         }
 
-        var dir = direction.ToLowerInvariant() switch
+        return element;
+    }
+
+    private static P.WipeTransition ApplySlideDirection(P.WipeTransition element, string? direction)
+    {
+        if (direction is not null)
+        {
+            element.Direction = MapSlideDirection(direction);
+        }
+
+        return element;
+    }
+
+    private static P.TransitionSlideDirectionValues MapSlideDirection(string direction)
+        => direction.ToLowerInvariant() switch
         {
             "right" => P.TransitionSlideDirectionValues.Right,
             "up" => P.TransitionSlideDirectionValues.Up,
@@ -579,45 +592,34 @@ public sealed class OpenXmlPptxRenderer
             _ => P.TransitionSlideDirectionValues.Left,
         };
 
-        if (element is P.PushTransition push)
+    private static P.CoverTransition ApplyCoverPullDirection(P.CoverTransition element, string? direction)
+    {
+        if (direction is not null)
         {
-            push.Direction = dir;
-        }
-        else if (element is P.WipeTransition wipe)
-        {
-            wipe.Direction = dir;
+            element.Direction = MapCoverPullDirection(direction);
         }
 
         return element;
     }
 
-    private static OpenXmlElement BuildCoverOrPullTransition(OpenXmlLeafElement element, string? direction)
+    private static P.PullTransition ApplyCoverPullDirection(P.PullTransition element, string? direction)
     {
-        // CoverTransition and PullTransition expose Direction as StringValue with values "l", "r", "u", "d".
-        if (direction is null)
+        if (direction is not null)
         {
-            return element;
+            element.Direction = MapCoverPullDirection(direction);
         }
 
-        var dir = direction.ToLowerInvariant() switch
+        return element;
+    }
+
+    private static string MapCoverPullDirection(string direction)
+        => direction.ToLowerInvariant() switch
         {
             "right" => "r",
             "up" => "u",
             "down" => "d",
             _ => "l",
         };
-
-        if (element is P.CoverTransition cover)
-        {
-            cover.Direction = dir;
-        }
-        else if (element is P.PullTransition pull)
-        {
-            pull.Direction = dir;
-        }
-
-        return element;
-    }
 
     private static P.RandomBarTransition BuildRandomBarTransition(string? direction)
     {

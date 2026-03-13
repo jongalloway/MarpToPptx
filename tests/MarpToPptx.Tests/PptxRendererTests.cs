@@ -3664,7 +3664,7 @@ public class PptxRendererTests
         Assert.NotNull(transition);
         var push = transition!.Elements<P.PushTransition>().SingleOrDefault();
         Assert.NotNull(push);
-        Assert.Equal("r", push!.OuterXml.Contains("dir=\"r\"") ? "r" : push.Direction?.ToString());
+        Assert.Equal(P.TransitionSlideDirectionValues.Right, push!.Direction?.Value);
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
