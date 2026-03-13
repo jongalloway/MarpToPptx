@@ -94,8 +94,42 @@ public static partial class MarpDirectiveParser
             "backgroundcolor" => Clone(style, backgroundColor: value),
             "header" => Clone(style, header: value),
             "footer" => Clone(style, footer: value),
+            "transition" => Clone(style, transition: ParseTransition(value)),
             _ => style,
         };
+    }
+
+    private static SlideTransition? ParseTransition(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var tokens = value.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var type = tokens[0];
+        string? direction = null;
+        int? durationMs = null;
+
+        foreach (var token in tokens.Skip(1))
+        {
+            if (token.StartsWith("dir:", StringComparison.OrdinalIgnoreCase))
+            {
+                var dir = token[4..];
+                if (!string.IsNullOrEmpty(dir))
+                {
+                    direction = dir;
+                }
+            }
+            else if (token.StartsWith("dur:", StringComparison.OrdinalIgnoreCase) &&
+                     int.TryParse(token[4..], out var dur) &&
+                     dur > 0)
+            {
+                durationMs = dur;
+            }
+        }
+
+        return new SlideTransition(type, direction, durationMs);
     }
 
     private static SlideStyle Clone(
@@ -108,7 +142,8 @@ public static partial class MarpDirectiveParser
         string? backgroundSize = null,
         string? backgroundColor = null,
         string? header = null,
-        string? footer = null)
+        string? footer = null,
+        SlideTransition? transition = null)
     {
         var clone = new SlideStyle
         {
@@ -121,6 +156,7 @@ public static partial class MarpDirectiveParser
             BackgroundColor = backgroundColor ?? source.BackgroundColor,
             Header = header ?? source.Header,
             Footer = footer ?? source.Footer,
+            Transition = transition ?? source.Transition,
         };
 
         foreach (var pair in source.Directives)

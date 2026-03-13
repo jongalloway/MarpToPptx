@@ -1,3 +1,4 @@
+using DocumentFormat.OpenXml;
 using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Office2010.PowerPoint;
 using DiagramForge;
@@ -372,6 +373,7 @@ public sealed class OpenXmlPptxRenderer
             {
                 AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
             }
+            ApplyTransition(slidePart.Slide, slideModel.Style.Transition);
             slidePart.Slide.Save();
             AppendSlideId(presentationPart, slidePart);
             if (!string.IsNullOrWhiteSpace(slideModel.Notes))
@@ -390,6 +392,7 @@ public sealed class OpenXmlPptxRenderer
             TryRenderIntoTemplatePlaceholders(context, slideLayoutPart, slideModel, effectiveTheme))
         {
             AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
+            ApplyTransition(slidePart.Slide, slideModel.Style.Transition);
             slidePart.Slide.Save();
             AppendSlideId(presentationPart, slidePart);
             if (!string.IsNullOrWhiteSpace(slideModel.Notes))
@@ -467,6 +470,7 @@ public sealed class OpenXmlPptxRenderer
 
         AddHeaderFooterAndPageNumber(context, slideModel.Style, bodyStyle, slideNumber);
 
+        ApplyTransition(slidePart.Slide, slideModel.Style.Transition);
         slidePart.Slide.Save();
         AppendSlideId(presentationPart, slidePart);
 
@@ -478,6 +482,156 @@ public sealed class OpenXmlPptxRenderer
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
         => theme.GetHeadingStyle(level);
+
+    /// <summary>
+    /// Applies a <see cref="P.Transition"/> element to the slide based on the supplied
+    /// <see cref="SlideTransition"/> model. Any existing transition on a cloned template
+    /// slide is replaced. When <paramref name="transition"/> is <c>null</c>, any
+    /// existing transition element is removed so that template-cloned transitions do
+    /// not bleed onto slides that do not request one.
+    /// </summary>
+    private static void ApplyTransition(P.Slide slide, SlideTransition? transition)
+    {
+        // Remove any existing transition element (e.g. from a cloned template slide).
+        var existingTransition = slide.Elements<P.Transition>().FirstOrDefault();
+        existingTransition?.Remove();
+
+        if (transition is null)
+        {
+            return;
+        }
+
+        var element = BuildTransitionElement(transition);
+
+        // Schema order: p:cSld, p:clrMapOvr?, p:transition?, p:timing?
+        // Insert after ColorMapOverride when present, else after CommonSlideData.
+        var insertAfter = (OpenXmlElement?)slide.Elements<P.ColorMapOverride>().LastOrDefault()
+                          ?? slide.Elements<P.CommonSlideData>().LastOrDefault();
+        if (insertAfter is not null)
+        {
+            insertAfter.InsertAfterSelf(element);
+        }
+        else
+        {
+            slide.Append(element);
+        }
+    }
+
+    /// <summary>
+    /// Builds a <see cref="P.Transition"/> element for the given <see cref="SlideTransition"/>.
+    /// Returns a transition element whose child encodes the transition type. For unknown
+    /// transition type values the element is returned with no child element, which renders
+    /// as a default PowerPoint transition.
+    /// </summary>
+    private static P.Transition BuildTransitionElement(SlideTransition transition)
+    {
+        var pt = new P.Transition();
+
+        if (transition.DurationMs.HasValue)
+        {
+            // Map the requested millisecond duration to the compatible spd attribute bands.
+            // spd is the Office2007-compatible duration attribute; the newer p14:dur extension
+            // attribute is not recognised by the base OpenXml schema validator.
+            pt.Speed = transition.DurationMs.Value switch
+            {
+                <= 300 => P.TransitionSpeedValues.Fast,
+                <= 700 => P.TransitionSpeedValues.Medium,
+                _ => P.TransitionSpeedValues.Slow,
+            };
+        }
+
+        OpenXmlElement? child = transition.Type.ToLowerInvariant() switch
+        {
+            "fade" => new P.FadeTransition(),
+            "cut" => new P.CutTransition(),
+            "push" => BuildPushOrWipeTransition(new P.PushTransition(), transition.Direction),
+            "wipe" => BuildPushOrWipeTransition(new P.WipeTransition(), transition.Direction),
+            "cover" => BuildCoverOrPullTransition(new P.CoverTransition(), transition.Direction),
+            "pull" => BuildCoverOrPullTransition(new P.PullTransition(), transition.Direction),
+            "random-bar" => BuildRandomBarTransition(transition.Direction),
+            // Morph requires an mc:AlternateContent wrapper with a p16:morph element.
+            // Emit fade as a compatible fallback until the full AlternateContent path is implemented.
+            "morph" => new P.FadeTransition(),
+            _ => null,
+        };
+
+        if (child is not null)
+        {
+            pt.Append(child);
+        }
+
+        return pt;
+    }
+
+    private static OpenXmlElement BuildPushOrWipeTransition(OpenXmlLeafElement element, string? direction)
+    {
+        // PushTransition and WipeTransition both expose Direction as EnumValue<TransitionSlideDirectionValues>.
+        if (direction is null)
+        {
+            return element;
+        }
+
+        var dir = direction.ToLowerInvariant() switch
+        {
+            "right" => P.TransitionSlideDirectionValues.Right,
+            "up" => P.TransitionSlideDirectionValues.Up,
+            "down" => P.TransitionSlideDirectionValues.Down,
+            _ => P.TransitionSlideDirectionValues.Left,
+        };
+
+        if (element is P.PushTransition push)
+        {
+            push.Direction = dir;
+        }
+        else if (element is P.WipeTransition wipe)
+        {
+            wipe.Direction = dir;
+        }
+
+        return element;
+    }
+
+    private static OpenXmlElement BuildCoverOrPullTransition(OpenXmlLeafElement element, string? direction)
+    {
+        // CoverTransition and PullTransition expose Direction as StringValue with values "l", "r", "u", "d".
+        if (direction is null)
+        {
+            return element;
+        }
+
+        var dir = direction.ToLowerInvariant() switch
+        {
+            "right" => "r",
+            "up" => "u",
+            "down" => "d",
+            _ => "l",
+        };
+
+        if (element is P.CoverTransition cover)
+        {
+            cover.Direction = dir;
+        }
+        else if (element is P.PullTransition pull)
+        {
+            pull.Direction = dir;
+        }
+
+        return element;
+    }
+
+    private static P.RandomBarTransition BuildRandomBarTransition(string? direction)
+    {
+        var rb = new P.RandomBarTransition();
+        if (direction is not null)
+        {
+            // Random-bar direction maps to orientation: "vertical"/"up"/"down" -> vert, everything else -> horz.
+            rb.Direction = direction.ToLowerInvariant() is "vertical" or "up" or "down"
+                ? P.DirectionValues.Vertical
+                : P.DirectionValues.Horizontal;
+        }
+
+        return rb;
+    }
 
     /// <summary>
     /// Attempts to render slide content into template placeholder shapes. Returns

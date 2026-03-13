@@ -1718,4 +1718,148 @@ public class ParserTests
         Assert.Empty(slide.Elements.OfType<MermaidDiagramElement>());
         Assert.Empty(slide.Elements.OfType<DiagramElement>());
     }
+
+    // ── Transition directive tests ────────────────────────────────────────
+
+    [Fact]
+    public void Parser_FrontMatterTransition_SetsDeckLevelDefault()
+    {
+        const string markdown = """
+        ---
+        transition: fade
+        ---
+
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal("fade", deck.Slides[0].Style.Transition?.Type);
+        Assert.Equal("fade", deck.Slides[1].Style.Transition?.Type);
+        Assert.Null(deck.Slides[0].Style.Transition?.Direction);
+        Assert.Null(deck.Slides[0].Style.Transition?.DurationMs);
+    }
+
+    [Fact]
+    public void Parser_LocalTransitionDirective_CarriesForwardToSubsequentSlides()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- transition: push dir:right -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.Transition);
+        Assert.Equal("push", deck.Slides[1].Style.Transition?.Type);
+        Assert.Equal("right", deck.Slides[1].Style.Transition?.Direction);
+        // Local directive carries forward to slide 3.
+        Assert.Equal("push", deck.Slides[2].Style.Transition?.Type);
+        Assert.Equal("right", deck.Slides[2].Style.Transition?.Direction);
+    }
+
+    [Fact]
+    public void Parser_SpotTransitionDirective_AppliesToCurrentSlideOnly()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- _transition: wipe dur:500 -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.Transition);
+        Assert.Equal("wipe", deck.Slides[1].Style.Transition?.Type);
+        Assert.Equal(500, deck.Slides[1].Style.Transition?.DurationMs);
+        // Spot directive does not carry forward to slide 3.
+        Assert.Null(deck.Slides[2].Style.Transition);
+    }
+
+    [Fact]
+    public void Parser_TransitionDirective_ParsesDirectionAndDuration()
+    {
+        const string markdown = """
+        <!-- transition: push dir:right dur:800 -->
+        # Slide
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var transition = Assert.Single(deck.Slides).Style.Transition;
+        Assert.NotNull(transition);
+        Assert.Equal("push", transition!.Type);
+        Assert.Equal("right", transition.Direction);
+        Assert.Equal(800, transition.DurationMs);
+    }
+
+    [Fact]
+    public void Parser_TransitionDirective_AllSupportedTypes_ParseWithoutCrash()
+    {
+        var types = new[] { "fade", "push", "wipe", "cut", "cover", "pull", "random-bar", "morph", "unknown-xyz" };
+        foreach (var type in types)
+        {
+            var markdown = $"<!-- transition: {type} -->\n# Slide";
+            var compiler = new MarpCompiler();
+            var deck = compiler.Compile(markdown);
+            var transition = Assert.Single(deck.Slides).Style.Transition;
+            Assert.NotNull(transition);
+            Assert.Equal(type, transition!.Type);
+        }
+    }
+
+    [Fact]
+    public void Parser_SpotTransitionOverridesLocalForOneSlide()
+    {
+        const string markdown = """
+        <!-- transition: fade -->
+        # Slide One
+
+        ---
+
+        <!-- _transition: push dir:left -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("fade", deck.Slides[0].Style.Transition?.Type);
+        // Spot override on slide 2.
+        Assert.Equal("push", deck.Slides[1].Style.Transition?.Type);
+        Assert.Equal("left", deck.Slides[1].Style.Transition?.Direction);
+        // Slide 3 reverts to the carried-forward local value.
+        Assert.Equal("fade", deck.Slides[2].Style.Transition?.Type);
+    }
 }

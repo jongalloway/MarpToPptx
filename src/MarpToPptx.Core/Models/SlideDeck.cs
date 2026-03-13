@@ -56,8 +56,23 @@ public sealed class SlideStyle
 
     public string? Footer { get; init; }
 
+    public SlideTransition? Transition { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
+
+/// <summary>
+/// Describes the slide transition animation to apply when advancing to this slide in PowerPoint.
+/// </summary>
+/// <param name="Type">
+/// Transition type identifier (e.g. <c>fade</c>, <c>push</c>, <c>wipe</c>, <c>cut</c>, <c>cover</c>, <c>pull</c>, <c>random-bar</c>, <c>morph</c>).
+/// Unknown values are preserved in the model but produce no transition element in the rendered PPTX.
+/// </param>
+/// <param name="Direction">
+/// Optional direction: <c>left</c>, <c>right</c>, <c>up</c>, <c>down</c>. Ignored for transitions that do not support direction.
+/// </param>
+/// <param name="DurationMs">Optional transition duration in milliseconds.</param>
+public sealed record SlideTransition(string Type, string? Direction = null, int? DurationMs = null);
 
 public interface ISlideElement
 {

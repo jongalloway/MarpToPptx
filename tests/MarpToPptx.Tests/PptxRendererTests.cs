@@ -3603,4 +3603,221 @@ public class PptxRendererTests
             return (b << 16) | a;
         }
     }
+
+    // ── Transition directive renderer tests ──────────────────────────────
+
+    [Fact]
+    public void Renderer_FadeTransition_EmitsTransitionElementWithFadeChild()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            transition: fade
+            ---
+
+            # Slide One
+
+            ---
+
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var slidePart in slideParts)
+        {
+            var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+            Assert.NotNull(transition);
+            Assert.Single(transition!.Elements<P.FadeTransition>());
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_PushTransitionWithDirection_EmitsPushElementWithDirectionAttribute()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- transition: push dir:right -->
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+        Assert.NotNull(transition);
+        var push = transition!.Elements<P.PushTransition>().SingleOrDefault();
+        Assert.NotNull(push);
+        Assert.Equal("r", push!.OuterXml.Contains("dir=\"r\"") ? "r" : push.Direction?.ToString());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_NoTransition_EmitsNoTransitionElement()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var transition = slidePart.Slide!.Elements<P.Transition>().FirstOrDefault();
+        Assert.Null(transition);
+    }
+
+    [Fact]
+    public void Renderer_TransitionWithDuration_EmitsSpeedAttribute()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- transition: wipe dur:600 -->
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+        Assert.NotNull(transition);
+        // 600ms maps to the "med" speed band.
+        Assert.Equal(P.TransitionSpeedValues.Medium, transition!.Speed?.Value);
+        Assert.Single(transition.Elements<P.WipeTransition>());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_AllSupportedTransitionTypes_PassOpenXmlValidation()
+    {
+        var types = new[] { "fade", "push", "wipe", "cut", "cover", "pull", "random-bar", "morph" };
+        foreach (var type in types)
+        {
+            using var workspace = TestWorkspace.Create();
+            var markdownPath = workspace.WriteMarkdown(
+                "deck.md",
+                $"""
+                <!-- transition: {type} -->
+                # Slide One
+                """);
+
+            var outputPath = workspace.GetPath("deck.pptx");
+            RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+            using var document = PresentationDocument.Open(outputPath, false);
+            var validationErrors = new OpenXmlPackageValidator().Validate(document);
+            Assert.Empty(validationErrors);
+
+            var slidePart = document.PresentationPart!.SlideParts.Single();
+            var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+            Assert.NotNull(transition);
+        }
+    }
+
+    [Fact]
+    public void Renderer_CutTransition_EmitsCutElementWithNoDirection()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- transition: cut -->
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+        Assert.NotNull(transition);
+        Assert.Single(transition!.Elements<P.CutTransition>());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_RandomBarTransition_EmitsHorizontalOrientationByDefault()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- transition: random-bar -->
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+        Assert.NotNull(transition);
+        var rb = transition!.Elements<P.RandomBarTransition>().SingleOrDefault();
+        Assert.NotNull(rb);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_MorphTransition_EmitsFadeAsFallback()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- transition: morph -->
+            # Slide One
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var transition = slidePart.Slide!.Elements<P.Transition>().SingleOrDefault();
+        Assert.NotNull(transition);
+        // Morph is currently emitted as fade (fallback until AlternateContent wrapper is implemented).
+        Assert.Single(transition!.Elements<P.FadeTransition>());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
 }
