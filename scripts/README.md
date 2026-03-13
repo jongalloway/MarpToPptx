@@ -4,6 +4,16 @@ This directory contains the main PowerShell scripts that were useful during PPTX
 
 ## Available Helpers
 
+### `Invoke-TestConcierge.ps1`
+
+Interactive front door for the existing script set. It asks which workflow you want, gathers the relevant arguments, and then invokes the underlying helper script.
+
+```powershell
+pwsh ./scripts/Invoke-TestConcierge.ps1
+```
+
+For example, to export `samples/04-content-coverage.md`, launch the concierge, choose `Generate one PPTX from Markdown`, then pick `samples/04-content-coverage.md` from the sample list and accept the default output path if it works for you.
+
 ### `Generate-LocalPptx.ps1`
 
 Generate a PPTX with the local CLI project instead of the published `dnx` tool.
@@ -80,6 +90,7 @@ pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -Incl
 - These scripts are intended for local Windows-based troubleshooting.
 - `Test-PowerPointOpen.ps1` requires Microsoft PowerPoint to be installed and available through COM interop.
 - `Generate-LocalPptx.ps1` is the preferred path for renderer debugging because it executes the current workspace code.
+- `Invoke-TestConcierge.ps1` is the easiest way to discover the local test and export flows without remembering script parameters.
 - `Invoke-PptxSmokeTest.ps1` is the quickest end-to-end check before or after renderer/package changes.
 - `Invoke-AllPptxSmokeTests.ps1` is the quickest way to run the full local smoke suite across the sample directory.
 - `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus .NET-hosted Open XML validation on CI agents or other environments without PowerPoint.

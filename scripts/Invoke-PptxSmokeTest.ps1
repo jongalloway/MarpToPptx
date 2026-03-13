@@ -122,7 +122,14 @@ if ($AllowRemoteAssets) {
 	$generateArguments.AllowRemoteAssets = $true
 }
 
-& $generateScript @generateArguments
+try {
+	& $generateScript @generateArguments
+}
+catch {
+	Write-Error $_.Exception.Message -ErrorAction Continue
+	$global:LASTEXITCODE = 1
+	return
+}
 
 Write-Host "Step 2: Validate the generated package with Open XML SDK." -ForegroundColor Cyan
 Invoke-OpenXmlValidation -PptxPath $resolvedOutputPath -Configuration $Configuration -RepositoryRoot $repoRoot
