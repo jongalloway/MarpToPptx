@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<svg
+   viewBox="0 0 1280 640"
+   width="1280"
+   height="640"
+   version="1.1"
+   id="svg19"
+   sodipodi:docname="social-preview.svg"
+   inkscape:version="1.4.3 (0d15f75, 2025-12-25)"
+   xmlns:inkscape="http://www.inkscape.org/namespaces/inkscape"
+   xmlns:sodipodi="http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd"
+   xmlns="http://www.w3.org/2000/svg"
+   xmlns:svg="http://www.w3.org/2000/svg">
+  <sodipodi:namedview
+     id="namedview19"
+     pagecolor="#505050"
+     bordercolor="#eeeeee"
+     borderopacity="1"
+     inkscape:showpageshadow="0"
+     inkscape:pageopacity="0"
+     inkscape:pagecheckerboard="0"
+     inkscape:deskcolor="#d1d1d1"
+     inkscape:zoom="1.2953125"
+     inkscape:cx="647.72014"
+     inkscape:cy="320"
+     inkscape:window-width="1920"
+     inkscape:window-height="1009"
+     inkscape:window-x="3832"
+     inkscape:window-y="-8"
+     inkscape:window-maximized="1"
+     inkscape:current-layer="svg19" />
+  <defs
+     id="defs4">
+    <linearGradient
+       id="bg"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="100%">
+      <stop
+         offset="0%"
+         style="stop-color:#0f172a"
+         id="stop1" />
+      <stop
+         offset="100%"
+         style="stop-color:#1e293b"
+         id="stop2" />
+    </linearGradient>
+    <linearGradient
+       id="arrowGrad"
+       x1="0%"
+       y1="0%"
+       x2="100%"
+       y2="0%">
+      <stop
+         offset="0%"
+         style="stop-color:#0288d1"
+         id="stop3" />
+      <stop
+         offset="100%"
+         style="stop-color:#d04423"
+         id="stop4" />
+    </linearGradient>
+    <filter
+       id="glow"
+       x="-0.3"
+       y="-0.2"
+       width="1.6"
+       height="1.4">
+      <feGaussianBlur
+         stdDeviation="10"
+         result="blur"
+         id="feGaussianBlur4" />
+      <feComposite
+         in="SourceGraphic"
+         in2="blur"
+         operator="over"
+         id="feComposite4" />
+    </filter>
+  </defs>
+  <!-- Background -->
+  <rect
+     width="1280"
+     height="640"
+     fill="url(#bg)"
+     id="rect4" />
+  <!-- Subtle grid pattern -->
+  <g
+     opacity="0.03"
+     id="g5"
+     transform="translate(0,-1)">
+    <pattern
+       id="grid"
+       width="40"
+       height="40"
+       patternUnits="userSpaceOnUse">
+      <path
+         d="M 40 0 L 0 0 0 40"
+         fill="none"
+         stroke="white"
+         stroke-width="0.5"
+         id="path4" />
+    </pattern>
+    <rect
+       width="1280"
+       height="640"
+       fill="url(#grid)"
+       id="rect5"
+       x="0"
+       y="0" />
+  </g>
+  <!-- Accent glow behind icons — three equal columns at x=250, 640, 1030 -->
+  <circle
+     cx="250"
+     cy="185"
+     r="180"
+     fill="#0288d1"
+     opacity="0.07"
+     id="circle5" />
+  <circle
+     cx="1030"
+     cy="185"
+     r="180"
+     fill="#d04423"
+     opacity="0.07"
+     id="circle6" />
+  <!-- === MARP LOGO — column 1, centered at x=250 === -->
+  <!-- Chevron: original 250×160, scale 1.15 → 287×184, centered at x=250 -->
+  <g
+     transform="translate(106, 60) scale(1.15)"
+     id="g8">
+    <path
+       fill="#67b8e3"
+       d="M250 0l-90 90v70h90V0z"
+       id="path6" />
+    <path
+       fill="#0288d1"
+       d="M160 0L0 160h90l70-70V0z"
+       id="path7" />
+    <path
+       fill="#02669d"
+       d="M90 160h70V90l-70 70z"
+       id="path8" />
+  </g>
+  <!-- "Marp" text centered below chevron -->
+  <text
+     x="250"
+     y="305"
+     font-family="'Segoe UI', 'SF Pro Display', Arial, sans-serif"
+     font-size="56"
+     font-weight="300"
+     fill="#e2e8f0"
+     text-anchor="middle"
+     letter-spacing="4"
+     id="text8">Marp</text>
+  <!-- === ARROW — column 2, centered at x=640 === -->
+  <g
+     filter="url(#glow)"
+     id="g9">
+    <polygon
+       points="600,125 600,245 680,185"
+       fill="url(#arrowGrad)"
+       id="polygon8" />
+  </g>
+  <!-- === PPTX — column 3, centered at x=1030 === -->
+  <!-- Original 270×404, scaled 0.69 → ~186×279, centered at x=1030 -->
+  <g
+     transform="translate(937, 40) scale(0.69)"
+     id="g13">
+    <!-- Document body -->
+    <path
+       d="M0,14 Q0,0 14,0 L195,0 L270,75 L270,390 Q270,404 256,404 L14,404 Q0,404 0,390 Z"
+       fill="#1e293b"
+       stroke="#475569"
+       stroke-width="2.5"
+       id="path9" />
+    <!-- Folded corner -->
+    <path
+       d="M195,0 L195,61 Q195,75 209,75 L270,75"
+       fill="#334155"
+       stroke="#475569"
+       stroke-width="2"
+       id="path10" />
+    <!-- Red rounded square with white P — centered in upper body -->
+    <rect
+       x="85"
+       y="105"
+       width="100"
+       height="100"
+       rx="20"
+       ry="20"
+       fill="#d04423"
+       id="rect10" />
+    <text
+       x="135"
+       y="178"
+       font-family="'Segoe UI', Arial, sans-serif"
+       font-size="72"
+       font-weight="700"
+       fill="#ffffff"
+       text-anchor="middle"
+       id="text10">P</text>
+    <!-- Decorative content lines below P -->
+    <line
+       x1="40"
+       y1="240"
+       x2="230"
+       y2="240"
+       stroke="#475569"
+       stroke-width="2"
+       opacity="0.5"
+       id="line10" />
+    <line
+       x1="40"
+       y1="263"
+       x2="195"
+       y2="263"
+       stroke="#475569"
+       stroke-width="2"
+       opacity="0.35"
+       id="line11" />
+    <line
+       x1="40"
+       y1="286"
+       x2="210"
+       y2="286"
+       stroke="#475569"
+       stroke-width="2"
+       opacity="0.25"
+       id="line12" />
+    <line
+       x1="40"
+       y1="309"
+       x2="170"
+       y2="309"
+       stroke="#475569"
+       stroke-width="2"
+       opacity="0.2"
+       id="line13" />
+    <!-- ".pptx" text across the bottom -->
+    <text
+       x="135"
+       y="380"
+       font-family="'Segoe UI', Arial, sans-serif"
+       font-size="60"
+       font-weight="700"
+       fill="#f1f5f9"
+       text-anchor="middle"
+       letter-spacing="-1"
+       id="text13">.pptx</text>
+  </g>
+  <!-- === TEXT === -->
+  <text
+     x="640"
+     y="460"
+     font-family="'Segoe UI', 'SF Pro Display', Arial, sans-serif"
+     font-size="72"
+     font-weight="700"
+     fill="#f1f5f9"
+     text-anchor="middle"
+     letter-spacing="-1"
+     id="text14">
+    MarpToPptx
+  </text>
+  <text
+     x="642.09473"
+     y="583"
+     font-family="'Segoe UI', 'SF Pro Display', Arial, sans-serif"
+     font-size="52px"
+     font-weight="500"
+     fill="#cbd5e1"
+     text-anchor="middle"
+     letter-spacing="0.5"
+     id="text15"
+     style="font-size:86.6667px;text-align:center;text-anchor:middle">Write slides in Markdown</text>
+  <!-- Bottom accent line -->
+  <!-- Corner accents -->
+  <line
+     x1="20"
+     y1="20"
+     x2="20"
+     y2="70"
+     stroke="#0288d1"
+     stroke-width="2"
+     opacity="0.25"
+     id="line16" />
+  <line
+     x1="20"
+     y1="20"
+     x2="70"
+     y2="20"
+     stroke="#0288d1"
+     stroke-width="2"
+     opacity="0.25"
+     id="line17" />
+  <line
+     x1="1260"
+     y1="570"
+     x2="1260"
+     y2="620"
+     stroke="#d04423"
+     stroke-width="2"
+     opacity="0.25"
+     id="line18" />
+  <line
+     x1="1210"
+     y1="620"
+     x2="1260"
+     y2="620"
+     stroke="#d04423"
+     stroke-width="2"
+     opacity="0.25"
+     id="line19" />
+</svg>
