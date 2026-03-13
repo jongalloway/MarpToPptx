@@ -11,7 +11,11 @@ param(
 	[switch]$CiSafe,
 	[switch]$SkipPowerPoint,
 	[switch]$SkipRoundTripSave,
-	[string]$RoundTripCopyPath
+	[string]$RoundTripCopyPath,
+	[switch]$ExportSlides,
+	[ValidateSet("jpg", "png")]
+	[string]$SlideExportFormat = "png",
+	[string]$SlideExportDirectory
 )
 
 Set-StrictMode -Version Latest
@@ -70,6 +74,7 @@ function Test-PowerPointAutomationAvailable {
 $repoRoot = Split-Path -Parent $PSScriptRoot
 $generateScript = Join-Path $PSScriptRoot "Generate-LocalPptx.ps1"
 $powerPointScript = Join-Path $PSScriptRoot "Test-PowerPointOpen.ps1"
+$exportSlidesScript = Join-Path $PSScriptRoot "Export-PptxSlides.ps1"
 $usedDefaultOutputPath = $false
 
 if (-not $OutputPath) {
@@ -148,6 +153,21 @@ if (-not $SkipPowerPoint) {
 }
 else {
 	Write-Host "Step 3: Skipped PowerPoint validation." -ForegroundColor Yellow
+}
+
+if ($ExportSlides) {
+	Write-Host "Step 4: Export slide images." -ForegroundColor Cyan
+	$exportSlidesArguments = @{
+		PptxPath = $resolvedOutputPath
+		Format   = $SlideExportFormat
+		CiSafe   = $CiSafe
+	}
+
+	if ($SlideExportDirectory) {
+		$exportSlidesArguments.OutputDirectory = [System.IO.Path]::GetFullPath($SlideExportDirectory, $repoRoot)
+	}
+
+	& $exportSlidesScript @exportSlidesArguments
 }
 
 Write-Host "Smoke test passed for '$resolvedOutputPath'." -ForegroundColor Green

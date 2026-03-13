@@ -574,6 +574,33 @@ function Start-ComparePptx {
     Invoke-SelectedScript -ScriptPath (Join-Path $PSScriptRoot "Compare-PptxStructure.ps1") -Arguments $arguments -RepositoryRoot $RepositoryRoot
 }
 
+function Start-ExportSlides {
+    param(
+        [Parameter(Mandatory = $true)]
+        [string]$RepositoryRoot
+    )
+
+    $pptxPath = Read-ExistingFilePath -Prompt "PPTX path to export slides from" -RepositoryRoot $RepositoryRoot
+    $format = Read-MenuChoice -Prompt "Choose the export image format." -Options @(
+        [pscustomobject]@{ Label = "PNG"; Value = "png" },
+        [pscustomobject]@{ Label = "JPG"; Value = "jpg" }
+    ) -DefaultIndex 0
+    $pptxBaseName = [System.IO.Path]::GetFileNameWithoutExtension($pptxPath)
+    $defaultOutputDirectory = Join-Path (Join-Path (Join-Path $RepositoryRoot "artifacts") "slide-exports") $pptxBaseName
+    $outputDirectory = Read-OptionalOutputPath -Prompt "Output directory" -RepositoryRoot $RepositoryRoot -Default $defaultOutputDirectory
+
+    $arguments = @{
+        PptxPath  = $pptxPath
+        Format    = $format
+    }
+
+    if ($outputDirectory) {
+        $arguments.OutputDirectory = $outputDirectory
+    }
+
+    Invoke-SelectedScript -ScriptPath (Join-Path $PSScriptRoot "Export-PptxSlides.ps1") -Arguments $arguments -RepositoryRoot $RepositoryRoot
+}
+
 $repositoryRoot = Get-RepositoryRoot
 
 Write-Host "MarpToPptx test concierge" -ForegroundColor Magenta
@@ -583,6 +610,7 @@ $action = Read-MenuChoice -Prompt "What do you want to do?" -Options @(
     [pscustomobject]@{ Label = "Generate one PPTX from Markdown"; Value = "generate-single" },
     [pscustomobject]@{ Label = "Run the smoke test for one deck"; Value = "smoke-single" },
     [pscustomobject]@{ Label = "Run the smoke test suite"; Value = "smoke-all" },
+    [pscustomobject]@{ Label = "Export slide images from a PPTX"; Value = "export-slides" },
     [pscustomobject]@{ Label = "Expand a PPTX package into a directory"; Value = "expand" },
     [pscustomobject]@{ Label = "Open a PPTX in PowerPoint"; Value = "open" },
     [pscustomobject]@{ Label = "Compare two PPTX packages or directories"; Value = "compare" }
@@ -592,6 +620,7 @@ switch ($action) {
     "generate-single" { Start-GenerateSingle -RepositoryRoot $repositoryRoot }
     "smoke-single" { Start-SmokeSingle -RepositoryRoot $repositoryRoot }
     "smoke-all" { Start-SmokeAll -RepositoryRoot $repositoryRoot }
+    "export-slides" { Start-ExportSlides -RepositoryRoot $repositoryRoot }
     "expand" { Start-ExpandPptx -RepositoryRoot $repositoryRoot }
     "open" { Start-OpenInPowerPoint -RepositoryRoot $repositoryRoot }
     "compare" { Start-ComparePptx -RepositoryRoot $repositoryRoot }
