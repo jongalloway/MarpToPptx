@@ -63,6 +63,9 @@ jobs:
       - name: Restore
         run: dotnet restore MarpToPptx.slnx
 
+      - name: Build
+        run: dotnet build MarpToPptx.slnx --configuration Release --no-restore
+
       - name: Run PPTX Smoke Test
         shell: pwsh
         run: |
@@ -76,6 +79,17 @@ jobs:
             -Configuration Release `
             -CiSafe `
             -OnlyRemoteSamples
+
+      - name: Run Contrast Audit
+        continue-on-error: true
+        shell: pwsh
+        run: |
+          ./scripts/Invoke-ContrastAudit.ps1 `
+            -PptxDirectory artifacts/smoke-tests `
+            -Configuration Release `
+            -ReportPath artifacts/smoke-tests/contrast-audit-report.json `
+            -NoBuild `
+            -ContinueOnError
 
       - name: Upload Smoke Test Artifacts
         if: always()

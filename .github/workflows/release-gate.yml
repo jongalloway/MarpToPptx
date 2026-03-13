@@ -68,11 +68,21 @@ jobs:
 
                   foreach ($pptxFile in $pptxFiles) {
                     Write-Host "Validating '$($pptxFile.Name)' with Open XML SDK..." -ForegroundColor Cyan
-                    dotnet run --project src/MarpToPptx.OpenXmlValidator -c ${{ inputs.configuration }} -- $pptxFile.FullName
+                    dotnet run --project src/MarpToPptx.OpenXmlValidator -c ${{ inputs.configuration }} --no-build -- $pptxFile.FullName
                     if ($LASTEXITCODE -ne 0) {
                       throw "Open XML validation failed for $($pptxFile.FullName)"
                     }
                   }
+
+            - name: Run Contrast Audit
+              shell: pwsh
+              run: |
+                  ./scripts/Invoke-ContrastAudit.ps1 `
+                    -PptxDirectory artifacts/release-gate/samples `
+                    -Configuration ${{ inputs.configuration }} `
+                    -ReportPath artifacts/release-gate/contrast-audit-report.json `
+                    -NoBuild `
+                    -ContinueOnError
 
             - name: Convert PPTX To PDF With LibreOffice
               shell: pwsh
@@ -107,4 +117,94 @@ jobs:
                   path: |
                       artifacts/release-gate/*
                       artifacts/nupkg/*.nupkg
+                  if-no-files-found: warn
+
+    windows-powerpoint-validation:
+        runs-on: windows-latest
+
+        steps:
+            - name: Checkout
+              uses: actions/checkout@v4
+              with:
+                  fetch-depth: 0
+
+            - name: Setup .NET
+              uses: actions/setup-dotnet@v4
+              with:
+                  global-json-file: global.json
+                  dotnet-version: 10.0.x
+
+            - name: Restore
+              run: dotnet restore MarpToPptx.slnx
+
+            - name: Build
+              run: dotnet build MarpToPptx.slnx --configuration ${{ inputs.configuration }} --no-restore
+
+            - name: Generate Complete Sample Set
+              shell: pwsh
+              run: |
+                  ./scripts/Generate-SamplePptxSet.ps1 `
+                    -Configuration ${{ inputs.configuration }} `
+                    -OutputDirectory artifacts/windows-gate/samples `
+                    -IncludeThemeSamples `
+                    -Force
+
+            - name: Validate Generated PPTX Packages
+              shell: pwsh
+              run: |
+                  $pptxFiles = Get-ChildItem artifacts/windows-gate/samples -Filter *.pptx | Sort-Object Name
+                  if ($pptxFiles.Count -eq 0) {
+                    throw "No PPTX files were generated for Windows gate validation."
+                  }
+
+                  foreach ($pptxFile in $pptxFiles) {
+                    Write-Host "Validating '$($pptxFile.Name)' with Open XML SDK..." -ForegroundColor Cyan
+                    dotnet run --project src/MarpToPptx.OpenXmlValidator -c ${{ inputs.configuration }} --no-build -- $pptxFile.FullName
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "Open XML validation failed for $($pptxFile.FullName)"
+                    }
+                  }
+
+            - name: Run Contrast Audit
+              shell: pwsh
+              run: |
+                  ./scripts/Invoke-ContrastAudit.ps1 `
+                    -PptxDirectory artifacts/windows-gate/samples `
+                    -Configuration ${{ inputs.configuration }} `
+                    -ReportPath artifacts/windows-gate/contrast-audit-report.json `
+                    -NoBuild `
+                    -ContinueOnError
+
+            - name: Open PPTX Files in PowerPoint
+              shell: pwsh
+              run: |
+                  $powerPointType = [System.Type]::GetTypeFromProgID("PowerPoint.Application", $false)
+                  if ($null -eq $powerPointType) {
+                    Write-Host "PowerPoint COM automation is unavailable on this runner. Skipping PowerPoint open validation." -ForegroundColor Yellow
+                  } else {
+                    $pptxFiles = Get-ChildItem artifacts/windows-gate/samples -Filter *.pptx | Sort-Object Name
+                    foreach ($pptxFile in $pptxFiles) {
+                      Write-Host "Testing PowerPoint open for '$($pptxFile.Name)'..." -ForegroundColor Cyan
+                      ./scripts/Test-PowerPointOpen.ps1 -PptxPath $pptxFile.FullName
+                    }
+                  }
+
+            - name: Export Slide Images
+              shell: pwsh
+              run: |
+                  $pptxFiles = Get-ChildItem artifacts/windows-gate/samples -Filter *.pptx | Sort-Object Name
+                  foreach ($pptxFile in $pptxFiles) {
+                    Write-Host "Exporting slides for '$($pptxFile.Name)'..." -ForegroundColor Cyan
+                    ./scripts/Export-PptxSlides.ps1 `
+                      -PptxPath $pptxFile.FullName `
+                      -OutputDirectory "artifacts/windows-gate/slide-exports/$($pptxFile.BaseName)" `
+                      -CiSafe
+                  }
+
+            - name: Upload Windows Gate Artifacts
+              if: always()
+              uses: actions/upload-artifact@v4
+              with:
+                  name: marp2pptx-windows-gate-artifacts
+                  path: artifacts/windows-gate/*
                   if-no-files-found: warn

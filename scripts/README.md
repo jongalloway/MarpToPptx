@@ -77,6 +77,18 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Ex
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/04-content-coverage.md -ExportSlides -SlideExportFormat jpg -CiSafe
 ```
 
+### `Invoke-ContrastAudit.ps1`
+
+Run the contrast auditor on every `.pptx` file in a directory and write a JSON summary report. The script exits cleanly if no PPTX files are found, reports a warning for each file with contrast failures, and throws on failure or error by default. Pass `-ContinueOnError` to always audit every file before surfacing failures.
+
+```powershell
+pwsh ./scripts/Invoke-ContrastAudit.ps1 -PptxDirectory artifacts/smoke-tests -Configuration Release
+pwsh ./scripts/Invoke-ContrastAudit.ps1 -PptxDirectory artifacts/release-gate/samples -Configuration Release -ReportPath artifacts/release-gate/contrast-audit-report.json -ContinueOnError
+pwsh ./scripts/Invoke-ContrastAudit.ps1 -PptxDirectory artifacts/smoke-tests -Configuration Release -NoBuild -ContinueOnError
+```
+
+The auditor checks text/background color-contrast ratios in each slide against WCAG thresholds. Exit code `0` means all pairs passed (or no auditable pairs were found), exit code `2` means one or more contrast failures were detected, and exit code `1` indicates an unexpected error.
+
 ### `Invoke-PptxSmokeTest.ps1`
 
 Run the main local PPTX smoke-test flow in one command: generate with the local CLI project, validate with the .NET Open XML helper, and then open the result in PowerPoint.
@@ -117,7 +129,8 @@ pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -Incl
 - `Invoke-TestConcierge.ps1` is the easiest way to discover the local test and export flows without remembering script parameters.
 - `Invoke-PptxSmokeTest.ps1` is the quickest end-to-end check before or after renderer/package changes.
 - `Invoke-AllPptxSmokeTests.ps1` is the quickest way to run the full local smoke suite across the sample directory.
+- `Invoke-ContrastAudit.ps1` is cross-platform and works without PowerPoint; run it after any PPTX generation step to catch text/background contrast regressions.
 - `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus .NET-hosted Open XML validation on CI agents or other environments without PowerPoint.
 - `Export-PptxSlides.ps1 -CiSafe` and `Invoke-PptxSmokeTest.ps1 -ExportSlides -CiSafe` skip the slide export step gracefully when PowerPoint is unavailable.
 - Remote asset smoke coverage is opt-in in the sample-generation helpers so the default local flow stays deterministic when working offline.
-- The manual pre-release PowerPoint review checklist is documented in `doc/release-validation.md`.
+- The manual pre-release PowerPoint review checklist and the CI/release gate documentation are in `doc/release-validation.md`.
