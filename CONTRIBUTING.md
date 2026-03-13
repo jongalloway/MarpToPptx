@@ -70,6 +70,14 @@ git tag v1.2.3
 git push origin v1.2.3
 ```
 
+Or use the helper script:
+
+```powershell
+pwsh ./scripts/New-ReleaseTag.ps1 -Version 1.2.3
+```
+
+The script requires a clean, up-to-date `main` branch and asks you to confirm that release validation is complete before it creates and pushes the tag. Use `-Force` only when you intentionally need to bypass those checks.
+
 After the workflow finishes and NuGet indexing completes, install or run the published tool with:
 
 ```bash
