@@ -22,8 +22,8 @@ public sealed class OpenXmlPptxRenderer
     private const int LayoutScale = 12700;
     private const string DefaultTableStyleId = "{5C22544A-7EE6-4342-B048-85BDC9FD1C3A}";
     private const string SvgBlipExtensionUri = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
-    private const double MermaidErrorLabelVerticalGap = 4;
-    private const double MermaidErrorLabelHeight = 20;
+    private const double DiagramErrorLabelVerticalGap = 4;
+    private const double DiagramErrorLabelHeight = 20;
     private static readonly byte[] MediaPlaceholderImage = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
     private static readonly DiagramRenderer _diagramRenderer = new();
@@ -1480,19 +1480,19 @@ public sealed class OpenXmlPptxRenderer
             // Keep the fallback code block and error label within the original frame.
             // If the frame is too small for both (edge case), the code block gets zero height
             // and only the error label is shown.
-            var reservedForLabel = MermaidErrorLabelVerticalGap + MermaidErrorLabelHeight;
+            var reservedForLabel = DiagramErrorLabelVerticalGap + DiagramErrorLabelHeight;
             var availableCodeHeight = Math.Max(0, frame.Height - reservedForLabel);
             var codeFrame = new Rect(frame.X, frame.Y, frame.Width, availableCodeHeight);
             var fallbackCode = new CodeBlockElement(fenceName, source);
             AddCodeBlock(context, codeFrame, fallbackCode, fallbackStyle);
 
-            var labelY = frame.Y + frame.Height - MermaidErrorLabelHeight;
+            var labelY = frame.Y + frame.Height - DiagramErrorLabelHeight;
             var errorPrefix = string.Equals(fenceName, "mermaid", StringComparison.OrdinalIgnoreCase)
                 ? "Mermaid"
                 : "Diagram";
             AddTextShape(
                 context,
-                new Rect(frame.X, labelY, frame.Width, MermaidErrorLabelHeight),
+                new Rect(frame.X, labelY, frame.Width, DiagramErrorLabelHeight),
                 $"{errorPrefix} parse error: {ex.Message}",
                 fallbackStyle);
             return;
@@ -1554,12 +1554,17 @@ public sealed class OpenXmlPptxRenderer
 
     private static Theme CreateDiagramTheme(ThemeDefinition effectiveTheme)
     {
-        var nodeFillColor = string.IsNullOrWhiteSpace(effectiveTheme.Code.BackgroundColor)
-            ? effectiveTheme.BackgroundColor
-            : effectiveTheme.Code.BackgroundColor;
+        var hasCodeBackground = !string.IsNullOrWhiteSpace(effectiveTheme.Code.BackgroundColor);
+
+        var nodeFillColor = hasCodeBackground
+            ? effectiveTheme.Code.BackgroundColor!
+            : effectiveTheme.BackgroundColor;
 
         var nodeStrokeColor = effectiveTheme.GetHeadingStyle(2).Color;
-        var textColor = effectiveTheme.Code.Color;
+
+        var textColor = hasCodeBackground
+            ? effectiveTheme.Code.Color
+            : effectiveTheme.Body.Color;
 
         return new Theme
         {

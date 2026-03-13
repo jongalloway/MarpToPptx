@@ -155,24 +155,28 @@ public sealed class MarpMarkdownParser
 
     private static string NormalizeDiagramSource(string source)
     {
-        var lines = source.Replace("\r\n", "\n").Split('\n').ToList();
+        var lines = source.Replace("\r\n", "\n").Split('\n');
 
-        while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[0]))
+        var start = 0;
+        while (start < lines.Length && string.IsNullOrWhiteSpace(lines[start]))
         {
-            lines.RemoveAt(0);
+            start++;
         }
 
-        while (lines.Count > 0 && string.IsNullOrWhiteSpace(lines[^1]))
+        var end = lines.Length - 1;
+        while (end >= start && string.IsNullOrWhiteSpace(lines[end]))
         {
-            lines.RemoveAt(lines.Count - 1);
+            end--;
         }
 
-        if (lines.Count == 0)
+        if (start > end)
         {
             return string.Empty;
         }
 
-        var minIndent = lines
+        var trimmed = lines[start..(end + 1)];
+
+        var minIndent = trimmed
             .Where(line => !string.IsNullOrWhiteSpace(line))
             .Select(line => line.TakeWhile(char.IsWhiteSpace).Count())
             .DefaultIfEmpty(0)
@@ -180,10 +184,10 @@ public sealed class MarpMarkdownParser
 
         if (minIndent <= 0)
         {
-            return string.Join('\n', lines);
+            return string.Join('\n', trimmed);
         }
 
-        return string.Join('\n', lines.Select(line =>
+        return string.Join('\n', trimmed.Select(line =>
             string.IsNullOrWhiteSpace(line)
                 ? string.Empty
                 : line.Length >= minIndent

@@ -11,7 +11,7 @@ MarpToPptx can render both `mermaid` and `diagram` fenced blocks through Diagram
 
 ---
 
-## Mermaid Sequence
+## Mermaid Flowchart
 
 ```mermaid
 flowchart LR
