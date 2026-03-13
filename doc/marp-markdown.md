@@ -87,6 +87,7 @@ Front matter key-value pairs set deck-level defaults that apply to all slides un
 | `headingDivider` | integer (1–6) | Split slides before headings at or above that level |
 | `lang` | BCP-47 string | Language tag written to PPTX document metadata |
 | `style` | CSS string | Inline CSS merged with any `--theme-css` CSS |
+| `transition` | string | Default slide transition for all slides (see [Transition Directive](#transition-directive)) |
 
 All other front matter keys are stored in `SlideDeck.FrontMatter` but not interpreted.
 
@@ -113,6 +114,60 @@ A leading `_` on the key makes a directive a **spot directive**: it applies only
 ```
 
 All recognised directive keys support the `_` prefix. The next slide reverts to the inherited carry-forward value.
+
+### Transition Directive
+
+The `transition` directive adds a PowerPoint slide transition to the slide that advances into it. It can be set globally in front matter (deck default), as a local directive (carries forward), or as a spot directive (current slide only).
+
+**Syntax:**
+
+```markdown
+transition: <type> [dir:<direction>] [dur:<milliseconds>]
+```
+
+**Supported transition types:**
+
+| Directive value | PowerPoint transition | Direction supported |
+|---|---|---|
+| `fade` | Fade | No |
+| `push` | Push | Yes (`left`, `right`, `up`, `down`) |
+| `wipe` | Wipe | Yes (`left`, `right`, `up`, `down`) |
+| `cut` | Cut (instant) | No |
+| `cover` | Cover | Yes (`left`, `right`, `up`, `down`) |
+| `pull` | Pull (Uncover) | Yes (`left`, `right`, `up`, `down`) |
+| `random-bar` | Random Bar | `horizontal` (default), `vertical` |
+| `morph` | Morph (fallback: fade) | No |
+
+**Optional parameters:**
+
+- `dir:<value>` — sets the direction for transitions that support it. Ignored otherwise.
+- `dur:<ms>` — duration in milliseconds. Mapped to the `spd` attribute bands: `≤300ms` → fast, `≤700ms` → medium, `>700ms` → slow.
+
+> **Morph note:** Morph is an Office 2019+ feature that requires an `mc:AlternateContent` wrapper in the PPTX. The current implementation emits a `fade` as a compatible fallback for all PowerPoint versions. Full morph support is tracked as a follow-up.
+
+**Examples:**
+
+```markdown
+---
+transition: fade
+---
+
+# First slide (inherits fade)
+
+---
+
+<!-- transition: push dir:right -->
+# Second slide (push right, carries forward)
+
+---
+
+<!-- _transition: wipe dur:500 -->
+# Third slide (wipe, spot override — does not carry forward)
+
+---
+
+# Fourth slide (back to push right from slide 2)
+```
 
 ### Presenter Notes
 
@@ -152,6 +207,7 @@ Console.WriteLine("notes code block");
   - `backgroundColor`
   - `header`
   - `footer`
+  - `transition` — slide transition type with optional `dir:` and `dur:` parameters
 - Spot directives — all of the above keys work with a `_` prefix (e.g. `_class`, `_paginate`); they apply only to the current slide and do not carry forward
 - Headings
 - Paragraphs
@@ -173,6 +229,7 @@ Console.WriteLine("notes code block");
 - Text transform applied from CSS `text-transform` (`uppercase`, `lowercase`, `capitalize`)
 - Optional template-copy workflow via `--template`
 - Named template layout selection via front matter `layout`, comment directives `layout` / `_layout`, and authored template-slide selection via `Template[n]`
+- Slide transitions via the `transition` directive (`fade`, `push`, `wipe`, `cut`, `cover`, `pull`, `random-bar`, `morph` with fade fallback); optional `dir:` and `dur:` parameters
 
 ### Not Yet Supported
 
