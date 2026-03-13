@@ -26,6 +26,7 @@ public sealed class LayoutEngine
                 VideoElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 AudioElement => CreateFixedFrame(contentX, contentWidth, ref y, 80),
                 MermaidDiagramElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
+                DiagramElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 CodeBlockElement code => CreateCodeBlockFrame(code, theme, contentX, contentWidth, ref y),
                 TableElement table => CreateTableFrame(table, theme, contentX, contentWidth, ref y),
                 _ => CreateFixedFrame(contentX, contentWidth, ref y, 80),

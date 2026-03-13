@@ -1653,6 +1653,52 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_ParsesDiagramFencedBlock_AsDiagramElement()
+    {
+        const string markdown = """
+                # Slide
+
+                ```diagram
+                diagram: cycle
+                steps:
+                    - Plan
+                    - Build
+                    - Measure
+                    - Learn
+                ```
+                """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
+        Assert.Contains("diagram: cycle", diagram.Source);
+    }
+
+    [Fact]
+    public void Parser_ParsesDiagramFencedBlock_CaseInsensitive()
+    {
+        const string markdown = """
+                # Slide
+
+                ```DIAGRAM
+                diagram: pyramid
+                levels:
+                    - Vision
+                    - Strategy
+                    - Tactics
+                ```
+                """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Single(slide.Elements.OfType<DiagramElement>());
+    }
+
+    [Fact]
     public void Parser_NonMermaidFencedBlock_RemainsCodeBlockElement()
     {
         const string markdown = """
@@ -1670,5 +1716,6 @@ public class ParserTests
         var codeBlock = Assert.Single(slide.Elements.OfType<CodeBlockElement>());
         Assert.Equal("csharp", codeBlock.Language);
         Assert.Empty(slide.Elements.OfType<MermaidDiagramElement>());
+        Assert.Empty(slide.Elements.OfType<DiagramElement>());
     }
 }

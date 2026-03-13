@@ -1628,7 +1628,7 @@ public class PptxRendererTests
                     new A.Offset { X = 0L, Y = 0L },
                     new A.Extents { Cx = 0L, Cy = 0L },
                     new A.ChildOffset { X = 0L, Y = 0L },
-                    new A.ChildExtents { Cx = 0L, Cy = 0L })))) ,
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })))),
             new P.ColorMapOverride(new A.MasterColorMapping()))
         {
             Type = P.SlideLayoutValues.Text,
@@ -3396,6 +3396,46 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_PlacesDiagramFenceAsPictureShape_OnSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide with Conceptual Diagram
+
+            ```diagram
+                        diagram: pyramid
+                        levels:
+                            - Vision
+                            - Strategy
+                            - Tactics
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        var svgPart = slidePart.ImageParts
+            .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(svgPart);
+
+        using var stream = svgPart!.GetStream();
+        var svg = new System.IO.StreamReader(stream).ReadToEnd();
+        Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_InvalidMermaidInput_FallsBackToCodeBlock()
     {
         using var workspace = TestWorkspace.Create();
@@ -3423,6 +3463,37 @@ public class PptxRendererTests
 
         // Error label should contain the "Mermaid parse error:" prefix
         Assert.Contains(textRuns, t => t.StartsWith("Mermaid parse error:", StringComparison.Ordinal));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_InvalidDiagramInput_FallsBackToCodeBlock()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ```diagram
+            diagram: unknowntype
+            items:
+              - Alpha
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.NotEmpty(textRuns);
+        Assert.Contains(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
