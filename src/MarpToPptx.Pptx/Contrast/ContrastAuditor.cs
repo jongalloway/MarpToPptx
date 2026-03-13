@@ -127,7 +127,7 @@ public sealed class ContrastAuditor
     {
         foreach (var paragraph in textBody.Elements<A.Paragraph>())
         {
-            // Heuristic: treat heading-sized text (font >= 28pt) as large text.
+            // WCAG 2.1 large text: 18pt+ (any weight) or 14pt+ bold.
             // The paragraph-level default run properties may carry a font size.
             var paraFontSize = GetParagraphFontSizePt(paragraph);
 
@@ -138,7 +138,9 @@ public sealed class ContrastAuditor
                     continue;
 
                 var runFontSize = GetRunFontSizePt(run) ?? paraFontSize;
-                var isLargeText = runFontSize.HasValue && runFontSize.Value >= 18.0;
+                var isBold = run.RunProperties?.Bold?.Value == true;
+                var isLargeText = runFontSize.HasValue
+                    && (runFontSize.Value >= 18.0 || (isBold && runFontSize.Value >= 14.0));
 
                 var ratio = ContrastCalculator.ContrastRatio(runColor, backgroundHex);
 
