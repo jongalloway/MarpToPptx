@@ -88,7 +88,7 @@ internal static class ProgramEntry
 			Console.WriteLine($"Generated '{outputPath}'.");
 			return Task.FromResult(0);
 		}
-		catch (ArgumentException ex)
+		catch (CliArgumentException ex)
 		{
 			Console.Error.WriteLine($"Error: {ex.Message}");
 			Console.Error.WriteLine();
@@ -122,11 +122,19 @@ internal static class ProgramEntry
 	{
 		if (index + 1 >= args.Length)
 		{
-			throw new ArgumentException($"Option '{option}' requires a value.");
+			throw new CliArgumentException($"Option '{option}' requires a value.");
 		}
 
 		index++;
 		return args[index];
+	}
+
+	private sealed class CliArgumentException : ArgumentException
+	{
+		public CliArgumentException(string message)
+			: base(message)
+		{
+		}
 	}
 
 	private static void PrintUsage()
