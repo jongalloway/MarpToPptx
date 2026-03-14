@@ -1,32 +1,189 @@
 using MarpToPptx.Pptx.Diagnostics;
 
-if (args.Length != 1 || string.IsNullOrWhiteSpace(args[0]))
+if (args.Length == 0 || IsHelpFlag(args[0]))
 {
-    Console.Error.WriteLine("Usage: dotnet run --project src/MarpToPptx.TemplateDiagnostics -- <path-to-template.pptx>");
-    return 1;
-}
-
-var templatePath = Path.GetFullPath(args[0]);
-if (!File.Exists(templatePath))
-{
-    Console.Error.WriteLine($"Template file was not found: {templatePath}");
-    return 1;
-}
-
-try
-{
-    var diagnoser = new TemplateDiagnoser();
-    var report = diagnoser.Diagnose(templatePath);
-    PrintReport(report);
+    PrintUsage();
     return 0;
 }
-catch (Exception exception)
+
+var subcommand = args[0].ToLowerInvariant();
+
+if (subcommand == "diagnose")
 {
-    Console.Error.WriteLine($"Template diagnostics failed for '{templatePath}': {exception.Message}");
-    return 1;
+    return await RunDiagnoseAsync(args[1..]);
 }
 
-static void PrintReport(TemplateDiagnosticReport report)
+if (subcommand == "doctor")
+{
+    return await RunDoctorAsync(args[1..]);
+}
+
+// Backward-compatible: no subcommand → treat the first argument as a template path and run diagnose.
+if (!args[0].StartsWith('-'))
+{
+    return await RunDiagnoseAsync(args);
+}
+
+Console.Error.WriteLine($"Unknown subcommand '{args[0]}'. Run with --help for usage.");
+return 1;
+
+// ── Subcommand: diagnose ────────────────────────────────────────────────────
+
+static Task<int> RunDiagnoseAsync(string[] subArgs)
+{
+    if (subArgs.Length == 0 || IsHelpFlag(subArgs[0]))
+    {
+        Console.WriteLine("Usage: template-diagnostics diagnose <path-to-template.pptx>");
+        Console.WriteLine();
+        Console.WriteLine("Analyzes a .pptx template and reports its layout structure,");
+        Console.WriteLine("recommended Markdown directives, and potential warnings.");
+        return Task.FromResult(0);
+    }
+
+    var templatePath = ResolveTemplatePath(subArgs[0]);
+    if (templatePath is null)
+    {
+        return Task.FromResult(1);
+    }
+
+    try
+    {
+        var diagnoser = new TemplateDiagnoser();
+        var report = diagnoser.Diagnose(templatePath);
+        PrintDiagnoseReport(report);
+        return Task.FromResult(0);
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Template diagnostics failed for '{templatePath}': {exception.Message}");
+        return Task.FromResult(1);
+    }
+}
+
+// ── Subcommand: doctor ──────────────────────────────────────────────────────
+
+static Task<int> RunDoctorAsync(string[] subArgs)
+{
+    if (subArgs.Length == 0 || IsHelpFlag(subArgs[0]))
+    {
+        Console.WriteLine("Usage: template-diagnostics doctor <path-to-template.pptx> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --dry-run                    Report issues without writing any file (default).");
+        Console.WriteLine("  --write-fixed-template <path>  Write a repaired copy of the template to <path>.");
+        Console.WriteLine("  --json                       Emit the report as JSON to stdout.");
+        Console.WriteLine();
+        Console.WriteLine("Analyzes a .pptx template for structural issues that degrade MarpToPptx output");
+        Console.WriteLine("and optionally writes a repaired copy with safe fixups applied.");
+        return Task.FromResult(0);
+    }
+
+    string? templatePath = null;
+    string? outputPath = null;
+    var jsonMode = false;
+
+    for (var i = 0; i < subArgs.Length; i++)
+    {
+        var arg = subArgs[i];
+
+        switch (arg.ToLowerInvariant())
+        {
+            case "--dry-run":
+                // outputPath stays null → dry run.
+                break;
+
+            case "--write-fixed-template":
+                if (i + 1 >= subArgs.Length)
+                {
+                    Console.Error.WriteLine("--write-fixed-template requires a path argument.");
+                    return Task.FromResult(1);
+                }
+
+                outputPath = Path.GetFullPath(subArgs[++i]);
+                break;
+
+            case "--json":
+                jsonMode = true;
+                break;
+
+            default:
+                if (arg.StartsWith('-'))
+                {
+                    Console.Error.WriteLine($"Unknown option '{arg}'. Run 'doctor --help' for usage.");
+                    return Task.FromResult(1);
+                }
+
+                templatePath ??= arg;
+                break;
+        }
+    }
+
+    if (templatePath is null)
+    {
+        Console.Error.WriteLine("A template path is required.");
+        return Task.FromResult(1);
+    }
+
+    var resolvedTemplatePath = ResolveTemplatePath(templatePath);
+    if (resolvedTemplatePath is null)
+    {
+        return Task.FromResult(1);
+    }
+
+    try
+    {
+        var doctor = new TemplateDoctor();
+        var report = doctor.Run(resolvedTemplatePath, outputPath);
+
+        if (jsonMode)
+        {
+            PrintDoctorReportJson(report);
+        }
+        else
+        {
+            PrintDoctorReport(report);
+        }
+
+        return Task.FromResult(0);
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Template doctor failed for '{resolvedTemplatePath}': {exception.Message}");
+        return Task.FromResult(1);
+    }
+}
+
+// ── Shared helpers ──────────────────────────────────────────────────────────
+
+static bool IsHelpFlag(string arg)
+    => arg is "-h" or "--help" or "-?" or "/?";
+
+static void PrintUsage()
+{
+    Console.WriteLine("Usage: template-diagnostics <subcommand> [options]");
+    Console.WriteLine();
+    Console.WriteLine("Subcommands:");
+    Console.WriteLine("  diagnose <template.pptx>    Analyze template layout structure and report recommendations.");
+    Console.WriteLine("  doctor   <template.pptx>    Inspect and optionally repair structural issues.");
+    Console.WriteLine();
+    Console.WriteLine("Run 'template-diagnostics <subcommand> --help' for subcommand-specific options.");
+}
+
+static string? ResolveTemplatePath(string path)
+{
+    var fullPath = Path.GetFullPath(path);
+    if (!File.Exists(fullPath))
+    {
+        Console.Error.WriteLine($"Template file was not found: {fullPath}");
+        return null;
+    }
+
+    return fullPath;
+}
+
+// ── Print: diagnose ─────────────────────────────────────────────────────────
+
+static void PrintDiagnoseReport(TemplateDiagnosticReport report)
 {
     var fileName = Path.GetFileName(report.TemplatePath);
     var title = $"Template Diagnostic Report: {fileName}";
@@ -141,3 +298,144 @@ static void PrintReport(TemplateDiagnosticReport report)
         Console.WriteLine();
     }
 }
+
+// ── Print: doctor (human-readable) ──────────────────────────────────────────
+
+static void PrintDoctorReport(TemplateDoctorReport report)
+{
+    var fileName = Path.GetFileName(report.TemplatePath);
+    var title = $"Template Doctor Report: {fileName}";
+    Console.WriteLine(title);
+    Console.WriteLine(new string('=', title.Length));
+    Console.WriteLine();
+
+    if (report.Issues.Count == 0)
+    {
+        Console.WriteLine("✓  No structural issues found.");
+        Console.WriteLine();
+    }
+    else
+    {
+        var fixable = report.Issues.Where(i => i.Severity == IssueSeverity.Fixable).ToList();
+        var warnings = report.Issues.Where(i => i.Severity == IssueSeverity.Warning).ToList();
+        var infos = report.Issues.Where(i => i.Severity == IssueSeverity.Info).ToList();
+
+        Console.WriteLine($"Issues found: {report.Issues.Count} total  " +
+            $"({fixable.Count} fixable, {warnings.Count} warning(s), {infos.Count} informational)");
+        Console.WriteLine();
+
+        if (fixable.Count > 0)
+        {
+            Console.WriteLine("Fixable issues");
+            Console.WriteLine("--------------");
+            foreach (var issue in fixable)
+            {
+                var prefix = issue.LayoutName is not null ? $"[{issue.LayoutName}]  " : "";
+                Console.WriteLine($"  🔧 {prefix}{issue.Description}");
+                if (issue.ProposedFix is not null)
+                {
+                    Console.WriteLine($"     Fix: {issue.ProposedFix}");
+                }
+            }
+
+            Console.WriteLine();
+        }
+
+        if (warnings.Count > 0)
+        {
+            Console.WriteLine("Warnings");
+            Console.WriteLine("--------");
+            foreach (var issue in warnings)
+            {
+                var prefix = issue.LayoutName is not null ? $"[{issue.LayoutName}]  " : "";
+                Console.WriteLine($"  ⚠  {prefix}{issue.Description}");
+            }
+
+            Console.WriteLine();
+        }
+
+        if (infos.Count > 0)
+        {
+            Console.WriteLine("Informational");
+            Console.WriteLine("-------------");
+            foreach (var issue in infos)
+            {
+                var prefix = issue.LayoutName is not null ? $"[{issue.LayoutName}]  " : "";
+                Console.WriteLine($"  ℹ  {prefix}{issue.Description}");
+            }
+
+            Console.WriteLine();
+        }
+    }
+
+    if (report.WroteFixedTemplate)
+    {
+        Console.WriteLine("Repaired template");
+        Console.WriteLine("-----------------");
+        Console.WriteLine($"Written to: {report.FixedTemplatePath}");
+
+        if (report.AppliedFixes.Count > 0)
+        {
+            Console.WriteLine($"Fixes applied ({report.AppliedFixes.Count}):");
+            foreach (var fix in report.AppliedFixes)
+            {
+                Console.WriteLine($"  ✓ {fix}");
+            }
+        }
+        else
+        {
+            Console.WriteLine("No fixable issues were found; the file is a clean copy of the original.");
+        }
+
+        Console.WriteLine();
+    }
+    else if (report.Issues.Any(i => i.Severity == IssueSeverity.Fixable))
+    {
+        Console.WriteLine("Tip: Run with --write-fixed-template <output.pptx> to apply the fixable repairs above.");
+        Console.WriteLine();
+    }
+}
+
+// ── Print: doctor (JSON) ────────────────────────────────────────────────────
+
+static void PrintDoctorReportJson(TemplateDoctorReport report)
+{
+    // Minimal hand-rolled JSON to avoid a System.Text.Json dependency.
+    Console.WriteLine("{");
+    Console.WriteLine($"  \"templatePath\": {JsonString(report.TemplatePath)},");
+    Console.WriteLine($"  \"wroteFixedTemplate\": {(report.WroteFixedTemplate ? "true" : "false")},");
+    Console.WriteLine($"  \"fixedTemplatePath\": {(report.FixedTemplatePath is not null ? JsonString(report.FixedTemplatePath) : "null")},");
+    Console.WriteLine($"  \"appliedFixes\": [");
+    var fixLines = report.AppliedFixes.Select((f, i) => $"    {JsonString(f)}{(i < report.AppliedFixes.Count - 1 ? "," : "")}");
+    foreach (var line in fixLines)
+    {
+        Console.WriteLine(line);
+    }
+
+    Console.WriteLine("  ],");
+    Console.WriteLine($"  \"issues\": [");
+
+    for (var i = 0; i < report.Issues.Count; i++)
+    {
+        var issue = report.Issues[i];
+        var comma = i < report.Issues.Count - 1 ? "," : "";
+        Console.WriteLine("    {");
+        Console.WriteLine($"      \"layoutName\": {(issue.LayoutName is not null ? JsonString(issue.LayoutName) : "null")},");
+        Console.WriteLine($"      \"severity\": {JsonString(issue.Severity.ToString())},");
+        Console.WriteLine($"      \"code\": {JsonString(issue.Code)},");
+        Console.WriteLine($"      \"description\": {JsonString(issue.Description)},");
+        Console.WriteLine($"      \"proposedFix\": {(issue.ProposedFix is not null ? JsonString(issue.ProposedFix) : "null")}");
+        Console.WriteLine($"    }}{comma}");
+    }
+
+    Console.WriteLine("  ]");
+    Console.WriteLine("}");
+}
+
+static string JsonString(string value)
+    => "\"" + value
+        .Replace("\\", "\\\\")
+        .Replace("\"", "\\\"")
+        .Replace("\n", "\\n")
+        .Replace("\r", "\\r")
+        .Replace("\t", "\\t") + "\"";

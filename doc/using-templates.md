@@ -142,3 +142,63 @@ character-for-character.
 If names match and it *still* looks the same, the template itself may carry
 all its artwork on the master rather than per-layout. See
 `doc/template-authoring-guidelines.md` for diagnosing that case.
+
+## Diagnosing a template
+
+MarpToPptx ships a standalone diagnostics tool that can report on a template's
+layout structure and make recommendations:
+
+```bash
+dotnet run --project src/MarpToPptx.TemplateDiagnostics -- diagnose conference.pptx
+```
+
+This prints a table of all layouts with their placeholder coverage and semantic
+roles, plus recommended `layout:` / `_layout:` values for your Markdown.
+
+## Template doctor: inspecting and repairing templates
+
+Real-world conference and corporate templates are often valid PowerPoint files
+but still produce suboptimal results with MarpToPptx.  The **template doctor**
+goes beyond diagnostics and can identify — and fix — structural problems.
+
+### What the doctor checks
+
+| Issue code | Severity | What it means |
+|---|---|---|
+| `DuplicateLayoutName` | Warning | Two or more layouts share the same name; only the first can be targeted by directive. |
+| `EmptyLayoutName` | Warning | A layout has no name and will be referenced by position only. |
+| `ContentLayoutMissingTitlePlaceholder` | Warning | A content layout lacks a title placeholder; headings won't use the template's title geometry. |
+| `ContentLayoutMissingBodyPlaceholder` | Warning | A content layout lacks a body placeholder; body content won't use the template's body geometry. |
+| `PlaceholderGeometryInherited` | **Fixable** | A placeholder identity exists on the layout but its position/size is inherited from the slide master instead of being declared on the layout itself.  The renderer recovers via master fallback, but materializing the geometry improves portability. |
+| `TypelessIndexedBodyPlaceholder` | Info | Body content is accessible only via a typeless indexed placeholder — this is standard and fully supported. |
+| `UnmappableLayoutRole` | Info | A picture-caption or comparison layout can't yet be auto-selected by the renderer. |
+| `VisuallyRedundantLayouts` | Info | Multiple layouts share the same role and have no distinct shapes; they appear identical at render time. |
+
+### Dry-run mode
+
+Inspect without modifying anything:
+
+```bash
+dotnet run --project src/MarpToPptx.TemplateDiagnostics -- doctor conference.pptx
+```
+
+### Write a repaired copy
+
+Apply all safe, automatable fixups to a *new* file (the original is never touched):
+
+```bash
+dotnet run --project src/MarpToPptx.TemplateDiagnostics -- \
+  doctor conference.pptx \
+  --write-fixed-template conference-fixed.pptx
+```
+
+The console output lists every fix that was applied.
+
+### JSON output
+
+Pipe the report into other tools:
+
+```bash
+dotnet run --project src/MarpToPptx.TemplateDiagnostics -- \
+  doctor conference.pptx --json
+```
