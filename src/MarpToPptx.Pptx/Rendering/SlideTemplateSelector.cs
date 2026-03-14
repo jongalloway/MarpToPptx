@@ -151,6 +151,17 @@ internal sealed class SlideTemplateSelector
         => GetPlaceholderRect(layoutPart, P.PlaceholderValues.Title, P.PlaceholderValues.CenteredTitle);
 
     /// <summary>
+    /// Returns the bounding rectangle (in layout units) of the title placeholder,
+    /// checking the layout's explicit transform first and falling back to the slide
+    /// master's title placeholder transform when the layout carries no explicit geometry.
+    /// Returns <c>null</c> when neither the layout nor its parent master carries a
+    /// usable title placeholder transform.
+    /// </summary>
+    public static Rect? GetTitlePlaceholderRectIncludingMaster(SlideLayoutPart layoutPart)
+        => GetTitlePlaceholderRect(layoutPart)
+           ?? GetMasterPlaceholderRect(layoutPart.SlideMasterPart, P.PlaceholderValues.Title, P.PlaceholderValues.CenteredTitle);
+
+    /// <summary>
     /// Returns the bounding rectangle (in layout units) of the body placeholder in the
     /// given layout, or <c>null</c> if the placeholder has no explicit transform.
     /// </summary>
@@ -333,6 +344,22 @@ internal sealed class SlideTemplateSelector
             return null;
         }
 
+        return GetPlaceholderRectFromShapeTree(shapeTree, types);
+    }
+
+    private static Rect? GetMasterPlaceholderRect(SlideMasterPart? masterPart, params P.PlaceholderValues[] types)
+    {
+        var shapeTree = masterPart?.SlideMaster?.CommonSlideData?.ShapeTree;
+        if (shapeTree is null)
+        {
+            return null;
+        }
+
+        return GetPlaceholderRectFromShapeTree(shapeTree, types);
+    }
+
+    private static Rect? GetPlaceholderRectFromShapeTree(DocumentFormat.OpenXml.OpenXmlElement shapeTree, P.PlaceholderValues[] types)
+    {
         foreach (var shape in shapeTree.Elements<P.Shape>())
         {
             var ph = shape.NonVisualShapeProperties?

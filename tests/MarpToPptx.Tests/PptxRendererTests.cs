@@ -1226,7 +1226,335 @@ public class PptxRendererTests
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
     }
+    [Fact]
+    public void Renderer_TitleOnly_ConstrainsResidualContentBelowExplicitTitleRect()
+    {
+        // Verifies that on a Title Only layout (title placeholder, no body placeholder)
+        // with an explicit title transform, standalone body shapes start below the
+        // title region plus the mandatory spacer gap.
+        using var workspace = TestWorkspace.Create();
 
+        // Title placeholder: Y=80, H=120 → bottom=200; expected min content Y=220 (spacer=20).
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithTitleOnlyLayout(templatePath,
+            layoutTitleBounds: new PlaceholderBounds(X: 50, Y: 80, W: 860, H: 120),
+            masterTitleBounds: null);
+
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- _layout: Title Only -->
+            # My Title
+
+            A body paragraph.
+
+            ```csharp
+            var x = 1;
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Title goes into a placeholder shape (no explicit transform).
+        var titleShape = Assert.Single(slidePart.Slide!.Descendants<P.Shape>(),
+            s => s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                     .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Title);
+        Assert.Null(titleShape.ShapeProperties?.Transform2D);
+
+        // All standalone (non-placeholder) shapes must start at or below 220*12700 EMU.
+        // titleBottom = 80+120=200; spacer=20; minY=220.
+        const long expectedMinY = 220L * 12700;
+        var standaloneShapes = slidePart.Slide!.Descendants<P.Shape>()
+            .Where(s => s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                             .GetFirstChild<P.PlaceholderShape>() is null)
+            .ToArray();
+
+        Assert.NotEmpty(standaloneShapes);
+        foreach (var shape in standaloneShapes)
+        {
+            var offsetY = shape.ShapeProperties?.Transform2D?.Offset?.Y?.Value;
+            Assert.NotNull(offsetY);
+            Assert.True(offsetY >= expectedMinY,
+                $"Shape '{shape.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value}' " +
+                $"Y={offsetY} is above the minimum {expectedMinY} (title bottom + spacer).");
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_TitleOnly_ConstrainsResidualContentBelowInheritedMasterTitleRect()
+    {
+        // Verifies that when a Title Only layout carries no explicit title transform but
+        // the slide master does, the renderer still resolves the master's title bounds and
+        // constrains standalone shapes below it.
+        using var workspace = TestWorkspace.Create();
+
+        // Master title: Y=60, H=100 → bottom=160; expected min content Y=180 (spacer=20).
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithTitleOnlyLayout(templatePath,
+            layoutTitleBounds: null,
+            masterTitleBounds: new PlaceholderBounds(X: 50, Y: 60, W: 860, H: 100));
+
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- _layout: Title Only -->
+            # Inherited Title
+
+            - Bullet one
+            - Bullet two
+            - Bullet three
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // All standalone (non-placeholder) shapes must start at or below 180*12700 EMU.
+        // masterTitleBottom = 60+100=160; spacer=20; minY=180.
+        const long expectedMinY = 180L * 12700;
+        var standaloneShapes = slidePart.Slide!.Descendants<P.Shape>()
+            .Where(s => s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                             .GetFirstChild<P.PlaceholderShape>() is null)
+            .ToArray();
+
+        Assert.NotEmpty(standaloneShapes);
+        foreach (var shape in standaloneShapes)
+        {
+            var offsetY = shape.ShapeProperties?.Transform2D?.Offset?.Y?.Value;
+            Assert.NotNull(offsetY);
+            Assert.True(offsetY >= expectedMinY,
+                $"Shape '{shape.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value}' " +
+                $"Y={offsetY} is above the minimum {expectedMinY} (master title bottom + spacer).");
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_TitleAndContent_DoesNotRegressWhenTitleOnlyFixApplied()
+    {
+        // Regression guard: Title and Content layouts still route body content into the
+        // body placeholder and do not apply the Title Only spacer constraint.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            # Slide Heading
+
+            Body paragraph text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Both title and body placeholders should be present.
+        var phShapes = slidePart.Slide!.Descendants<P.Shape>()
+            .Where(s => s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                             .GetFirstChild<P.PlaceholderShape>() is not null)
+            .ToArray();
+        Assert.Equal(2, phShapes.Length);
+
+        // No standalone shapes should exist (all content routed to placeholders).
+        var standaloneShapes = slidePart.Slide!.Descendants<P.Shape>()
+            .Where(s => s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                             .GetFirstChild<P.PlaceholderShape>() is null)
+            .ToArray();
+        Assert.Empty(standaloneShapes);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    /// <summary>
+    /// Creates a minimal template PPTX with a single "Title Only" layout that carries a
+    /// title placeholder but no body placeholder. When <paramref name="layoutTitleBounds"/>
+    /// is non-null, the title placeholder gets an explicit transform on the layout.
+    /// When <paramref name="masterTitleBounds"/> is non-null, the slide master carries a
+    /// title placeholder with that transform. Both may be set independently.
+    /// </summary>
+    private static void CreateTemplateWithTitleOnlyLayout(
+        string path,
+        PlaceholderBounds? layoutTitleBounds,
+        PlaceholderBounds? masterTitleBounds)
+    {
+        using var doc = PresentationDocument.Create(path, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
+        var presentationPart = doc.AddPresentationPart();
+        var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
+
+        static P.Shape MakeTitlePh(uint id, PlaceholderBounds? bounds)
+        {
+            var shapeProperties = bounds is { } b
+                ? new P.ShapeProperties(
+                    new A.Transform2D(
+                        new A.Offset { X = b.X * 12700L, Y = b.Y * 12700L },
+                        new A.Extents { Cx = b.W * 12700L, Cy = b.H * 12700L }),
+                    new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle })
+                : new P.ShapeProperties();
+            return new P.Shape(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = "Title Placeholder" },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = P.PlaceholderValues.Title })),
+                shapeProperties,
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+        }
+
+        var layoutShapeTree = new P.ShapeTree(
+            new P.NonVisualGroupShapeProperties(
+                new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                new P.NonVisualGroupShapeDrawingProperties(),
+                new P.ApplicationNonVisualDrawingProperties()),
+            new P.GroupShapeProperties(new A.TransformGroup(
+                new A.Offset { X = 0L, Y = 0L },
+                new A.Extents { Cx = 0L, Cy = 0L },
+                new A.ChildOffset { X = 0L, Y = 0L },
+                new A.ChildExtents { Cx = 0L, Cy = 0L })),
+            MakeTitlePh(2U, layoutTitleBounds));
+
+        var titleOnlyLayoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        titleOnlyLayoutPart.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(layoutShapeTree),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.TitleOnly,
+            MatchingName = "Title Only",
+        };
+        titleOnlyLayoutPart.SlideLayout.CommonSlideData!.Name = "Title Only";
+        titleOnlyLayoutPart.AddPart(slideMasterPart, "rId1");
+        titleOnlyLayoutPart.SlideLayout.Save();
+
+        var masterShapes = new List<P.Shape>();
+        if (masterTitleBounds is not null)
+        {
+            masterShapes.Add(MakeTitlePh(2U, masterTitleBounds));
+        }
+
+        var masterShapeTree = new P.ShapeTree(
+            new P.NonVisualGroupShapeProperties(
+                new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                new P.NonVisualGroupShapeDrawingProperties(),
+                new P.ApplicationNonVisualDrawingProperties()),
+            new P.GroupShapeProperties(new A.TransformGroup(
+                new A.Offset { X = 0L, Y = 0L },
+                new A.Extents { Cx = 0L, Cy = 0L },
+                new A.ChildOffset { X = 0L, Y = 0L },
+                new A.ChildExtents { Cx = 0L, Cy = 0L })));
+        foreach (var shape in masterShapes) { masterShapeTree.Append(shape); }
+
+        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId2");
+        themePart.Theme = new A.Theme
+        {
+            Name = "TestTitleOnly",
+            ThemeElements = new A.ThemeElements(
+                new A.ColorScheme(
+                    new A.Dark1Color(new A.SystemColor { Val = A.SystemColorValues.WindowText, LastColor = "000000" }),
+                    new A.Light1Color(new A.SystemColor { Val = A.SystemColorValues.Window, LastColor = "FFFFFF" }),
+                    new A.Dark2Color(new A.RgbColorModelHex { Val = "1F2937" }),
+                    new A.Light2Color(new A.RgbColorModelHex { Val = "F8FAFC" }),
+                    new A.Accent1Color(new A.RgbColorModelHex { Val = "0F766E" }),
+                    new A.Accent2Color(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.Accent3Color(new A.RgbColorModelHex { Val = "F59E0B" }),
+                    new A.Accent4Color(new A.RgbColorModelHex { Val = "DC2626" }),
+                    new A.Accent5Color(new A.RgbColorModelHex { Val = "7C3AED" }),
+                    new A.Accent6Color(new A.RgbColorModelHex { Val = "0891B2" }),
+                    new A.Hyperlink(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.FollowedHyperlinkColor(new A.RgbColorModelHex { Val = "7C3AED" }))
+                { Name = "TestTitleOnly" },
+                new A.FontScheme(
+                    new A.MajorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }),
+                    new A.MinorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }))
+                { Name = "TestTitleOnly" },
+                new A.FormatScheme(
+                    new A.FillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })),
+                    new A.LineStyleList(
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 6350 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 12700 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 19050 }),
+                    new A.EffectStyleList(
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList())),
+                    new A.BackgroundFillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })))
+                { Name = "TestTitleOnly" }),
+            ObjectDefaults = new A.ObjectDefaults(),
+            ExtraColorSchemeList = new A.ExtraColorSchemeList(),
+        };
+        themePart.Theme.Save();
+
+        slideMasterPart.SlideMaster = new P.SlideMaster(
+            new P.CommonSlideData(masterShapeTree),
+            new P.ColorMap
+            {
+                Background1 = A.ColorSchemeIndexValues.Light1,
+                Text1 = A.ColorSchemeIndexValues.Dark1,
+                Background2 = A.ColorSchemeIndexValues.Light2,
+                Text2 = A.ColorSchemeIndexValues.Dark2,
+                Accent1 = A.ColorSchemeIndexValues.Accent1,
+                Accent2 = A.ColorSchemeIndexValues.Accent2,
+                Accent3 = A.ColorSchemeIndexValues.Accent3,
+                Accent4 = A.ColorSchemeIndexValues.Accent4,
+                Accent5 = A.ColorSchemeIndexValues.Accent5,
+                Accent6 = A.ColorSchemeIndexValues.Accent6,
+                Hyperlink = A.ColorSchemeIndexValues.Hyperlink,
+                FollowedHyperlink = A.ColorSchemeIndexValues.FollowedHyperlink,
+            },
+            new P.SlideLayoutIdList(
+                new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(titleOnlyLayoutPart) }),
+            new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
+        slideMasterPart.SlideMaster.Save();
+
+        presentationPart.Presentation = new P.Presentation(
+            new P.SlideMasterIdList(new P.SlideMasterId { Id = 2147483648U, RelationshipId = presentationPart.GetIdOfPart(slideMasterPart) }),
+            new P.SlideIdList(),
+            new P.SlideSize { Cx = 12192000, Cy = 6858000, Type = P.SlideSizeValues.Screen16x9 },
+            new P.NotesSize { Cx = 6858000, Cy = 9144000 },
+            new P.DefaultTextStyle());
+        presentationPart.Presentation.Save();
+
+        doc.Save();
+    }
 
     /// <summary>
     /// Creates a minimal template PPTX with a single named layout that carries both a

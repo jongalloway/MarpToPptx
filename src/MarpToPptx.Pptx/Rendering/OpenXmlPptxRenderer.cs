@@ -749,11 +749,31 @@ public sealed class OpenXmlPptxRenderer
 
         // Non-text elements: render as standalone shapes using the layout engine for
         // positioning, just as the non-placeholder path does.
+        //
+        // For Title Only layouts (title placeholder present but no body placeholder),
+        // constrain residual content to start below the effective title region so that
+        // body content cannot overlap the title area. Use the explicit layout rect first;
+        // fall back to the inherited slide master rect when the layout carries no explicit
+        // title transform.
         if (nonTextElements.Count > 0)
         {
+            LayoutOptions? residualOptions = null;
+            if (bodyPlaceholder is null && titleHeading is not null)
+            {
+                var titleRect = SlideTemplateSelector.GetTitlePlaceholderRectIncludingMaster(slideLayoutPart);
+                if (titleRect is not null)
+                {
+                    const double titleBodySpacer = 20.0;
+                    residualOptions = LayoutOptions.Default with
+                    {
+                        ContentTopY = titleRect.Y + titleRect.Height + titleBodySpacer,
+                    };
+                }
+            }
+
             var residualSlide = new MarpToPptx.Core.Models.Slide { Style = slideModel.Style };
             residualSlide.Elements.AddRange(nonTextElements);
-            var plan = _layoutEngine.LayoutSlide(residualSlide, effectiveTheme);
+            var plan = _layoutEngine.LayoutSlide(residualSlide, effectiveTheme, residualOptions);
             var bodyStyle = effectiveTheme.Body;
             foreach (var placed in plan.Elements)
             {
