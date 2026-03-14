@@ -145,28 +145,36 @@ internal sealed class SlideTemplateSelector
 
     /// <summary>
     /// Returns the bounding rectangle (in layout units) of the title placeholder in the
-    /// given layout, or <c>null</c> if the placeholder has no explicit transform.
+    /// given layout, or <c>null</c> if neither the layout nor its slide master exposes
+    /// a usable transform for the inherited placeholder.
     /// </summary>
     public static Rect? GetTitlePlaceholderRect(SlideLayoutPart layoutPart)
-        => GetPlaceholderRect(layoutPart, P.PlaceholderValues.Title, P.PlaceholderValues.CenteredTitle);
-
-    /// <summary>
-    /// Returns the bounding rectangle (in layout units) of the title placeholder,
-    /// checking the layout's explicit transform first and falling back to the slide
-    /// master's title placeholder transform when the layout carries no explicit geometry.
-    /// Returns <c>null</c> when neither the layout nor its parent master carries a
-    /// usable title placeholder transform.
-    /// </summary>
-    public static Rect? GetTitlePlaceholderRectIncludingMaster(SlideLayoutPart layoutPart)
-        => GetTitlePlaceholderRect(layoutPart)
-           ?? GetMasterPlaceholderRect(layoutPart.SlideMasterPart, P.PlaceholderValues.Title, P.PlaceholderValues.CenteredTitle);
+        => GetPlaceholderRect(
+            layoutPart,
+            GetTitlePlaceholder(layoutPart),
+            P.PlaceholderValues.Title,
+            P.PlaceholderValues.CenteredTitle);
 
     /// <summary>
     /// Returns the bounding rectangle (in layout units) of the body placeholder in the
-    /// given layout, or <c>null</c> if the placeholder has no explicit transform.
+    /// given layout, or <c>null</c> if neither the layout nor its slide master exposes
+    /// a usable transform for the inherited placeholder.
     /// </summary>
     public static Rect? GetBodyPlaceholderRect(SlideLayoutPart layoutPart)
-        => GetPlaceholderRect(layoutPart, P.PlaceholderValues.Body, P.PlaceholderValues.SubTitle);
+        => GetBodyPlaceholderRect(layoutPart, GetBodyPlaceholder(layoutPart));
+
+    /// <summary>
+    /// Returns the bounding rectangle (in layout units) of the body placeholder in the
+    /// given layout using an already-resolved <see cref="TemplatePlaceholder"/>, avoiding
+    /// a second traversal of the shape tree. Returns <c>null</c> if the placeholder is
+    /// <c>null</c> or no usable transform is found on the layout or its slide master.
+    /// </summary>
+    public static Rect? GetBodyPlaceholderRect(SlideLayoutPart layoutPart, TemplatePlaceholder? bodyPlaceholder)
+        => GetPlaceholderRect(
+            layoutPart,
+            bodyPlaceholder,
+            P.PlaceholderValues.Body,
+            P.PlaceholderValues.SubTitle);
 
     /// <summary>
     /// Returns the title placeholder identity (<c>type</c>+<c>idx</c>) declared on the
@@ -336,42 +344,42 @@ internal sealed class SlideTemplateSelector
         }
     }
 
-    private static Rect? GetPlaceholderRect(SlideLayoutPart layoutPart, params P.PlaceholderValues[] types)
+    private static Rect? GetPlaceholderRect(
+        SlideLayoutPart layoutPart,
+        TemplatePlaceholder? placeholder,
+        params P.PlaceholderValues[] masterFallbackTypes)
     {
-        var shapeTree = layoutPart.SlideLayout?.CommonSlideData?.ShapeTree;
+        if (placeholder is null)
+        {
+            return null;
+        }
+
+        return GetPlaceholderRect(
+                layoutPart.SlideLayout?.CommonSlideData?.ShapeTree,
+                placeholder,
+                masterFallbackTypes)
+            ?? GetPlaceholderRect(
+                layoutPart.SlideMasterPart?.SlideMaster?.CommonSlideData?.ShapeTree,
+                placeholder,
+                masterFallbackTypes);
+    }
+
+    private static Rect? GetPlaceholderRect(
+        P.ShapeTree? shapeTree,
+        TemplatePlaceholder placeholder,
+        params P.PlaceholderValues[] masterFallbackTypes)
+    {
         if (shapeTree is null)
         {
             return null;
         }
 
-        return GetPlaceholderRectFromShapeTree(shapeTree, types);
-    }
-
-    private static Rect? GetMasterPlaceholderRect(SlideMasterPart? masterPart, params P.PlaceholderValues[] types)
-    {
-        var shapeTree = masterPart?.SlideMaster?.CommonSlideData?.ShapeTree;
-        if (shapeTree is null)
-        {
-            return null;
-        }
-
-        return GetPlaceholderRectFromShapeTree(shapeTree, types);
-    }
-
-    private static Rect? GetPlaceholderRectFromShapeTree(DocumentFormat.OpenXml.OpenXmlElement shapeTree, P.PlaceholderValues[] types)
-    {
         foreach (var shape in shapeTree.Elements<P.Shape>())
         {
             var ph = shape.NonVisualShapeProperties?
                 .ApplicationNonVisualDrawingProperties?
                 .GetFirstChild<P.PlaceholderShape>();
-            if (ph is null)
-            {
-                continue;
-            }
-
-            var phType = ph.Type?.Value;
-            if (phType is null || !types.Any(t => phType == t))
+            if (ph is null || !PlaceholderMatches(ph, placeholder, masterFallbackTypes))
             {
                 continue;
             }
@@ -400,5 +408,24 @@ internal sealed class SlideTemplateSelector
         }
 
         return null;
+    }
+
+    private static bool PlaceholderMatches(
+        P.PlaceholderShape placeholderShape,
+        TemplatePlaceholder placeholder,
+        params P.PlaceholderValues[] masterFallbackTypes)
+    {
+        if (placeholder.Index is not null && placeholderShape.Index?.Value != placeholder.Index)
+        {
+            return false;
+        }
+
+        if (placeholder.Type is { } type)
+        {
+            return placeholderShape.Type?.Value == type;
+        }
+
+        var actualType = placeholderShape.Type?.Value;
+        return actualType is null || masterFallbackTypes.Any(candidate => candidate == actualType);
     }
 }
