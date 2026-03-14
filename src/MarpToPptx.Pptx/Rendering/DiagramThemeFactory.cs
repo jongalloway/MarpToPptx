@@ -67,6 +67,12 @@ internal static class DiagramThemeFactory
         }
 
         var trimmed = value.Trim().Trim('"', '\'');
+
+        if (trimmed.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+        {
+            return TryParseRgbFunction(trimmed, out red, out green, out blue);
+        }
+
         if (trimmed.StartsWith('#'))
         {
             trimmed = trimmed[1..];
@@ -86,6 +92,60 @@ internal static class DiagramThemeFactory
         return int.TryParse(trimmed[..2], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out red)
             && int.TryParse(trimmed[2..4], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out green)
             && int.TryParse(trimmed[4..6], System.Globalization.NumberStyles.HexNumber, System.Globalization.CultureInfo.InvariantCulture, out blue);
+    }
+
+    private static bool TryParseRgbFunction(string value, out int red, out int green, out int blue)
+    {
+        red = 0;
+        green = 0;
+        blue = 0;
+
+        var parenOpen = value.IndexOf('(');
+        var parenClose = value.LastIndexOf(')');
+        if (parenOpen < 0 || parenClose <= parenOpen)
+        {
+            return false;
+        }
+
+        var inner = value[(parenOpen + 1)..parenClose];
+        var parts = inner.Split([',', '/'], StringSplitOptions.TrimEntries);
+        if (parts.Length < 3)
+        {
+            return false;
+        }
+
+        if (!TryParseColorComponent(parts[0], out red)
+            || !TryParseColorComponent(parts[1], out green)
+            || !TryParseColorComponent(parts[2], out blue))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private static bool TryParseColorComponent(string part, out int result)
+    {
+        result = 0;
+        part = part.Trim();
+        if (part.EndsWith('%'))
+        {
+            if (!double.TryParse(part[..^1], System.Globalization.NumberStyles.Float, System.Globalization.CultureInfo.InvariantCulture, out var pct))
+            {
+                return false;
+            }
+
+            result = (int)Math.Round(Math.Clamp(pct, 0, 100) / 100.0 * 255);
+            return true;
+        }
+
+        if (!int.TryParse(part, System.Globalization.NumberStyles.Integer, System.Globalization.CultureInfo.InvariantCulture, out result))
+        {
+            return false;
+        }
+
+        result = Math.Clamp(result, 0, 255);
+        return true;
     }
 
     private static string RotateHue(string hexColor, double degrees, double saturationDelta, double lightnessDelta)
