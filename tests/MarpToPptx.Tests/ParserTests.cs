@@ -453,6 +453,190 @@ public class ParserTests
         Assert.Null(image.Caption);
     }
 
+    // Marpit Extended Image Syntax Compatibility Matrix (Issue #103)
+    // Marpit uses alt-text keywords such as "bg", "w:Npx", "h:Npx", "fit", "left", and "right"
+    // to control image placement and slide backgrounds. MarpToPptx does not yet parse these
+    // keywords as structured options; they are preserved verbatim as ImageElement.AltText.
+    // The tests below capture the current behavior for each representative syntax form so that
+    // follow-up implementation work can proceed one compatibility slice at a time.
+
+    [Fact]
+    public void Parser_MarpitBgKeyword_YieldsImageElementWithBgAsAltText()
+    {
+        // Marpit upstream: ![bg](image.jpg) sets a slide background image.
+        // Current behavior: treated as a normal image; alt text is "bg".
+        const string markdown = """
+        # Slide
+
+        ![bg](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("bg", image.AltText);
+        // The bg keyword in image alt text does not set the background directive.
+        Assert.Null(slide.Style.BackgroundImage);
+    }
+
+    [Fact]
+    public void Parser_MarpitBgWithPercentage_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![bg 50%](image.jpg) sets a 50%-width background image.
+        // Current behavior: treated as a normal image; alt text is "bg 50%".
+        const string markdown = """
+        # Slide
+
+        ![bg 50%](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("bg 50%", image.AltText);
+        Assert.Null(slide.Style.BackgroundImage);
+    }
+
+    [Fact]
+    public void Parser_MarpitWidthDirective_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![w:200px](image.jpg) renders the image at 200 px wide.
+        // Current behavior: treated as a normal image; alt text is "w:200px".
+        const string markdown = """
+        # Slide
+
+        ![w:200px](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("w:200px", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_MarpitHeightDirective_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![h:150px](image.jpg) renders the image at 150 px tall.
+        // Current behavior: treated as a normal image; alt text is "h:150px".
+        const string markdown = """
+        # Slide
+
+        ![h:150px](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("h:150px", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_MarpitWidthAndHeightDirectives_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![w:200px h:150px](image.jpg) renders at explicit dimensions.
+        // Current behavior: treated as a normal image; alt text is "w:200px h:150px".
+        const string markdown = """
+        # Slide
+
+        ![w:200px h:150px](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("w:200px h:150px", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_MarpitPercentageSizing_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![50%](image.jpg) renders the image at 50% of the slide width.
+        // Current behavior: treated as a normal image; alt text is "50%".
+        const string markdown = """
+        # Slide
+
+        ![50%](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("50%", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_MarpitLeftAlignmentKeyword_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![left](image.jpg) floats the image to the left of the content area.
+        // Current behavior: treated as a normal image; alt text is "left".
+        const string markdown = """
+        # Slide
+
+        ![left](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("left", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_MarpitRightAlignmentKeyword_YieldsImageElementWithKeywordsAsAltText()
+    {
+        // Marpit upstream: ![right](image.jpg) floats the image to the right of the content area.
+        // Current behavior: treated as a normal image; alt text is "right".
+        const string markdown = """
+        # Slide
+
+        ![right](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("right", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_MarpitMultipleImagesWithBgKeywords_YieldsMultipleImageElements()
+    {
+        // Marpit upstream: two bg images on one slide produce a split-background layout.
+        // Current behavior: each image becomes an independent ImageElement; no split layout.
+        const string markdown = """
+        # Slide
+
+        ![bg left](left.png)
+        ![bg right](right.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var images = slide.Elements.OfType<ImageElement>().ToArray();
+        Assert.Equal(2, images.Length);
+        Assert.Equal("bg left", images[0].AltText);
+        Assert.Equal("bg right", images[1].AltText);
+    }
+
     [Fact]
     public void Parser_ExtractsNotesFromNonDirectiveHtmlComment()
     {
