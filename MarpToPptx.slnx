@@ -5,6 +5,7 @@
     <Project Path="src/MarpToPptx.Core/MarpToPptx.Core.csproj" />
     <Project Path="src/MarpToPptx.PptxToMarp/MarpToPptx.PptxToMarp.csproj" />
     <Project Path="src/MarpToPptx.OpenXmlValidator/MarpToPptx.OpenXmlValidator.csproj" />
+    <Project Path="src/MarpToPptx.TemplateDiagnostics/MarpToPptx.TemplateDiagnostics.csproj" />
     <Project Path="src/MarpToPptx.Pptx/MarpToPptx.Pptx.csproj" />
   </Folder>
   <Folder Name="/tests/">
