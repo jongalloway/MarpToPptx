@@ -161,9 +161,18 @@ internal sealed class SlideTemplateSelector
     /// a usable transform for the inherited placeholder.
     /// </summary>
     public static Rect? GetBodyPlaceholderRect(SlideLayoutPart layoutPart)
+        => GetBodyPlaceholderRect(layoutPart, GetBodyPlaceholder(layoutPart));
+
+    /// <summary>
+    /// Returns the bounding rectangle (in layout units) of the body placeholder in the
+    /// given layout using an already-resolved <see cref="TemplatePlaceholder"/>, avoiding
+    /// a second traversal of the shape tree. Returns <c>null</c> if the placeholder is
+    /// <c>null</c> or no usable transform is found on the layout or its slide master.
+    /// </summary>
+    public static Rect? GetBodyPlaceholderRect(SlideLayoutPart layoutPart, TemplatePlaceholder? bodyPlaceholder)
         => GetPlaceholderRect(
             layoutPart,
-            GetBodyPlaceholder(layoutPart),
+            bodyPlaceholder,
             P.PlaceholderValues.Body,
             P.PlaceholderValues.SubTitle);
 
