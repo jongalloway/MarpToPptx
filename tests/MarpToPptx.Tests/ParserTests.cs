@@ -330,6 +330,61 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_ImageAltText_DoesNotCreateParagraphElement()
+    {
+        const string markdown = """
+        # Slide Title
+
+        ![Interview Coach Agent Handoff](assets/interview-coach.webp)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Empty(slide.Elements.OfType<ParagraphElement>());
+        Assert.Single(slide.Elements.OfType<ImageElement>());
+    }
+
+    [Fact]
+    public void Parser_ImageAltText_IsPreservedOnImageElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ![My descriptive alt text](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("My descriptive alt text", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_TitlePlusImageSlide_DoesNotDuplicateTitleViaAltText()
+    {
+        const string markdown = """
+        # Interview Coach: Agent Handoff
+
+        ![Interview Coach Agent Handoff](assets/interview-coach-devui-handoff.webp)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        // No paragraph element should be created from the alt text
+        Assert.Empty(slide.Elements.OfType<ParagraphElement>());
+        // The image element should still be present
+        Assert.Single(slide.Elements.OfType<ImageElement>());
+        // The heading should be present
+        Assert.Single(slide.Elements.OfType<HeadingElement>());
+    }
+
+    [Fact]
     public void Parser_ExtractsNotesFromNonDirectiveHtmlComment()
     {
         const string markdown = """
