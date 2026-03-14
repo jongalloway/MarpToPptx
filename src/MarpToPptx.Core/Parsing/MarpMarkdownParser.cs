@@ -555,6 +555,9 @@ public sealed class MarpMarkdownParser
                         break;
                     }
 
+                case LinkInline link when link.IsImage:
+                    // Alt text is accessibility metadata stored on the image shape, not visible slide text.
+                    break;
                 case LinkInline link when !link.IsImage:
                     spans.AddRange(ExtractInlineSpans(link, bold, italic, strikethrough, code, link.Url));
                     break;

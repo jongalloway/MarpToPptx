@@ -330,6 +330,61 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_ImageAltText_DoesNotCreateParagraphElement()
+    {
+        const string markdown = """
+        # Slide Title
+
+        ![Interview Coach Agent Handoff](assets/interview-coach.webp)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Empty(slide.Elements.OfType<ParagraphElement>());
+        Assert.Single(slide.Elements.OfType<ImageElement>());
+    }
+
+    [Fact]
+    public void Parser_ImageAltText_IsPreservedOnImageElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ![My descriptive alt text](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("My descriptive alt text", image.AltText);
+    }
+
+    [Fact]
+    public void Parser_TitlePlusImageSlide_DoesNotDuplicateTitleViaAltText()
+    {
+        const string markdown = """
+        # Interview Coach: Agent Handoff
+
+        ![Interview Coach Agent Handoff](assets/interview-coach-devui-handoff.webp)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        // No paragraph element should be created from the alt text
+        Assert.Empty(slide.Elements.OfType<ParagraphElement>());
+        // The image element should still be present
+        Assert.Single(slide.Elements.OfType<ImageElement>());
+        // The heading should be present
+        Assert.Single(slide.Elements.OfType<HeadingElement>());
+    }
+
+    [Fact]
     public void Parser_ExtractsNotesFromNonDirectiveHtmlComment()
     {
         const string markdown = """
@@ -1717,6 +1772,180 @@ public class ParserTests
         Assert.Equal("csharp", codeBlock.Language);
         Assert.Empty(slide.Elements.OfType<MermaidDiagramElement>());
         Assert.Empty(slide.Elements.OfType<DiagramElement>());
+    }
+
+    [Fact]
+    public void Parser_ParsesDiagramFencedBlock_Pillars_WithSegments_AsDiagramElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ```diagram
+        diagram: pillars
+        pillars:
+          - title: Microsoft.Extensions.AI
+            segments:
+              - IChatClient
+              - Middleware
+          - title: Semantic Kernel
+            segments:
+              - Plugins
+              - Memory
+          - title: Azure AI
+            segments:
+              - OpenAI
+              - Search
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
+        Assert.Contains("diagram: pillars", diagram.Source);
+        Assert.Contains("segments:", diagram.Source);
+    }
+
+    [Fact]
+    public void Parser_ParsesDiagramFencedBlock_Pillars_WithEmbeddedFrontMatter_AsDiagramElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ```diagram
+        ---
+        theme: presentation
+        ---
+        diagram: pillars
+        pillars:
+          - title: Microsoft.Extensions.AI
+            segments:
+              - IChatClient
+              - Middleware
+          - title: Semantic Kernel
+            segments:
+              - Plugins
+              - Memory
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
+        Assert.Contains("diagram: pillars", diagram.Source);
+        // Front-matter block must survive normalization so DiagramForge can apply the theme.
+        // Verify the --- delimiters are present and in the correct order so DiagramForge parses the block as front-matter.
+        var openDelim = diagram.Source.IndexOf("---", StringComparison.Ordinal);
+        var themeIdx = diagram.Source.IndexOf("theme: presentation", StringComparison.Ordinal);
+        var closeDelim = diagram.Source.IndexOf("---", openDelim + 3, StringComparison.Ordinal);
+        Assert.True(openDelim >= 0, "Opening --- delimiter must be present");
+        Assert.True(themeIdx > openDelim, "theme: presentation must appear after the opening --- delimiter");
+        Assert.True(closeDelim > themeIdx, "Closing --- delimiter must appear after theme: presentation");
+    }
+
+    [Fact]
+    public void Parser_ParsesDiagramFencedBlock_Matrix_WithRowsAndColumns_AsDiagramElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ```diagram
+        ---
+        theme: presentation
+        ---
+        diagram: matrix
+        rows:
+          - Qdrant
+          - Redis
+        columns:
+          - Search
+          - Filter
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
+        Assert.Contains("diagram: matrix", diagram.Source);
+        Assert.Contains("rows:", diagram.Source);
+        Assert.Contains("columns:", diagram.Source);
+        // Verify the --- delimiters are present and in the correct order so DiagramForge parses the block as front-matter.
+        var openDelim = diagram.Source.IndexOf("---", StringComparison.Ordinal);
+        var themeIdx = diagram.Source.IndexOf("theme: presentation", StringComparison.Ordinal);
+        var closeDelim = diagram.Source.IndexOf("---", openDelim + 3, StringComparison.Ordinal);
+        Assert.True(openDelim >= 0, "Opening --- delimiter must be present");
+        Assert.True(themeIdx > openDelim, "theme: presentation must appear after the opening --- delimiter");
+        Assert.True(closeDelim > themeIdx, "Closing --- delimiter must appear after theme: presentation");
+    }
+
+    [Fact]
+    public void Parser_ParsesDiagramFencedBlock_Pyramid_WithEmbeddedFrontMatter_AsDiagramElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ```diagram
+        ---
+        theme: presentation
+        ---
+        diagram: pyramid
+        levels:
+          - Vision
+          - Strategy
+          - Delivery
+          - Feedback
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
+        Assert.Contains("diagram: pyramid", diagram.Source);
+        // Verify the --- delimiters are present and in the correct order so DiagramForge parses the block as front-matter.
+        var openDelim = diagram.Source.IndexOf("---", StringComparison.Ordinal);
+        var themeIdx = diagram.Source.IndexOf("theme: presentation", StringComparison.Ordinal);
+        var closeDelim = diagram.Source.IndexOf("---", openDelim + 3, StringComparison.Ordinal);
+        Assert.True(openDelim >= 0, "Opening --- delimiter must be present");
+        Assert.True(themeIdx > openDelim, "theme: presentation must appear after the opening --- delimiter");
+        Assert.True(closeDelim > themeIdx, "Closing --- delimiter must appear after theme: presentation");
+    }
+
+    [Fact]
+    public void Parser_ParsesDiagramFencedBlock_EmbeddedFrontMatter_DoesNotProduceSeparateCodeBlock()
+    {
+        // Ensures the --- inside the diagram fence is not misinterpreted as a slide
+        // separator or treated as a separate element.
+        const string markdown = """
+        # Slide
+
+        ```diagram
+        ---
+        theme: presentation
+        ---
+        diagram: matrix
+        rows:
+          - A
+          - B
+        columns:
+          - X
+          - Y
+        ```
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        // Single slide, single DiagramElement, no stray CodeBlockElements.
+        var slide = Assert.Single(deck.Slides);
+        Assert.Single(slide.Elements.OfType<DiagramElement>());
+        Assert.Empty(slide.Elements.OfType<CodeBlockElement>());
     }
 
     // ── Transition directive tests ────────────────────────────────────────
