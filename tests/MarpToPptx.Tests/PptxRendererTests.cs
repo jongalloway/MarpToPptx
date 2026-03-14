@@ -11,6 +11,10 @@ namespace MarpToPptx.Tests;
 
 public class PptxRendererTests
 {
+    // A 1×1 white pixel PNG used throughout image-related tests.
+    private const string OnePxPngBase64 =
+        "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=";
+
     [Fact]
     public void Renderer_MatchesGoldenPackageBaseline_ForMinimalDeck()
     {
@@ -724,6 +728,235 @@ public class PptxRendererTests
         var captionFontSize = captionRun!.RunProperties?.FontSize ?? 0;
         Assert.True(captionFontSize < defaultBodyFontSizeHundredths,
             $"Caption font size ({captionFontSize / 100.0}pt) should be smaller than body font size ({defaultBodyFontSizeHundredths / 100.0}pt)");
+    }
+
+    // Marpit Extended Image Syntax Compatibility Matrix (Issue #103)
+    // Marpit uses alt-text keywords to control image placement and slide backgrounds.
+    // MarpToPptx does not yet parse these as structured options; keywords are preserved in
+    // AltText and the image is rendered as an inline Picture shape in all cases.
+    // The tests below capture the current rendering behavior for each representative form.
+
+    [Fact]
+    public void Renderer_MarpitBgKeyword_RendersAsPictureShapeNotSlideBackground()
+    {
+        // Marpit upstream: ![bg](image.jpg) sets a slide background image.
+        // Current behavior: rendered as an inline Picture shape; slide background is not affected.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![bg](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        // Image is rendered as an inline Picture shape.
+        // No slide-level Background element is added by the image syntax.
+        Assert.Null(slidePart.Slide!.CommonSlideData?.Background);
+        AssertImageRenderedWithoutError(slidePart);
+    }
+
+    [Fact]
+    public void Renderer_MarpitBgWithPercentage_RendersAsPictureShapeWithoutError()
+    {
+        // Marpit upstream: ![bg 50%](image.jpg) sets a 50%-width background image.
+        // Current behavior: rendered as an inline Picture shape; percentage is not applied.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![bg 50%](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitWidthDirective_RendersImageWithoutError()
+    {
+        // Marpit upstream: ![w:200px](image.jpg) renders the image at 200 px wide.
+        // Current behavior: image rendered at default aspect-ratio size; width directive is ignored.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![w:200px](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitHeightDirective_RendersImageWithoutError()
+    {
+        // Marpit upstream: ![h:150px](image.jpg) renders the image at 150 px tall.
+        // Current behavior: image rendered at default aspect-ratio size; height directive is ignored.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![h:150px](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitWidthAndHeightDirectives_RendersImageWithoutError()
+    {
+        // Marpit upstream: ![w:200px h:150px](image.jpg) renders at explicit dimensions.
+        // Current behavior: image rendered at default aspect-ratio size; directives are ignored.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![w:200px h:150px](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitPercentageSizing_RendersImageWithoutError()
+    {
+        // Marpit upstream: ![50%](image.jpg) renders the image at 50% of the slide width.
+        // Current behavior: image rendered at default aspect-ratio size; percentage is ignored.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![50%](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitLeftAlignmentKeyword_RendersImageWithoutError()
+    {
+        // Marpit upstream: ![left](image.jpg) floats the image to the left of the content area.
+        // Current behavior: image rendered inline with no alignment applied.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![left](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitRightAlignmentKeyword_RendersImageWithoutError()
+    {
+        // Marpit upstream: ![right](image.jpg) floats the image to the right of the content area.
+        // Current behavior: image rendered inline with no alignment applied.
+        using var workspace = TestWorkspace.Create();
+
+        workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![right](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+    }
+
+    [Fact]
+    public void Renderer_MarpitMultipleImagesWithBgKeywords_BothRenderedAsPictureShapes()
+    {
+        // Marpit upstream: two bg images on one slide produce a split-background layout.
+        // Current behavior: each image is rendered as an independent inline Picture shape.
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(OnePxPngBase64);
+        workspace.WriteFile("left.png", pngBytes);
+        workspace.WriteFile("right.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![bg left](left.png)
+            ![bg right](right.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First(), expectedPictureCount: 2);
     }
 
     [Fact]
@@ -5150,5 +5383,13 @@ public class PptxRendererTests
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
+    }
+
+    // Asserts that a slide part contains exactly `expectedPictureCount` Picture shapes and
+    // no "Missing image" error text — the standard check used by the Marpit image matrix tests.
+    private static void AssertImageRenderedWithoutError(DocumentFormat.OpenXml.Packaging.SlidePart slidePart, int expectedPictureCount = 1)
+    {
+        Assert.Equal(expectedPictureCount, slidePart.Slide!.Descendants<P.Picture>().Count());
+        Assert.DoesNotContain("Missing image", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
     }
 }
