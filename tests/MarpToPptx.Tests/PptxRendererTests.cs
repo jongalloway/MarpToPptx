@@ -1,5 +1,6 @@
 using DocumentFormat.OpenXml.Packaging;
 using MarpToPptx.Core;
+using MarpToPptx.Core.Themes;
 using MarpToPptx.Pptx.Rendering;
 using MarpToPptx.Pptx.Validation;
 using System.IO.Compression;
@@ -5082,6 +5083,53 @@ public class PptxRendererTests
         using var stream = svgPart!.GetStream();
         var svg = new System.IO.StreamReader(stream).ReadToEnd();
         Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
+    public void Renderer_DefaultDiagramTheme_UsesMultiplePaletteColors()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ```mermaid
+            flowchart LR
+              A[Plan] --> B[Build]
+              B --> C[Test]
+              C --> D[Ship]
+              D --> E[Learn]
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var svgPart = slidePart.ImageParts
+            .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(svgPart);
+
+        using var stream = svgPart!.GetStream();
+        var svg = new System.IO.StreamReader(stream).ReadToEnd();
+
+        var expectedColors = DiagramThemeFactory.Create(ThemeDefinition.Default)
+            .NodePalette!
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .Take(4)
+            .ToArray();
+
+        Assert.True(expectedColors.Length >= 4);
+
+        var matchedColorCount = expectedColors.Count(color => svg.Contains(color, StringComparison.OrdinalIgnoreCase));
+        Assert.True(matchedColorCount >= 2, "Expected at least two generated palette colors to appear in the rendered SVG.");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
     }
 
     [Fact]
