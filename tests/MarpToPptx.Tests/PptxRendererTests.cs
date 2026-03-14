@@ -5602,8 +5602,8 @@ public class PptxRendererTests
         string ReadSvg(SlidePart sp)
         {
             var svgPart = sp.ImageParts.First(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
-            using var s = svgPart.GetStream();
-            return new System.IO.StreamReader(s).ReadToEnd();
+            using var stream = svgPart.GetStream();
+            return new System.IO.StreamReader(stream).ReadToEnd();
         }
 
         var svg1 = ReadSvg(slideParts[0]);

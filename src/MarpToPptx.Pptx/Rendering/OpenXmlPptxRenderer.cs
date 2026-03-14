@@ -1952,8 +1952,8 @@ public sealed class OpenXmlPptxRenderer
                     : string.Empty;
 
                 // If the fence already specifies a theme, it takes precedence — return unchanged.
-                if (frontMatterBody.Split('\n').Any(l =>
-                    l.TrimStart().StartsWith("theme:", StringComparison.OrdinalIgnoreCase)))
+                // Use a span-based line scan to avoid allocating a split array.
+                if (FrontMatterBodyHasThemeKey(frontMatterBody))
                 {
                     return source;
                 }
@@ -1965,6 +1965,25 @@ public sealed class OpenXmlPptxRenderer
 
         // No YAML front matter found — prepend a minimal block containing just the theme.
         return $"---\ntheme: {globalDiagramTheme}\n---\n{source}";
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> if any line in <paramref name="body"/> starts with
+    /// <c>theme:</c> (case-insensitive, leading whitespace ignored).
+    /// Uses a span-based line scan to avoid allocating a string array.
+    /// </summary>
+    private static bool FrontMatterBodyHasThemeKey(string body)
+    {
+        var remaining = body.AsSpan();
+        while (!remaining.IsEmpty)
+        {
+            int nl = remaining.IndexOf('\n');
+            var line = nl >= 0 ? remaining[..nl] : remaining;
+            if (line.TrimStart().StartsWith("theme:", StringComparison.OrdinalIgnoreCase))
+                return true;
+            remaining = nl >= 0 ? remaining[(nl + 1)..] : ReadOnlySpan<char>.Empty;
+        }
+        return false;
     }
 
     private static A.Paragraph CreateHighlightedParagraph(IReadOnlyList<TokenizedRun> runs, TextStyle style, string language)
