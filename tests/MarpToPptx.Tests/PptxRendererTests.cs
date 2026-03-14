@@ -4714,6 +4714,72 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_BackgroundPosition_UnsupportedPercentValue_FallsBackToCenter()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Wide image in contain mode: letterbox on top and bottom.
+        var pngBytes = CreateMinimalPng(2, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        // Unsupported percentage value should produce the same placement as no position (center).
+        var markdownPercent = workspace.WriteMarkdown(
+            "percent.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            <!-- backgroundPosition: 20% 30% -->
+            # Percent Position
+            """);
+
+        var markdownMixed = workspace.WriteMarkdown(
+            "mixed.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            <!-- backgroundPosition: top 20% -->
+            # Mixed Position
+            """);
+
+        var markdownDefault = workspace.WriteMarkdown(
+            "default.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            # Center Default
+            """);
+
+        var outputPercent = workspace.GetPath("percent.pptx");
+        var outputMixed = workspace.GetPath("mixed.pptx");
+        var outputDefault = workspace.GetPath("default.pptx");
+        RenderDeck(markdownPercent, outputPercent, workspace.RootPath);
+        RenderDeck(markdownMixed, outputMixed, workspace.RootPath);
+        RenderDeck(markdownDefault, outputDefault, workspace.RootPath);
+
+        using var docPercent = PresentationDocument.Open(outputPercent, false);
+        using var docMixed = PresentationDocument.Open(outputMixed, false);
+        using var docDefault = PresentationDocument.Open(outputDefault, false);
+
+        var offsetDefault = docDefault.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+
+        // "20% 30%" — both tokens are non-keywords, should fall back to centered.
+        var offsetPercent = docPercent.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+        Assert.Equal(offsetDefault.X!.Value, offsetPercent.X!.Value);
+        Assert.Equal(offsetDefault.Y!.Value, offsetPercent.Y!.Value);
+
+        // "top 20%" — second token is a non-keyword, should fall back to centered.
+        var offsetMixed = docMixed.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+        Assert.Equal(offsetDefault.X!.Value, offsetMixed.X!.Value);
+        Assert.Equal(offsetDefault.Y!.Value, offsetMixed.Y!.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(docPercent);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_PlacesMermaidDiagramAsPictureShape_OnSlide()
     {
         using var workspace = TestWorkspace.Create();

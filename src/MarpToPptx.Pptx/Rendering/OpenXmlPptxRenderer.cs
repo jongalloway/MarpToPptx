@@ -1648,7 +1648,8 @@ public sealed class OpenXmlPptxRenderer
     /// Parses a CSS <c>background-position</c> value into normalized (xAlign, yAlign) fractions
     /// where 0.0 is left/top and 1.0 is right/bottom.
     /// Supports single and two-keyword forms using <c>left</c>, <c>right</c>, <c>top</c>, <c>bottom</c>,
-    /// and <c>center</c>. Unrecognized or null values default to centered (0.5, 0.5).
+    /// and <c>center</c>. Any non-keyword token (e.g. a percentage or length value) causes the entire
+    /// value to fall back to centered (0.5, 0.5). Unrecognized or null values also default to (0.5, 0.5).
     /// </summary>
     private static (double XAlign, double YAlign) ParseBackgroundPosition(string? position)
     {
@@ -1657,7 +1658,7 @@ public sealed class OpenXmlPptxRenderer
             return (0.5, 0.5);
         }
 
-        var tokens = position.Trim().Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var tokens = position.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
         double xAlign = 0.5;
         double yAlign = 0.5;
 
@@ -1680,6 +1681,9 @@ public sealed class OpenXmlPptxRenderer
                 case "center":
                     // Intentional no-op: "center" leaves the default 0.5 for either axis.
                     break;
+                default:
+                    // Non-keyword token (e.g. "20%", "50px") — fall back to centered.
+                    return (0.5, 0.5);
             }
         }
 
