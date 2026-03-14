@@ -385,6 +385,75 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_ImageWithoutTitleAttribute_HasNullCaption()
+    {
+        const string markdown = """
+        # Slide
+
+        ![My alt text](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Null(image.Caption);
+    }
+
+    [Fact]
+    public void Parser_ImageTitleAttribute_IsPreservedAsCaptionOnImageElement()
+    {
+        const string markdown = """
+        # Slide
+
+        ![Screenshot](photo.png "Figure 1: Architecture overview")
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("Figure 1: Architecture overview", image.Caption);
+    }
+
+    [Fact]
+    public void Parser_ImageTitleAttribute_DoesNotAffectAltText()
+    {
+        const string markdown = """
+        # Slide
+
+        ![Accessibility description](photo.png "Visible caption")
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("Accessibility description", image.AltText);
+        Assert.Equal("Visible caption", image.Caption);
+    }
+
+    [Fact]
+    public void Parser_ImageWithEmptyTitleAttribute_HasNullCaption()
+    {
+        const string markdown = """
+        # Slide
+
+        ![Alt](photo.png "")
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Null(image.Caption);
+    }
+
+    [Fact]
     public void Parser_ExtractsNotesFromNonDirectiveHtmlComment()
     {
         const string markdown = """

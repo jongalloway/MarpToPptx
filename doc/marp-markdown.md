@@ -213,6 +213,7 @@ Console.WriteLine("notes code block");
 - Paragraphs
 - Bullet lists and ordered lists
 - Images with local file paths
+- Explicit visible captions via Markdown image title attribute: `![alt](url "Caption text")`
 - Fenced and indented code blocks
 - GFM-style tables at the semantic-model level
 - Theme CSS extraction from `section`, `:root`, `body`, `h1`-`h6`, `pre`, and `code` — see the CSS property reference below
@@ -222,6 +223,7 @@ Console.WriteLine("notes code block");
 - Editable PPTX text boxes for headings, paragraphs, lists, and code blocks
 - Editable text fallback for tables
 - Local image embedding with aspect-ratio-aware placement
+- Explicit visible image captions: use the Markdown image title attribute `![alt text](url "Caption text")` to render a visible caption below the image; the caption is styled smaller than body text to distinguish it from regular content; alt text remains as accessibility metadata on the image shape and is not shown visibly
 - Solid slide background color
 - Full-slide background image via directive or theme `background-image`
 - Line spacing applied from CSS `line-height`
@@ -320,6 +322,8 @@ Important current behavior:
 - Inline emphasis is flattened to text.
 - Non-image links keep their visible text but not hyperlink semantics.
 - Images inside paragraphs are emitted as separate `ImageElement` records.
+- Image alt text is accessibility metadata stored on the picture shape; it is not rendered as visible slide text.
+- An explicit visible caption can be added via the Markdown title attribute `![alt](url "caption")`; the caption renders below the image in a smaller font size.
 
 ### Slide Authoring Syntax
 

@@ -445,7 +445,7 @@ public sealed class OpenXmlPptxRenderer
                     AddBulletList(context, frame, list, bodyStyle);
                     break;
                 case ImageElement image:
-                    AddImage(context, frame, image.Source, image.AltText);
+                    AddImage(context, frame, image.Source, image.AltText, image.Caption);
                     break;
                 case VideoElement video:
                     AddVideo(context, frame, video.Source, video.AltText);
@@ -824,7 +824,7 @@ public sealed class OpenXmlPptxRenderer
                         AddBulletList(context, frame, list, bodyStyle);
                         break;
                     case ImageElement image:
-                        AddImage(context, frame, image.Source, image.AltText);
+                        AddImage(context, frame, image.Source, image.AltText, image.Caption);
                         break;
                     case VideoElement video:
                         AddVideo(context, frame, video.Source, video.AltText);
@@ -1014,7 +1014,7 @@ public sealed class OpenXmlPptxRenderer
                         AddBulletList(context, placed.Frame, list, bodyStyle);
                         break;
                     case ImageElement image:
-                        AddImage(context, placed.Frame, image.Source, image.AltText);
+                        AddImage(context, placed.Frame, image.Source, image.AltText, image.Caption);
                         break;
                     case VideoElement video:
                         AddVideo(context, placed.Frame, video.Source, video.AltText);
@@ -2083,9 +2083,19 @@ public sealed class OpenXmlPptxRenderer
         return luminance >= 160 ? "1F2937" : "FFFFFF";
     }
 
-    private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, bool useFullBleed = false)
+    private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, string? caption = null, bool useFullBleed = false)
     {
-        if (!TryResolveMediaSource(context, frame, source, "image", out var resolved))
+        // When a visible caption is requested, reserve a strip at the bottom of the frame.
+        const double captionGap = 4.0;           // gap between image and caption, in points
+        const double captionLineHeightFactor = 1.8; // caption text box height = captionFontSize * this factor
+        const double captionFontSizeRatio = 2.0 / 3.0; // caption font size as a fraction of body font size
+        var captionFontSize = Math.Round(context.Theme.Body.FontSize * captionFontSizeRatio, 1);
+        var captionHeight = string.IsNullOrWhiteSpace(caption) ? 0.0 : Math.Ceiling(captionFontSize * captionLineHeightFactor);
+        var imageFrame = captionHeight > 0
+            ? frame with { Height = Math.Max(0, frame.Height - captionHeight - captionGap) }
+            : frame;
+
+        if (!TryResolveMediaSource(context, imageFrame, source, "image", out var resolved))
         {
             return;
         }
@@ -2093,7 +2103,7 @@ public sealed class OpenXmlPptxRenderer
         var contentType = GetImageContentType(resolved);
         if (contentType is null)
         {
-            AddTextShape(context, frame, $"Unsupported image format: {source}", context.Theme.Body);
+            AddTextShape(context, imageFrame, $"Unsupported image format: {source}", context.Theme.Body);
             return;
         }
 
@@ -2103,7 +2113,7 @@ public sealed class OpenXmlPptxRenderer
             imagePart.FeedData(imageStream);
         }
 
-        var (x, y, width, height) = CalculateImagePlacement(frame, resolved, useFullBleed);
+        var (x, y, width, height) = CalculateImagePlacement(imageFrame, resolved, useFullBleed);
         var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
         var blip = CreateImageBlip(contentType, relationshipId);
 
@@ -2122,6 +2132,13 @@ public sealed class OpenXmlPptxRenderer
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
 
         context.ShapeTree.Append(picture);
+
+        if (captionHeight > 0)
+        {
+            var captionFrame = new Rect(frame.X, frame.Y + imageFrame.Height + captionGap, frame.Width, captionHeight);
+            var captionStyle = context.Theme.Body with { FontSize = captionFontSize };
+            AddTextShape(context, captionFrame, caption!, captionStyle);
+        }
     }
 
     /// <summary>
