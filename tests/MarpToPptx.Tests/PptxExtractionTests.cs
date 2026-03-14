@@ -55,7 +55,7 @@ public class PptxExtractionTests
         Assert.Contains("![Pixel](assets/pixel.png)", extracted);
         Assert.Contains("<!--", extracted);
         Assert.Contains("Speaker note", extracted);
-        Assert.True(File.Exists(workspace.GetPath("assets\\pixel.png")));
+        Assert.True(File.Exists(workspace.GetPath(Path.Combine("assets", "pixel.png"))));
     }
 
     [Fact]
