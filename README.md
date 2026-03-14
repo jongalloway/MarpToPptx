@@ -62,10 +62,11 @@ Or reuse an existing PowerPoint template to inherit your organization's masters 
 marp2pptx slides.md --template corporate.pptx -o slides.pptx
 ```
 
-To warn on low-contrast slide text after generation, add the built-in contrast audit switch:
+To audit low-contrast slide text after generation, choose the warning level you want:
 
 ```bash
-marp2pptx slides.md --template conference-template.pptx -o slides.pptx --warn-low-contrast
+marp2pptx slides.md --template conference-template.pptx -o slides.pptx --contrast-warnings summary
+marp2pptx slides.md --template conference-template.pptx -o slides.pptx --contrast-warnings detailed
 ```
 
 If you want a saved text report as well:
@@ -96,7 +97,7 @@ See [doc/using-templates.md](doc/using-templates.md) for the quickstart and [doc
 ## 📋 Features
 
 | Category | What's supported |
-|---|---|
+| --- | --- |
 | **Slide structure** | Front matter directives, `---` slide splitting, presenter notes |
 | **Text content** | Headings, paragraphs, ordered and unordered lists, bold/italic/code spans |
 | **Rich content** | Local images, syntax-highlighted code blocks, native tables, Mermaid and DiagramForge diagram fences |
