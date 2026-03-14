@@ -7,7 +7,7 @@ namespace MarpToPptx.Pptx.Extraction;
 
 public sealed partial class PptxMarkdownExporter
 {
-    private static IReadOnlyList<MarkdownBlock> GetImageBlocks(SlidePart slidePart, PptxMarkdownExportOptions options, HashSet<string> usedAssetNames, IReadOnlyDictionary<string, int> imageUseCounts)
+    private static IReadOnlyList<MarkdownBlock> GetImageBlocks(SlidePart slidePart, PptxMarkdownExportOptions options, HashSet<string> usedAssetNames, IReadOnlyDictionary<string, int> imageUseCounts, Dictionary<string, string?> signatureCache)
     {
         var shapeTree = slidePart.Slide?.CommonSlideData?.ShapeTree;
         if (shapeTree is null || string.IsNullOrWhiteSpace(options.AssetsDirectory))
@@ -30,7 +30,7 @@ public sealed partial class PptxMarkdownExporter
                 continue;
             }
 
-            if (options.FilterNoise && IsLikelyDecorativeImage(picture, imagePart, imageUseCounts))
+            if (options.FilterNoise && IsLikelyDecorativeImage(picture, imagePart, imageUseCounts, signatureCache))
             {
                 continue;
             }
@@ -297,7 +297,7 @@ public sealed partial class PptxMarkdownExporter
         return true;
     }
 
-    private static Dictionary<string, int> CountImageUses(IReadOnlyList<SlidePart> slides)
+    private static Dictionary<string, int> CountImageUses(IReadOnlyList<SlidePart> slides, Dictionary<string, string?> signatureCache)
     {
         var counts = new Dictionary<string, int>(StringComparer.Ordinal);
         foreach (var slidePart in slides)
@@ -322,7 +322,7 @@ public sealed partial class PptxMarkdownExporter
                     continue;
                 }
 
-                var signature = ComputeImageSignature(imagePart);
+                var signature = GetOrComputeImageSignature(imagePart, signatureCache);
                 if (signature is null)
                 {
                     continue;
@@ -335,7 +335,7 @@ public sealed partial class PptxMarkdownExporter
         return counts;
     }
 
-    private static bool IsLikelyDecorativeImage(P.Picture picture, ImagePart imagePart, IReadOnlyDictionary<string, int> imageUseCounts)
+    private static bool IsLikelyDecorativeImage(P.Picture picture, ImagePart imagePart, IReadOnlyDictionary<string, int> imageUseCounts, Dictionary<string, string?> signatureCache)
     {
         var altText = picture.NonVisualPictureProperties?.NonVisualDrawingProperties?.Description?.Value;
         if (!string.IsNullOrWhiteSpace(altText) &&
@@ -349,7 +349,7 @@ public sealed partial class PptxMarkdownExporter
             return false;
         }
 
-        var signature = ComputeImageSignature(imagePart);
+        var signature = GetOrComputeImageSignature(imagePart, signatureCache);
         var repeated = signature is not null && imageUseCounts.TryGetValue(signature, out var count) && count > 1;
         if (!repeated)
         {
@@ -359,6 +359,17 @@ public sealed partial class PptxMarkdownExporter
         var relativeArea = (double)(cx * cy) / (SlideWidthEmu * (double)SlideHeightEmu);
         var nearCorner = x < SlideWidthEmu * 0.2 && y < SlideHeightEmu * 0.25;
         return relativeArea < 0.05 && nearCorner;
+    }
+
+    private static string? GetOrComputeImageSignature(ImagePart imagePart, Dictionary<string, string?> signatureCache)
+    {
+        var key = imagePart.Uri.ToString();
+        if (!signatureCache.TryGetValue(key, out var signature))
+        {
+            signatureCache[key] = signature = ComputeImageSignature(imagePart);
+        }
+
+        return signature;
     }
 
     private static string? ComputeImageSignature(ImagePart imagePart)
