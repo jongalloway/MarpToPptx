@@ -1644,6 +1644,52 @@ public sealed class OpenXmlPptxRenderer
             LetterSpacing: theme.Body.LetterSpacing,
             TextTransform: null);
 
+    /// <summary>
+    /// Parses a CSS <c>background-position</c> value into normalized (xAlign, yAlign) fractions
+    /// where 0.0 is left/top and 1.0 is right/bottom.
+    /// Supports single and two-keyword forms using <c>left</c>, <c>right</c>, <c>top</c>, <c>bottom</c>,
+    /// and <c>center</c>. Any non-keyword token (e.g. a percentage or length value) causes the entire
+    /// value to fall back to centered (0.5, 0.5). Unrecognized or null values also default to (0.5, 0.5).
+    /// </summary>
+    private static (double XAlign, double YAlign) ParseBackgroundPosition(string? position)
+    {
+        if (string.IsNullOrWhiteSpace(position))
+        {
+            return (0.5, 0.5);
+        }
+
+        var tokens = position.Trim().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries);
+        double xAlign = 0.5;
+        double yAlign = 0.5;
+
+        foreach (var token in tokens.Take(2))
+        {
+            switch (token.ToLowerInvariant())
+            {
+                case "left":
+                    xAlign = 0.0;
+                    break;
+                case "right":
+                    xAlign = 1.0;
+                    break;
+                case "top":
+                    yAlign = 0.0;
+                    break;
+                case "bottom":
+                    yAlign = 1.0;
+                    break;
+                case "center":
+                    // Intentional no-op: "center" leaves the default 0.5 for either axis.
+                    break;
+                default:
+                    // Non-keyword token (e.g. "20%", "50px") — fall back to centered.
+                    return (0.5, 0.5);
+            }
+        }
+
+        return (xAlign, yAlign);
+    }
+
     private static void AddBackground(SlideStyle style, SlideRenderContext context)
     {
         if (context.UseTemplateStyle)
@@ -1670,8 +1716,10 @@ public sealed class OpenXmlPptxRenderer
         if (!string.IsNullOrWhiteSpace(backgroundImage))
         {
             var backgroundSize = style.BackgroundSize ?? context.Theme.BackgroundSize;
+            var backgroundPosition = style.BackgroundPosition ?? context.Theme.BackgroundPosition;
             var useFullBleed = !string.Equals(backgroundSize, "contain", StringComparison.OrdinalIgnoreCase);
-            AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), backgroundImage, string.Empty, useFullBleed: useFullBleed);
+            var (xAlign, yAlign) = ParseBackgroundPosition(backgroundPosition);
+            AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), backgroundImage, string.Empty, useFullBleed: useFullBleed, xAlign: xAlign, yAlign: yAlign);
         }
     }
 
@@ -2091,7 +2139,7 @@ public sealed class OpenXmlPptxRenderer
         return luminance >= 160 ? "1F2937" : "FFFFFF";
     }
 
-    private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, string? caption = null, bool useFullBleed = false)
+    private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, string? caption = null, bool useFullBleed = false, double xAlign = 0.5, double yAlign = 0.5)
     {
         // When a visible caption is requested, reserve a strip at the bottom of the frame.
         const double captionGap = 4.0;           // gap between image and caption, in points
@@ -2121,7 +2169,7 @@ public sealed class OpenXmlPptxRenderer
             imagePart.FeedData(imageStream);
         }
 
-        var (x, y, width, height) = CalculateImagePlacement(imageFrame, resolved, useFullBleed);
+        var (x, y, width, height) = CalculateImagePlacement(imageFrame, resolved, useFullBleed, xAlign, yAlign);
         var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
         var blip = CreateImageBlip(contentType, relationshipId);
 
@@ -2439,7 +2487,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private static (double X, double Y, double Width, double Height) CalculateImagePlacement(Rect frame, string imagePath, bool useFullBleed)
+    private static (double X, double Y, double Width, double Height) CalculateImagePlacement(Rect frame, string imagePath, bool useFullBleed, double xAlign = 0.5, double yAlign = 0.5)
     {
         if (!ImageMetadataReader.TryReadSize(imagePath, out var pixelWidth, out var pixelHeight) || pixelWidth <= 0 || pixelHeight <= 0)
         {
@@ -2454,21 +2502,25 @@ public sealed class OpenXmlPptxRenderer
             if (imageAspect > frameAspect)
             {
                 var scaledWidth = frame.Height * imageAspect;
-                return (frame.X - ((scaledWidth - frame.Width) / 2), frame.Y, scaledWidth, frame.Height);
+                var overflow = scaledWidth - frame.Width;
+                return (frame.X - overflow * xAlign, frame.Y, scaledWidth, frame.Height);
             }
 
             var scaledHeight = frame.Width / imageAspect;
-            return (frame.X, frame.Y - ((scaledHeight - frame.Height) / 2), frame.Width, scaledHeight);
+            var overflowY = scaledHeight - frame.Height;
+            return (frame.X, frame.Y - overflowY * yAlign, frame.Width, scaledHeight);
         }
 
         if (imageAspect > frameAspect)
         {
             var fittedHeight = frame.Width / imageAspect;
-            return (frame.X, frame.Y + ((frame.Height - fittedHeight) / 2), frame.Width, fittedHeight);
+            var gapY = frame.Height - fittedHeight;
+            return (frame.X, frame.Y + gapY * yAlign, frame.Width, fittedHeight);
         }
 
         var fittedWidth = frame.Height * imageAspect;
-        return (frame.X + ((frame.Width - fittedWidth) / 2), frame.Y, fittedWidth, frame.Height);
+        var gapX = frame.Width - fittedWidth;
+        return (frame.X + gapX * xAlign, frame.Y, fittedWidth, frame.Height);
     }
 
     private static string? ResolvePath(string? sourceDirectory, string source, RemoteAssetResolver? remoteAssets, out string? errorMessage)

@@ -4487,6 +4487,298 @@ public class PptxRendererTests
         Assert.Empty(validationErrors);
     }
 
+    // ────────────────────────────────────────────────────────
+    // backgroundPosition rendering
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Renderer_BackgroundPosition_Top_AlignsImageToTopOfSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Tall portrait image: height overflows in cover mode.
+        var pngBytes = CreateMinimalPng(1, 4);
+        workspace.WriteFile("tall.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: tall.png -->
+            <!-- backgroundPosition: top -->
+            # Top Aligned
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        // With top alignment, the image Y offset should be 0 (image starts at slide top).
+        var offset = pictures[0].Descendants<A.Offset>().First();
+        Assert.Equal(0L, offset.Y!.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundPosition_Bottom_AlignsImageToBottomOfSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Tall portrait image: height overflows in cover mode.
+        var pngBytes = CreateMinimalPng(1, 4);
+        workspace.WriteFile("tall.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: tall.png -->
+            <!-- backgroundPosition: bottom -->
+            # Bottom Aligned
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        // With bottom alignment, the image Y offset should be negative (image pulled up so its bottom aligns with slide bottom).
+        var offset = pictures[0].Descendants<A.Offset>().First();
+        Assert.True(offset.Y!.Value < 0L, "Bottom alignment should produce a negative Y offset");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundPosition_Left_AlignsImageToLeftOfSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Wide landscape image: width overflows in cover mode.
+        var pngBytes = CreateMinimalPng(4, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundPosition: left -->
+            # Left Aligned
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        // With left alignment, the image X offset should be 0 (image starts at slide left).
+        var offset = pictures[0].Descendants<A.Offset>().First();
+        Assert.Equal(0L, offset.X!.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundPosition_Right_AlignsImageToRightOfSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Wide landscape image: width overflows in cover mode.
+        var pngBytes = CreateMinimalPng(4, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundPosition: right -->
+            # Right Aligned
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        // With right alignment, the image X offset should be negative (image pulled left so its right edge aligns with slide right).
+        var offset = pictures[0].Descendants<A.Offset>().First();
+        Assert.True(offset.X!.Value < 0L, "Right alignment should produce a negative X offset");
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundPosition_Contain_TopLeft_PositionsImageAtOrigin()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Wide image in contain mode: letterbox on top and bottom.
+        var pngBytes = CreateMinimalPng(2, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            <!-- backgroundPosition: top left -->
+            # Contain Top Left
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        // Image fits to slide width; vertical gap is at the bottom.
+        // With top-left alignment the image should be at Y = 0.
+        var offset = pictures[0].Descendants<A.Offset>().First();
+        Assert.Equal(0L, offset.Y!.Value);
+        Assert.Equal(0L, offset.X!.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundPosition_DefaultCenter_MatchesCenteredPlacement()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Wide image in contain mode: letterbox on top and bottom.
+        var pngBytes = CreateMinimalPng(2, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        // Explicit center position should produce the same placement as no position specified.
+        var markdownCenterExplicit = workspace.WriteMarkdown(
+            "center.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            <!-- backgroundPosition: center -->
+            # Center Explicit
+            """);
+
+        var markdownDefault = workspace.WriteMarkdown(
+            "default.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            # Center Default
+            """);
+
+        var outputCenter = workspace.GetPath("center.pptx");
+        var outputDefault = workspace.GetPath("default.pptx");
+        RenderDeck(markdownCenterExplicit, outputCenter, workspace.RootPath);
+        RenderDeck(markdownDefault, outputDefault, workspace.RootPath);
+
+        using var docCenter = PresentationDocument.Open(outputCenter, false);
+        using var docDefault = PresentationDocument.Open(outputDefault, false);
+
+        var offsetCenter = docCenter.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+        var offsetDefault = docDefault.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+
+        Assert.Equal(offsetDefault.X!.Value, offsetCenter.X!.Value);
+        Assert.Equal(offsetDefault.Y!.Value, offsetCenter.Y!.Value);
+
+        var validationErrors1 = new OpenXmlPackageValidator().Validate(docCenter);
+        Assert.Empty(validationErrors1);
+        var validationErrors2 = new OpenXmlPackageValidator().Validate(docDefault);
+        Assert.Empty(validationErrors2);
+    }
+
+    [Fact]
+    public void Renderer_BackgroundPosition_UnsupportedPercentValue_FallsBackToCenter()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        // Wide image in contain mode: letterbox on top and bottom.
+        var pngBytes = CreateMinimalPng(2, 1);
+        workspace.WriteFile("wide.png", pngBytes);
+
+        // Unsupported percentage value should produce the same placement as no position (center).
+        var markdownPercent = workspace.WriteMarkdown(
+            "percent.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            <!-- backgroundPosition: 20% 30% -->
+            # Percent Position
+            """);
+
+        var markdownMixed = workspace.WriteMarkdown(
+            "mixed.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            <!-- backgroundPosition: top 20% -->
+            # Mixed Position
+            """);
+
+        var markdownDefault = workspace.WriteMarkdown(
+            "default.md",
+            """
+            <!-- backgroundImage: wide.png -->
+            <!-- backgroundSize: contain -->
+            # Center Default
+            """);
+
+        var outputPercent = workspace.GetPath("percent.pptx");
+        var outputMixed = workspace.GetPath("mixed.pptx");
+        var outputDefault = workspace.GetPath("default.pptx");
+        RenderDeck(markdownPercent, outputPercent, workspace.RootPath);
+        RenderDeck(markdownMixed, outputMixed, workspace.RootPath);
+        RenderDeck(markdownDefault, outputDefault, workspace.RootPath);
+
+        using var docPercent = PresentationDocument.Open(outputPercent, false);
+        using var docMixed = PresentationDocument.Open(outputMixed, false);
+        using var docDefault = PresentationDocument.Open(outputDefault, false);
+
+        var offsetDefault = docDefault.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+
+        // "20% 30%" — both tokens are non-keywords, should fall back to centered.
+        var offsetPercent = docPercent.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+        Assert.Equal(offsetDefault.X!.Value, offsetPercent.X!.Value);
+        Assert.Equal(offsetDefault.Y!.Value, offsetPercent.Y!.Value);
+
+        // "top 20%" — second token is a non-keyword, should fall back to centered.
+        var offsetMixed = docMixed.PresentationPart!.SlideParts.First().Slide!
+            .Descendants<P.Picture>().First().Descendants<A.Offset>().First();
+        Assert.Equal(offsetDefault.X!.Value, offsetMixed.X!.Value);
+        Assert.Equal(offsetDefault.Y!.Value, offsetMixed.Y!.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(docPercent);
+        Assert.Empty(validationErrors);
+    }
+
     [Fact]
     public void Renderer_PlacesMermaidDiagramAsPictureShape_OnSlide()
     {
