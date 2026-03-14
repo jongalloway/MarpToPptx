@@ -742,7 +742,8 @@ public sealed class OpenXmlPptxRenderer
                 context.NextShapeId(),
                 "Content Placeholder",
                 bodyPlaceholder,
-                bodyParagraphs));
+                bodyParagraphs,
+                normAutofit: true));
         }
         else if (bodyPlaceholder is null && bodyTextElements.Count > 0)
         {
@@ -1046,7 +1047,7 @@ public sealed class OpenXmlPptxRenderer
     /// from the matching layout/master placeholder. The shape carries an empty
     /// <c>&lt;p:spPr/&gt;</c> (no transform) and a text body with the supplied paragraphs.
     /// </summary>
-    private static P.Shape CreateSlidePlaceholderShape(uint shapeId, string name, TemplatePlaceholder placeholder, IEnumerable<A.Paragraph> paragraphs)
+    private static P.Shape CreateSlidePlaceholderShape(uint shapeId, string name, TemplatePlaceholder placeholder, IEnumerable<A.Paragraph> paragraphs, bool normAutofit = false)
     {
         // Echo the layout placeholder's identity exactly. For typeless content
         // placeholders (<p:ph idx="..."/> on obj layouts such as "Title and Content"),
@@ -1062,7 +1063,14 @@ public sealed class OpenXmlPptxRenderer
             ph.Index = idx;
         }
 
-        var textBody = new P.TextBody(new A.BodyProperties(), new A.ListStyle());
+        // When normAutofit is requested, add <a:normAutofit/> inside <a:bodyPr> so
+        // that PowerPoint shrinks text proportionally when content overflows the
+        // placeholder bounds. The element has no effect when text already fits.
+        A.BodyProperties bodyProperties = normAutofit
+            ? new A.BodyProperties(new A.NormalAutoFit())
+            : new A.BodyProperties();
+
+        var textBody = new P.TextBody(bodyProperties, new A.ListStyle());
         foreach (var paragraph in paragraphs)
         {
             textBody.Append(paragraph.CloneNode(true));

@@ -1239,6 +1239,107 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_EmitsNormAutofit_InBodyPlaceholder_ForDenseTextSlide()
+    {
+        // Regression: body placeholder shape must carry <a:normAutofit/> inside
+        // <a:bodyPr> so PowerPoint shrinks text proportionally when many bullets
+        // overflow the placeholder bounds. The title placeholder must NOT get it.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            # Dense Slide
+
+            - Bullet one with substantial text content
+            - Bullet two with substantial text content
+            - Bullet three with substantial text content
+            - Bullet four with substantial text content
+            - Bullet five with substantial text content
+            - Bullet six with substantial text content
+            - Bullet seven with substantial text content
+            - Bullet eight with substantial text content
+            - Bullet nine with substantial text content
+            - Bullet ten with substantial text content
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Body placeholder shape must have <a:normAutofit/> so PowerPoint can shrink
+        // dense text to fit within the placeholder region.
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        Assert.NotNull(bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>());
+
+        // Title placeholder must NOT get normAutofit—title text should not shrink.
+        var titleShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Title);
+        Assert.Null(titleShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_EmitsNormAutofit_InBodyPlaceholder_EvenForShortSlide()
+    {
+        // The normAutofit element is conservative: PowerPoint only applies shrink when
+        // text overflows the placeholder. Short slides that fit should still emit the
+        // element so the hint is in place when the same template is used with dense content.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            # Short Slide
+
+            - Only one bullet
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        Assert.NotNull(bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_FallsBackToStandaloneShapes_WhenNamedLayoutLacksPlaceholders()
     {
         using var workspace = TestWorkspace.Create();
