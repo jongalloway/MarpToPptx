@@ -154,3 +154,50 @@ levels:
   - Delivery
   - Feedback
 ```
+
+---
+
+## Conceptual Pillars
+
+```diagram
+diagram: pillars
+pillars:
+  - title: Microsoft.Extensions.AI
+    segments:
+      - IChatClient
+      - Middleware
+  - title: Semantic Kernel
+    segments:
+      - Plugins
+      - Memory
+  - title: Azure AI
+    segments:
+      - OpenAI
+      - Search
+```
+
+---
+
+## Conceptual Pillars With Presentation Theme
+
+This conceptual diagram uses DiagramForge frontmatter to apply the built-in Presentation theme inside the fenced block.
+
+```diagram
+---
+theme: presentation
+---
+diagram: pillars
+pillars:
+  - title: Microsoft.Extensions.AI
+    segments:
+      - IChatClient
+      - Middleware
+  - title: Semantic Kernel
+    segments:
+      - Plugins
+      - Memory
+  - title: Azure AI
+    segments:
+      - OpenAI
+      - Search
+```
