@@ -121,9 +121,11 @@ public class PptxRendererTests
 
         var slideParts = presentationPart.SlideParts.ToArray();
         Assert.Equal(2, slideParts.Length);
-        // Slide 1 (H1 + paragraph = Title kind) and slide 2 (H2 + bullets + image = Content kind)
-        // both use the content layout (type="tx"); image-focused selection applies when images are at least 50% of non-heading elements.
-        Assert.All(slideParts, slidePart => Assert.Equal("/ppt/slideLayouts/slideLayout1.xml", slidePart.SlideLayoutPart?.Uri.ToString()));
+        // Slide 1 (H1 + paragraph = Title kind) uses the content layout (type="tx").
+        // Slide 2 (H2 + bullets + image): the image is 50% of non-heading elements,
+        // meeting the image-focused threshold, so it uses the blank layout (type="blank").
+        Assert.Equal("/ppt/slideLayouts/slideLayout1.xml", slideParts[0].SlideLayoutPart?.Uri.ToString());
+        Assert.Equal("/ppt/slideLayouts/slideLayout2.xml", slideParts[1].SlideLayoutPart?.Uri.ToString());
         Assert.NotNull(slideParts[0].Slide);
         Assert.NotNull(slideParts[1].Slide);
         Assert.Contains("Title Slide", slideParts[0].Slide!.Descendants<A.Text>().Select(text => text.Text));
@@ -540,6 +542,61 @@ public class PptxRendererTests
         var slidePart = document.PresentationPart!.SlideParts.First();
         var texts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
         Assert.Contains(texts, t => t.Contains("Unsupported image format"));
+    }
+
+    [Fact]
+    public void Renderer_ImageAltText_IsNotRenderedAsVisibleSlideText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # My Title
+
+            ![My descriptive alt text](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var visibleTexts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.DoesNotContain("My descriptive alt text", visibleTexts);
+    }
+
+    [Fact]
+    public void Renderer_ImageAltText_IsSetOnPictureShapeDescription()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Accessibility description here](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var description = picture.NonVisualPictureProperties?
+            .NonVisualDrawingProperties?
+            .Description?.Value;
+        Assert.Equal("Accessibility description here", description);
     }
 
     [Fact]
