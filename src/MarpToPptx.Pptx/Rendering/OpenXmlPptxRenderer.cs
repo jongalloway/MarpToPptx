@@ -767,7 +767,7 @@ public sealed class OpenXmlPptxRenderer
 
         if (picturePlaceholderImage is not null)
         {
-            AddImageIntoPicturePlaceholder(context, picturePlaceholderImage, picturePlaceholder!);
+            AddImageIntoPicturePlaceholder(context, picturePlaceholderImage, picturePlaceholder!, slideLayoutPart);
         }
 
         // Non-text elements (and any body text rerouted above when no body placeholder
@@ -2128,10 +2128,17 @@ public sealed class OpenXmlPptxRenderer
     /// Embeds an image into a picture placeholder shape (<c>&lt;p:ph type="pic"/&gt;</c>),
     /// inheriting the placeholder's geometry and cropping behavior from the layout.
     /// </summary>
-    private static void AddImageIntoPicturePlaceholder(SlideRenderContext context, ImageElement image, TemplatePlaceholder picturePlaceholder)
+    private static void AddImageIntoPicturePlaceholder(SlideRenderContext context, ImageElement image, TemplatePlaceholder picturePlaceholder, SlideLayoutPart slideLayoutPart)
     {
-        // Use a zero rect for error-text fallback; the placeholder provides real geometry.
-        if (!TryResolveMediaSource(context, new Rect(0, 0, 0, 0), image.Source, "image", out var resolved))
+        // Resolve the placeholder rect for error-text fallback positioning.
+        // If the layout carries no explicit transform, use the full slide area so
+        // error text is always visible rather than positioned at a zero-size origin.
+        const double slideWidth = SlideWidthEmu / (double)LayoutScale;
+        const double slideHeight = SlideHeightEmu / (double)LayoutScale;
+        var errorFrame = SlideTemplateSelector.GetPicturePlaceholderRect(slideLayoutPart, picturePlaceholder)
+            ?? new Rect(0, 0, slideWidth, slideHeight);
+
+        if (!TryResolveMediaSource(context, errorFrame, image.Source, "image", out var resolved))
         {
             return;
         }
@@ -2139,6 +2146,7 @@ public sealed class OpenXmlPptxRenderer
         var contentType = GetImageContentType(resolved);
         if (contentType is null)
         {
+            AddTextShape(context, errorFrame, $"Unsupported image format: {image.Source}", context.Theme.Body);
             return;
         }
 

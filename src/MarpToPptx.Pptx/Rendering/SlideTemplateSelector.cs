@@ -210,9 +210,18 @@ internal sealed class SlideTemplateSelector
     /// a usable transform for the inherited placeholder.
     /// </summary>
     public static Rect? GetPicturePlaceholderRect(SlideLayoutPart layoutPart)
+        => GetPicturePlaceholderRect(layoutPart, GetPicturePlaceholder(layoutPart));
+
+    /// <summary>
+    /// Returns the bounding rectangle (in layout units) of the picture placeholder in the
+    /// given layout using an already-resolved <see cref="TemplatePlaceholder"/>, avoiding
+    /// a second traversal of the shape tree. Returns <c>null</c> if the placeholder is
+    /// <c>null</c> or no usable transform is found on the layout or its slide master.
+    /// </summary>
+    public static Rect? GetPicturePlaceholderRect(SlideLayoutPart layoutPart, TemplatePlaceholder? picturePlaceholder)
         => GetPlaceholderRect(
             layoutPart,
-            GetPicturePlaceholder(layoutPart),
+            picturePlaceholder,
             P.PlaceholderValues.Picture);
 
     private static TemplatePlaceholder? FindPlaceholder(SlideLayoutPart layoutPart, params P.PlaceholderValues[] types)
