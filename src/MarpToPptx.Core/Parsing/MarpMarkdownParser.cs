@@ -461,6 +461,7 @@ public sealed class MarpMarkdownParser
                 case LinkInline link when link.IsImage:
                     var url = link.Url ?? string.Empty;
                     var altText = ExtractInlineText(link).Trim();
+                    var caption = string.IsNullOrWhiteSpace(link.Title) ? null : link.Title.Trim();
                     if (url.EndsWith(".mp4", StringComparison.OrdinalIgnoreCase))
                     {
                         yield return new VideoElement(url, altText);
@@ -473,7 +474,7 @@ public sealed class MarpMarkdownParser
                     }
                     else
                     {
-                        yield return new ImageElement(url, altText);
+                        yield return new ImageElement(url, altText, caption);
                     }
 
                     break;

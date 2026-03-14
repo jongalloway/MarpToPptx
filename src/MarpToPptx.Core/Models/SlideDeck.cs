@@ -107,7 +107,16 @@ public sealed record BulletListItem(IReadOnlyList<InlineSpan> Spans, int Depth =
     public string Text => string.Concat(Spans.Select(s => s.Text));
 }
 
-public sealed record ImageElement(string Source, string AltText) : ISlideElement;
+/// <summary>
+/// Represents an embedded image on a slide.
+/// </summary>
+/// <param name="Source">File path or URL of the image.</param>
+/// <param name="AltText">Accessibility alt text stored on the image shape; not rendered as visible slide text.</param>
+/// <param name="Caption">
+/// Optional visible caption rendered below the image.
+/// Specify via the Markdown image title attribute: <c>![alt](url "Caption text")</c>.
+/// </param>
+public sealed record ImageElement(string Source, string AltText, string? Caption = null) : ISlideElement;
 
 public sealed record VideoElement(string Source, string AltText) : ISlideElement;
 

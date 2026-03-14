@@ -17,6 +17,16 @@ The image above should be embedded from a local SVG file.
 
 ---
 
+## Image with Caption
+
+![Architecture sketch](assets/stack-diagram.svg "Figure 1: MarpToPptx architecture overview")
+
+The image above uses the title attribute to show an explicit visible caption beneath it.
+The caption is styled smaller than body text to distinguish it from regular content.
+The alt text remains separate accessibility metadata.
+
+---
+
 ## Code Blocks
 
 ```json

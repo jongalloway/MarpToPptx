@@ -600,6 +600,133 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_ImageWithoutCaption_RendersNoCaptionText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Accessibility description](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        // Only one shape tree child should be present for the picture (plus the background sp)
+        var visibleTexts = slidePart.Slide!.Descendants<A.Text>()
+            .Select(t => t.Text)
+            .Where(t => !string.IsNullOrWhiteSpace(t))
+            .ToArray();
+        Assert.DoesNotContain("Accessibility description", visibleTexts);
+    }
+
+    [Fact]
+    public void Renderer_ImageWithCaption_RendersVisibleCaptionText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Alt text](photo.png "Figure 1: System architecture")
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        var visibleTexts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("Figure 1: System architecture", visibleTexts);
+    }
+
+    [Fact]
+    public void Renderer_ImageCaption_IsDistinctFromAltText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Screen reader description](photo.png "Visible caption for sighted readers")
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // Alt text is stored as accessibility metadata on the picture shape, not as visible text
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var description = picture.NonVisualPictureProperties?
+            .NonVisualDrawingProperties?
+            .Description?.Value;
+        Assert.Equal("Screen reader description", description);
+
+        // Caption is rendered as visible text
+        var visibleTexts = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("Visible caption for sighted readers", visibleTexts);
+        Assert.DoesNotContain("Screen reader description", visibleTexts);
+    }
+
+    [Fact]
+    public void Renderer_ImageCaption_FontSizeIsSmallerThanBodyFontSize()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            ![Alt](photo.png "A visible caption")
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        // Find the run that contains the caption text and check its font size
+        var captionRun = slidePart.Slide!.Descendants<A.Run>()
+            .FirstOrDefault(r => r.Text?.Text == "A visible caption");
+        Assert.NotNull(captionRun);
+
+        // Default body font size is 24pt (FontSize in hundredths of a point = 2400)
+        const int defaultBodyFontSizeHundredths = 2400;
+        var captionFontSize = captionRun!.RunProperties?.FontSize ?? 0;
+        Assert.True(captionFontSize < defaultBodyFontSizeHundredths,
+            $"Caption font size ({captionFontSize / 100.0}pt) should be smaller than body font size ({defaultBodyFontSizeHundredths / 100.0}pt)");
+    }
+
+    [Fact]
     public void Renderer_ResolvesRemoteImage_WhenUrlHasNoFileExtension()
     {
         using var workspace = TestWorkspace.Create();
