@@ -53,6 +53,7 @@ public sealed class MarpMarkdownParser
                 case "class":
                 case "backgroundimage":
                 case "backgroundsize":
+                case "backgroundposition":
                 case "backgroundcolor":
                 case "header":
                 case "footer":

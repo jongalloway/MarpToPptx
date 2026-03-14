@@ -1708,6 +1708,100 @@ public class ParserTests
         Assert.Equal("cover", deck.Slides[2].Style.BackgroundSize);
     }
 
+    // ────────────────────────────────────────────────────────
+    // backgroundPosition directive
+    // ────────────────────────────────────────────────────────
+
+    [Fact]
+    public void Parser_ParsesBackgroundPosition_FromFrontMatter()
+    {
+        const string markdown = """
+        ---
+        backgroundImage: url(bg.jpg)
+        backgroundPosition: top left
+        ---
+
+        # Slide
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("top left", deck.Slides[0].Style.BackgroundPosition);
+    }
+
+    [Fact]
+    public void Parser_ParsesBackgroundPosition_FromSlideDirective()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- backgroundImage: url(bg.jpg) -->
+        <!-- backgroundPosition: bottom right -->
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.BackgroundPosition);
+        Assert.Equal("bottom right", deck.Slides[1].Style.BackgroundPosition);
+    }
+
+    [Fact]
+    public void Parser_BackgroundPosition_CarriesForwardToSubsequentSlides()
+    {
+        const string markdown = """
+        <!-- backgroundPosition: top -->
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal("top", deck.Slides[0].Style.BackgroundPosition);
+        Assert.Equal("top", deck.Slides[1].Style.BackgroundPosition);
+    }
+
+    [Fact]
+    public void Parser_SpotBackgroundPosition_AppliesToSingleSlide()
+    {
+        const string markdown = """
+        ---
+        backgroundImage: url(bg.jpg)
+        backgroundPosition: center
+        ---
+
+        # Default
+
+        ---
+
+        <!-- _backgroundPosition: top left -->
+        # Top Left
+
+        ---
+
+        # Back To Center
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("center", deck.Slides[0].Style.BackgroundPosition);
+        Assert.Equal("top left", deck.Slides[1].Style.BackgroundPosition);
+        Assert.Equal("center", deck.Slides[2].Style.BackgroundPosition);
+    }
+
     [Fact]
     public void Parser_SpotHeader_AppliesToSingleSlideOnly()
     {

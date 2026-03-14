@@ -81,6 +81,7 @@ Front matter key-value pairs set deck-level defaults that apply to all slides un
 | `class` | string | CSS class applied to all slides |
 | `backgroundImage` | string | URL of background image for all slides |
 | `backgroundSize` | string | Background sizing hint (`cover`, `contain`, etc.) |
+| `backgroundPosition` | string | Background image position (`center`, `top`, `bottom`, `left`, `right`, or two-keyword combinations) |
 | `backgroundColor` | string | Background fill color for all slides |
 | `header` | string | Repeated header text on every slide |
 | `footer` | string | Repeated footer text on every slide |
@@ -204,6 +205,7 @@ Console.WriteLine("notes code block");
   - `class`
   - `backgroundImage`
   - `backgroundSize`
+  - `backgroundPosition`
   - `backgroundColor`
   - `header`
   - `footer`
@@ -273,8 +275,8 @@ All other selectors are silently ignored.
 | `background-color` | `section`, `:root`, `body` | Slide background fill | Hex or `rgb()`/`rgba()` values. |
 | `background` | `section`, `:root`, `body`, `pre`, `code` | Slide or code background | Color and URL extracted from shorthand. Other shorthand tokens (e.g. `no-repeat`) are ignored. |
 | `background-image` | `section`, `:root`, `body` | Theme-level background image | `url(...)` value. Applied as full-bleed image behind all slides unless overridden per slide. |
-| `background-size` | `section`, `:root`, `body` | Stored in theme model | Stored as-is (e.g. `cover`, `contain`, `100% 100%`). Not currently mapped to a PPTX fill option. |
-| `background-position` | `section`, `:root`, `body` | Stored in theme model | Stored as-is (e.g. `center`, `top left`). Not currently mapped to a PPTX fill option. |
+| `background-size` | `section`, `:root`, `body` | Background image sizing | `cover` (default) scales the image to fill the slide, cropping as needed. `contain` scales it to fit within the slide with letterboxing. Other values fall back to cover behavior. |
+| `background-position` | `section`, `:root`, `body` | Background image position | Supported keyword values: `center` (default), `top`, `bottom`, `left`, `right`, and two-keyword combinations such as `top left`, `bottom right`, `top center`. Percentage and length values are not supported and fall back to centered. |
 | `padding` | `section`, `:root`, `body` | Slide padding inset | 1–4 value shorthand. Accepts `px`, `rem`, and unitless pt. |
 | `line-height` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Paragraph line spacing (percent) | Unitless or `%` values treated as multipliers. `1.5` and `150%` both map to 150 % line spacing. |
 | `letter-spacing` | `section`, `:root`, `body`, `h1`–`h6`, `pre`, `code` | Run character spacing | Accepts `px`, `rem`, and unitless pt. Converted to pt before storage. |
