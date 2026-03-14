@@ -2254,4 +2254,75 @@ public class ParserTests
         // Slide 3 reverts to the carried-forward local value.
         Assert.Equal("fade", deck.Slides[2].Style.Transition?.Type);
     }
+
+    // ── diagram-theme directive tests ─────────────────────────────────────
+
+    [Fact]
+    public void Parser_DiagramTheme_FromFrontMatter_SetsDeckDiagramTheme()
+    {
+        const string markdown = """
+        ---
+        diagram-theme: prism
+        ---
+
+        # Slide One
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal("prism", deck.DiagramTheme);
+    }
+
+    [Fact]
+    public void Parser_DiagramTheme_NotPresent_IsNull()
+    {
+        const string markdown = """
+        ---
+        theme: default
+        ---
+
+        # Slide One
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Null(deck.DiagramTheme);
+    }
+
+    [Fact]
+    public void Parser_DiagramTheme_WhitespaceOnly_IsNull()
+    {
+        const string markdown = """
+        ---
+        diagram-theme:
+        ---
+
+        # Slide One
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Null(deck.DiagramTheme);
+    }
+
+    [Fact]
+    public void Parser_DiagramTheme_StoredInFrontMatter()
+    {
+        const string markdown = """
+        ---
+        diagram-theme: dracula
+        ---
+
+        # Slide One
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.True(deck.FrontMatter.ContainsKey("diagram-theme"));
+        Assert.Equal("dracula", deck.FrontMatter["diagram-theme"]);
+    }
 }

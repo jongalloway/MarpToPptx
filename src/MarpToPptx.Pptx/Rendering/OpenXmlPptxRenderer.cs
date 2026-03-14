@@ -76,7 +76,7 @@ public sealed class OpenXmlPptxRenderer
             {
                 var slideKind = SlideTemplateSelector.Classify(slideModel);
                 var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout);
-                AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language, selectedLayout.TemplateSlide);
+                AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
                 slideNumber++;
             }
 
@@ -317,7 +317,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language, TemplateSlideReference? templateSlide = null)
+    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language, TemplateSlideReference? templateSlide = null, string? globalDiagramTheme = null)
     {
         SlidePart slidePart;
         P.ShapeTree shapeTree;
@@ -362,7 +362,7 @@ public sealed class OpenXmlPptxRenderer
         var effectiveTheme = useTemplateStyle
             ? ThemeDefinition.Default
             : theme.ApplyClassVariant(classVariant);
-        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, useTemplateStyle, language);
+        var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, useTemplateStyle, language, globalDiagramTheme);
 
         AddBackground(slideModel.Style, context);
 
@@ -1805,11 +1805,12 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddDiagram(SlideRenderContext context, Rect frame, string source, string fenceName, ThemeDefinition effectiveTheme, TextStyle fallbackStyle)
     {
+        var effectiveSource = InjectDiagramThemeIfNeeded(source, context.GlobalDiagramTheme);
         var diagramTheme = CreateDiagramTheme(effectiveTheme);
         string svg;
         try
         {
-            svg = _diagramRenderer.Render(source, diagramTheme);
+            svg = _diagramRenderer.Render(effectiveSource, diagramTheme);
         }
         catch (DiagramParseException ex)
         {
@@ -1910,6 +1911,60 @@ public sealed class OpenXmlPptxRenderer
             FontFamily = effectiveTheme.FontFamily,
             BorderRadius = 12,
         };
+    }
+
+    /// <summary>
+    /// Injects a <c>theme:</c> key into the diagram source's YAML front matter when neither
+    /// the source's own front matter nor the absence of front matter already specifies one.
+    /// </summary>
+    /// <remarks>
+    /// Precedence rules:
+    /// <list type="number">
+    ///   <item>Fence-level <c>theme:</c> in embedded YAML front matter — returned unchanged.</item>
+    ///   <item>Deck-level <paramref name="globalDiagramTheme"/> — injected when present and no fence-level theme exists.</item>
+    ///   <item>Neither present — returned unchanged (DiagramForge uses its built-in defaults).</item>
+    /// </list>
+    /// </remarks>
+    private static string InjectDiagramThemeIfNeeded(string source, string? globalDiagramTheme)
+    {
+        if (string.IsNullOrWhiteSpace(globalDiagramTheme))
+            return source;
+
+        // Check if the source starts with a YAML front matter block (--- ... ---).
+        // NormalizeDiagramSource trims leading blank lines, so front matter begins at index 0.
+        if (source.StartsWith("---", StringComparison.Ordinal) &&
+            (source.Length == 3 || source[3] is '\n' or '\r'))
+        {
+            var openEnd = source.IndexOf('\n', 3);
+            if (openEnd < 0)
+                return source; // Opening delimiter with no newline — return unchanged.
+
+            var bodyStart = openEnd + 1;
+
+            // Search for the closing --- delimiter. Start from openEnd so the \n that
+            // terminates the opening delimiter line is included in the search window,
+            // which correctly handles an empty front matter block (--- immediately after ---\n).
+            var closeLineIdx = source.IndexOf("\n---", openEnd, StringComparison.Ordinal);
+            if (closeLineIdx >= 0)
+            {
+                var frontMatterBody = closeLineIdx >= bodyStart
+                    ? source[bodyStart..closeLineIdx]
+                    : string.Empty;
+
+                // If the fence already specifies a theme, it takes precedence — return unchanged.
+                if (frontMatterBody.Split('\n').Any(l =>
+                    l.TrimStart().StartsWith("theme:", StringComparison.OrdinalIgnoreCase)))
+                {
+                    return source;
+                }
+
+                // Inject the global theme as the first key inside the existing front matter block.
+                return source[..bodyStart] + $"theme: {globalDiagramTheme}\n" + source[bodyStart..];
+            }
+        }
+
+        // No YAML front matter found — prepend a minimal block containing just the theme.
+        return $"---\ntheme: {globalDiagramTheme}\n---\n{source}";
     }
 
     private static A.Paragraph CreateHighlightedParagraph(IReadOnlyList<TokenizedRun> runs, TextStyle style, string language)
@@ -3320,7 +3375,7 @@ public sealed class OpenXmlPptxRenderer
 
     private sealed record TemplateTextShapeCandidate(P.Shape Shape, long X, long Y, long Cx, long Cy);
 
-    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, string language = "en-US")
+    private sealed class SlideRenderContext(SlidePart slidePart, P.ShapeTree shapeTree, string? sourceDirectory, ThemeDefinition theme, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, string language = "en-US", string? globalDiagramTheme = null)
     {
         private uint _shapeId = shapeTree.Descendants<P.NonVisualDrawingProperties>()
             .Select(properties => properties.Id?.Value ?? 0U)
@@ -3340,6 +3395,8 @@ public sealed class OpenXmlPptxRenderer
         public bool UseTemplateStyle { get; } = useTemplateStyle;
 
         public string Language { get; } = language;
+
+        public string? GlobalDiagramTheme { get; } = globalDiagramTheme;
 
         public uint NextShapeId() => ++_shapeId;
     }

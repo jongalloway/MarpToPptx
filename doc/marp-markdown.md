@@ -89,6 +89,7 @@ Front matter key-value pairs set deck-level defaults that apply to all slides un
 | `lang` | BCP-47 string | Language tag written to PPTX document metadata |
 | `style` | CSS string | Inline CSS merged with any `--theme-css` CSS |
 | `transition` | string | Default slide transition for all slides (see [Transition Directive](#transition-directive)) |
+| `diagram-theme` | string | Default DiagramForge theme for all `mermaid` and `diagram` fences (see [Diagram Theme Directive](#diagram-theme-directive)) |
 
 All other front matter keys are stored in `SlideDeck.FrontMatter` but not interpreted.
 
@@ -170,6 +171,47 @@ transition: fade
 # Fourth slide (back to push right from slide 2)
 ```
 
+### Diagram Theme Directive
+
+The `diagram-theme` front matter directive sets a deck-level preferred DiagramForge theme name for all `mermaid` and `diagram` fenced code blocks in the presentation. This lets you apply a consistent diagram look without repeating front matter inside every fence.
+
+**Syntax (front matter only):**
+
+```yaml
+diagram-theme: <theme-name>
+```
+
+Supported DiagramForge theme names include `default`, `prism`, `dracula`, and `presentation`.
+
+**Precedence:**
+
+1. **Fence-level `theme:`** — a `theme:` key inside the fenced block's own YAML front matter always wins.
+2. **Deck-level `diagram-theme`** — applied when the fence does not specify its own theme.
+3. **Neither set** — DiagramForge falls back to its default color mapping derived from the Marp slide theme.
+
+**Examples:**
+
+Set a deck-wide default:
+
+```yaml
+---
+diagram-theme: prism
+---
+```
+
+Override a single diagram back to a different theme:
+
+````markdown
+```mermaid
+---
+theme: dracula
+---
+flowchart LR
+  A --> B
+````
+
+In the example above, the Mermaid diagram renders with the `dracula` theme despite the deck-level `prism` setting, because the fence-level `theme:` takes precedence.
+
 ### Presenter Notes
 
 HTML comments that do **not** match the `<!-- key: value -->` pattern are treated as presenter notes. They are stripped from the slide content and stored in `Slide.Notes`, then emitted as PPTX speaker notes.
@@ -197,6 +239,7 @@ Console.WriteLine("notes code block");
 - YAML front matter with simple `key: value` scalars, plus `|` literal block scalars (for `style`)
   - `lang` — sets the BCP-47 language tag for document metadata
   - `style` — inline CSS merged with any external theme CSS
+  - `diagram-theme` — sets a deck-level preferred DiagramForge theme for all `mermaid` and `diagram` fences
 - Slide splitting on literal `---`
 - `headingDivider` in front matter (integer 1–6) — also splits slides before headings at or above that level
 - HTML comment directives (local and spot) for:

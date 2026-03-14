@@ -23,6 +23,13 @@ public sealed class SlideDeck
     /// When set, this is used for document metadata and run-level language properties.
     /// </summary>
     public string? Language { get; set; }
+
+    /// <summary>
+    /// Deck-level preferred DiagramForge theme name from the <c>diagram-theme</c> global directive.
+    /// Applied to all Mermaid and <c>diagram</c> fences that do not specify their own <c>theme:</c>
+    /// in embedded front matter. A fence-level <c>theme:</c> always takes precedence.
+    /// </summary>
+    public string? DiagramTheme { get; set; }
 }
 
 public sealed class Slide

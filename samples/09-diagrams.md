@@ -3,15 +3,21 @@ theme: diagram-showcase
 paginate: true
 header: DiagramForge in MarpToPptx
 footer: Mermaid and diagram fences
+diagram-theme: prism
 ---
 
 # Diagram Showcase
 
 MarpToPptx can render both `mermaid` and `diagram` fenced blocks through DiagramForge.
 
+This deck sets `diagram-theme: prism` in front matter as the default for all diagrams.
+Individual fences can override it with their own `theme:` in embedded YAML front matter.
+
 ---
 
 ## Mermaid Flowchart
+
+Uses the deck-level `diagram-theme: prism`.
 
 ```mermaid
 flowchart LR
@@ -25,6 +31,8 @@ flowchart LR
 ---
 
 ## Mermaid Block Diagram
+
+Uses the deck-level `diagram-theme: prism`.
 
 ```mermaid
 block-beta
@@ -40,6 +48,8 @@ block-beta
 
 ## Mermaid State Diagram
 
+Uses the deck-level `diagram-theme: prism`.
+
 ```mermaid
 stateDiagram-v2
   [*] --> Draft
@@ -53,6 +63,8 @@ stateDiagram-v2
 ---
 
 ## Mermaid Mindmap
+
+Uses the deck-level `diagram-theme: prism`.
 
 ```mermaid
 mindmap
@@ -70,7 +82,7 @@ mindmap
 
 ## Mermaid With Dracula Theme
 
-This Mermaid diagram uses DiagramForge frontmatter to switch to the built-in Dracula theme and apply additional styling overrides.
+This Mermaid diagram uses DiagramForge frontmatter to override the deck-level `prism` theme with `theme: dracula`, plus additional styling options.
 
 ```mermaid
 ---
@@ -90,6 +102,8 @@ flowchart LR
 
 ## Conceptual Matrix
 
+Uses the deck-level `diagram-theme: prism`.
+
 ```diagram
 diagram: matrix
 rows:
@@ -102,9 +116,9 @@ columns:
 
 ---
 
-## Conceptual Matrix With Prism Theme
+## Conceptual Matrix With Prism Theme and Custom Palette
 
-This conceptual diagram uses DiagramForge frontmatter to apply the built-in Prism theme inside the fenced block.
+This conceptual diagram uses DiagramForge frontmatter to stay on `prism` but add a custom palette and other styling options.
 
 ```diagram
 ---
@@ -126,6 +140,8 @@ columns:
 
 ## Conceptual Pyramid
 
+Uses the deck-level `diagram-theme: prism`.
+
 ```diagram
 diagram: pyramid
 levels:
@@ -138,6 +154,8 @@ levels:
 ---
 
 ## Conceptual Pyramid With Dracula Theme
+
+This conceptual diagram overrides the deck-level `prism` theme with `theme: dracula` in embedded frontmatter.
 
 ```diagram
 ---
@@ -158,6 +176,8 @@ levels:
 ---
 
 ## Conceptual Pillars
+
+Uses the deck-level `diagram-theme: prism`.
 
 ```diagram
 diagram: pillars
@@ -180,7 +200,7 @@ pillars:
 
 ## Conceptual Pillars With Presentation Theme
 
-This conceptual diagram uses DiagramForge frontmatter to apply the built-in Presentation theme inside the fenced block.
+This conceptual diagram overrides the deck-level `prism` theme with `theme: presentation` in embedded frontmatter.
 
 ```diagram
 ---
