@@ -1911,19 +1911,17 @@ public sealed class OpenXmlPptxRenderer
 
         // Check if the source starts with a YAML front matter block (--- ... ---).
         // NormalizeDiagramSource trims leading blank lines, so front matter begins at index 0.
-        if (source.StartsWith("---", StringComparison.Ordinal) &&
-            (source.Length == 3 || source[3] is '\n' or '\r'))
+        // Use a trim-based check so that a delimiter with trailing whitespace (e.g. "---   ") is still recognized.
+        var firstNewline = source.IndexOf('\n');
+        var firstLine = firstNewline >= 0 ? source[..firstNewline] : source;
+        if (firstLine.Trim() == "---")
         {
-            var openEnd = source.IndexOf('\n', 3);
-            if (openEnd < 0)
-                return source; // Opening delimiter with no newline — return unchanged.
+            var bodyStart = firstNewline >= 0 ? firstNewline + 1 : source.Length;
 
-            var bodyStart = openEnd + 1;
-
-            // Search for the closing --- delimiter. Start from openEnd so the \n that
-            // terminates the opening delimiter line is included in the search window,
-            // which correctly handles an empty front matter block (--- immediately after ---\n).
-            var closeLineIdx = source.IndexOf("\n---", openEnd, StringComparison.Ordinal);
+            // Search for the closing --- delimiter. The \n before it is used as the anchor so
+            // that only a delimiter on its own line (trimmed) is matched. Empty front-matter
+            // blocks (--- immediately followed by ---\n) are handled correctly.
+            var closeLineIdx = FindClosingFrontMatterDelimiter(source, firstNewline >= 0 ? firstNewline : 0);
             if (closeLineIdx >= 0)
             {
                 var frontMatterBody = closeLineIdx >= bodyStart
@@ -1944,6 +1942,29 @@ public sealed class OpenXmlPptxRenderer
 
         // No YAML front matter found — prepend a minimal block containing just the theme.
         return $"---\ntheme: {globalDiagramTheme}\n---\n{source}";
+    }
+
+    /// <summary>
+    /// Finds the index (in <paramref name="source"/>) of the start of the first line
+    /// (after <paramref name="searchFrom"/>) whose trimmed content equals <c>---</c>.
+    /// Returns the index of the <c>\n</c> that precedes that line, or -1 if not found.
+    /// </summary>
+    private static int FindClosingFrontMatterDelimiter(string source, int searchFrom)
+    {
+        var idx = searchFrom;
+        while (idx < source.Length)
+        {
+            var nl = source.IndexOf('\n', idx);
+            if (nl < 0)
+                break;
+            var lineStart = nl + 1;
+            var lineEnd = source.IndexOf('\n', lineStart);
+            var line = lineEnd >= 0 ? source[lineStart..lineEnd] : source[lineStart..];
+            if (line.Trim() == "---")
+                return nl; // return the index of the \n before the closing ---
+            idx = lineStart;
+        }
+        return -1;
     }
 
     /// <summary>

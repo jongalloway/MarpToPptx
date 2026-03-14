@@ -208,6 +208,7 @@ theme: dracula
 ---
 flowchart LR
   A --> B
+```
 ````
 
 In the example above, the Mermaid diagram renders with the `dracula` theme despite the deck-level `prism` setting, because the fence-level `theme:` takes precedence.

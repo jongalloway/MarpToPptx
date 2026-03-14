@@ -5736,283 +5736,283 @@ public class PptxRendererTests
         Assert.DoesNotContain(slidePart.Slide!.Descendants<A.Text>(), t => t.Text.Contains("Missing image"));
     }
 
-        // ── diagram-theme directive tests ──────────────────────────────────────────
+    // ── diagram-theme directive tests ──────────────────────────────────────────
 
-        [Fact]
-        public void Renderer_GlobalDiagramTheme_MermaidFence_WithoutFenceLevelTheme_RendersSvg()
+    [Fact]
+    public void Renderer_GlobalDiagramTheme_MermaidFence_WithoutFenceLevelTheme_RendersSvg()
+    {
+        // A deck with diagram-theme: prism should apply the theme to mermaid fences without
+        // their own fence-level theme, and the diagram must render as an SVG picture shape.
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            diagram-theme: prism
+            ---
+
+            # Mermaid Diagram
+
+            ```mermaid
+            flowchart LR
+              A --> B
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        var svgPart = slidePart.ImageParts
+            .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(svgPart);
+
+        using var stream = svgPart!.GetStream();
+        var svg = new System.IO.StreamReader(stream).ReadToEnd();
+        Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
+
+        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.DoesNotContain(textRuns, t => t.StartsWith("Mermaid parse error:", StringComparison.Ordinal));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_GlobalDiagramTheme_DiagramFence_WithoutFenceLevelTheme_RendersSvg()
+    {
+        // A deck with diagram-theme: prism should apply the theme to diagram fences without
+        // their own fence-level theme, and the diagram must render as an SVG picture shape.
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            diagram-theme: prism
+            ---
+
+            # Conceptual Diagram
+
+            ```diagram
+            diagram: matrix
+            rows:
+              - Important
+              - Not Important
+            columns:
+              - Urgent
+              - Not Urgent
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        var svgPart = slidePart.ImageParts
+            .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+        Assert.NotNull(svgPart);
+
+        using var stream = svgPart!.GetStream();
+        var svg = new System.IO.StreamReader(stream).ReadToEnd();
+        Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
+
+        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_GlobalDiagramTheme_FenceLevelTheme_Wins_OverDeckLevel()
+    {
+        // A fence that specifies its own theme: dracula must use dracula, even when the
+        // deck sets diagram-theme: prism. The two themes should produce different SVG output.
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            diagram-theme: prism
+            ---
+
+            # Slide One — deck-level theme (no fence theme)
+
+            ```mermaid
+            flowchart LR
+              A --> B
+            ```
+
+            ---
+
+            # Slide Two — fence-level override wins
+
+            ```mermaid
+            ---
+            theme: dracula
+            ---
+            flowchart LR
+              A --> B
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var sp in slideParts)
         {
-                // A deck with diagram-theme: prism should apply the theme to mermaid fences without
-                // their own fence-level theme, and the diagram must render as an SVG picture shape.
-                using var workspace = TestWorkspace.Create();
+            var pictures = sp.Slide!.Descendants<P.Picture>().ToArray();
+            Assert.NotEmpty(pictures);
 
-                var markdownPath = workspace.WriteMarkdown(
-                        "deck.md",
-                        """
-                        ---
-                        diagram-theme: prism
-                        ---
+            var svgPart = sp.ImageParts
+                .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(svgPart);
 
-                        # Mermaid Diagram
-
-                        ```mermaid
-                        flowchart LR
-                            A --> B
-                        ```
-                        """);
-
-                var outputPath = workspace.GetPath("deck.pptx");
-                RenderDeck(markdownPath, outputPath, workspace.RootPath);
-
-                using var document = PresentationDocument.Open(outputPath, false);
-                var slidePart = document.PresentationPart!.SlideParts.Single();
-
-                var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
-                Assert.NotEmpty(pictures);
-
-                var svgPart = slidePart.ImageParts
-                        .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
-                Assert.NotNull(svgPart);
-
-                using var stream = svgPart!.GetStream();
-                var svg = new System.IO.StreamReader(stream).ReadToEnd();
-                Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
-
-                var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
-                Assert.DoesNotContain(textRuns, t => t.StartsWith("Mermaid parse error:", StringComparison.Ordinal));
-
-                var validationErrors = new OpenXmlPackageValidator().Validate(document);
-                Assert.Empty(validationErrors);
+            var textRuns = sp.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+            Assert.DoesNotContain(textRuns, t => t.StartsWith("Mermaid parse error:", StringComparison.Ordinal));
         }
 
-        [Fact]
-        public void Renderer_GlobalDiagramTheme_DiagramFence_WithoutFenceLevelTheme_RendersSvg()
+        string ReadSvg(SlidePart sp)
         {
-                // A deck with diagram-theme: prism should apply the theme to diagram fences without
-                // their own fence-level theme, and the diagram must render as an SVG picture shape.
-                using var workspace = TestWorkspace.Create();
-
-                var markdownPath = workspace.WriteMarkdown(
-                        "deck.md",
-                        """
-                        ---
-                        diagram-theme: prism
-                        ---
-
-                        # Conceptual Diagram
-
-                        ```diagram
-                        diagram: matrix
-                        rows:
-                            - Important
-                            - Not Important
-                        columns:
-                            - Urgent
-                            - Not Urgent
-                        ```
-                        """);
-
-                var outputPath = workspace.GetPath("deck.pptx");
-                RenderDeck(markdownPath, outputPath, workspace.RootPath);
-
-                using var document = PresentationDocument.Open(outputPath, false);
-                var slidePart = document.PresentationPart!.SlideParts.Single();
-
-                var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
-                Assert.NotEmpty(pictures);
-
-                var svgPart = slidePart.ImageParts
-                        .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
-                Assert.NotNull(svgPart);
-
-                using var stream = svgPart!.GetStream();
-                var svg = new System.IO.StreamReader(stream).ReadToEnd();
-                Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
-
-                var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
-                Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
-
-                var validationErrors = new OpenXmlPackageValidator().Validate(document);
-                Assert.Empty(validationErrors);
+            var svgPart = sp.ImageParts.First(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+            using var stream = svgPart.GetStream();
+            return new System.IO.StreamReader(stream).ReadToEnd();
         }
 
-        [Fact]
-        public void Renderer_GlobalDiagramTheme_FenceLevelTheme_Wins_OverDeckLevel()
+        var svg1 = ReadSvg(slideParts[0]);
+        var svg2 = ReadSvg(slideParts[1]);
+        Assert.NotEqual(svg1, svg2);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_GlobalDiagramTheme_NotSet_PreservesDefaultBehavior()
+    {
+        // Decks without diagram-theme must render exactly as before: no SVG regression.
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Diagram Without Global Theme
+
+            ```diagram
+            diagram: matrix
+            rows:
+              - Important
+              - Not Important
+            columns:
+              - Urgent
+              - Not Urgent
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
+        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_GlobalDiagramTheme_DiagramFenceWithExistingFrontMatter_FenceLevelWins()
+    {
+        // A diagram fence with its own front matter (e.g. palette, shadowStyle) but no theme:
+        // must receive the deck-level theme injected into its front matter and still render.
+        // A fence with theme: dracula in its front matter must ignore the deck-level prism theme.
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            diagram-theme: prism
+            ---
+
+            # Slide One — fence has front matter but no theme: key
+
+            ```diagram
+            ---
+            shadowStyle: soft
+            transparent: true
+            ---
+            diagram: matrix
+            rows:
+              - Important
+              - Not Important
+            columns:
+              - Urgent
+              - Not Urgent
+            ```
+
+            ---
+
+            # Slide Two — fence front matter has explicit theme: dracula
+
+            ```diagram
+            ---
+            theme: dracula
+            shadowStyle: soft
+            ---
+            diagram: matrix
+            rows:
+              - High Impact
+              - Lower Impact
+            columns:
+              - Quick Wins
+              - Strategic Bets
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var sp in slideParts)
         {
-                // A fence that specifies its own theme: dracula must use dracula, even when the
-                // deck sets diagram-theme: prism. The two themes should produce different SVG output.
-                using var workspace = TestWorkspace.Create();
+            var pictures = sp.Slide!.Descendants<P.Picture>().ToArray();
+            Assert.NotEmpty(pictures);
 
-                var markdownPath = workspace.WriteMarkdown(
-                        "deck.md",
-                        """
-                        ---
-                        diagram-theme: prism
-                        ---
+            var svgPart = sp.ImageParts
+                .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(svgPart);
 
-                        # Slide One — deck-level theme (no fence theme)
-
-                        ```mermaid
-                        flowchart LR
-                            A --> B
-                        ```
-
-                        ---
-
-                        # Slide Two — fence-level override wins
-
-                        ```mermaid
-                        ---
-                        theme: dracula
-                        ---
-                        flowchart LR
-                            A --> B
-                        ```
-                        """);
-
-                var outputPath = workspace.GetPath("deck.pptx");
-                RenderDeck(markdownPath, outputPath, workspace.RootPath);
-
-                using var document = PresentationDocument.Open(outputPath, false);
-                var slideParts = document.PresentationPart!.SlideParts.ToArray();
-                Assert.Equal(2, slideParts.Length);
-
-                foreach (var sp in slideParts)
-                {
-                        var pictures = sp.Slide!.Descendants<P.Picture>().ToArray();
-                        Assert.NotEmpty(pictures);
-
-                        var svgPart = sp.ImageParts
-                                .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
-                        Assert.NotNull(svgPart);
-
-                        var textRuns = sp.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
-                        Assert.DoesNotContain(textRuns, t => t.StartsWith("Mermaid parse error:", StringComparison.Ordinal));
-                }
-
-                string ReadSvg(SlidePart sp)
-                {
-                        var svgPart = sp.ImageParts.First(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
-                        using var stream = svgPart.GetStream();
-                        return new System.IO.StreamReader(stream).ReadToEnd();
-                }
-
-                var svg1 = ReadSvg(slideParts[0]);
-                var svg2 = ReadSvg(slideParts[1]);
-                Assert.NotEqual(svg1, svg2);
-
-                var validationErrors = new OpenXmlPackageValidator().Validate(document);
-                Assert.Empty(validationErrors);
+            var textRuns = sp.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+            Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
         }
 
-        [Fact]
-        public void Renderer_GlobalDiagramTheme_NotSet_PreservesDefaultBehavior()
-        {
-                // Decks without diagram-theme must render exactly as before: no SVG regression.
-                using var workspace = TestWorkspace.Create();
-
-                var markdownPath = workspace.WriteMarkdown(
-                        "deck.md",
-                        """
-                        # Diagram Without Global Theme
-
-                        ```diagram
-                        diagram: matrix
-                        rows:
-                            - Important
-                            - Not Important
-                        columns:
-                            - Urgent
-                            - Not Urgent
-                        ```
-                        """);
-
-                var outputPath = workspace.GetPath("deck.pptx");
-                RenderDeck(markdownPath, outputPath, workspace.RootPath);
-
-                using var document = PresentationDocument.Open(outputPath, false);
-                var slidePart = document.PresentationPart!.SlideParts.Single();
-
-                var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
-                Assert.NotEmpty(pictures);
-
-                var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
-                Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
-
-                var validationErrors = new OpenXmlPackageValidator().Validate(document);
-                Assert.Empty(validationErrors);
-        }
-
-        [Fact]
-        public void Renderer_GlobalDiagramTheme_DiagramFenceWithExistingFrontMatter_FenceLevelWins()
-        {
-                // A diagram fence with its own front matter (e.g. palette, shadowStyle) but no theme:
-                // must receive the deck-level theme injected into its front matter and still render.
-                // A fence with theme: dracula in its front matter must ignore the deck-level prism theme.
-                using var workspace = TestWorkspace.Create();
-
-                var markdownPath = workspace.WriteMarkdown(
-                        "deck.md",
-                        """
-                        ---
-                        diagram-theme: prism
-                        ---
-
-                        # Slide One — fence has front matter but no theme: key
-
-                        ```diagram
-                        ---
-                        shadowStyle: soft
-                        transparent: true
-                        ---
-                        diagram: matrix
-                        rows:
-                            - Important
-                            - Not Important
-                        columns:
-                            - Urgent
-                            - Not Urgent
-                        ```
-
-                        ---
-
-                        # Slide Two — fence front matter has explicit theme: dracula
-
-                        ```diagram
-                        ---
-                        theme: dracula
-                        shadowStyle: soft
-                        ---
-                        diagram: matrix
-                        rows:
-                            - High Impact
-                            - Lower Impact
-                        columns:
-                            - Quick Wins
-                            - Strategic Bets
-                        ```
-                        """);
-
-                var outputPath = workspace.GetPath("deck.pptx");
-                RenderDeck(markdownPath, outputPath, workspace.RootPath);
-
-                using var document = PresentationDocument.Open(outputPath, false);
-                var slideParts = document.PresentationPart!.SlideParts.ToArray();
-                Assert.Equal(2, slideParts.Length);
-
-                foreach (var sp in slideParts)
-                {
-                        var pictures = sp.Slide!.Descendants<P.Picture>().ToArray();
-                        Assert.NotEmpty(pictures);
-
-                        var svgPart = sp.ImageParts
-                                .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
-                        Assert.NotNull(svgPart);
-
-                        var textRuns = sp.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
-                        Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
-                }
-
-                var validationErrors = new OpenXmlPackageValidator().Validate(document);
-                Assert.Empty(validationErrors);
-        }
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
 }

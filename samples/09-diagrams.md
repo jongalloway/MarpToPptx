@@ -82,7 +82,7 @@ mindmap
 
 ## Mermaid With Dracula Theme
 
-This Mermaid diagram uses DiagramForge frontmatter to override the deck-level `prism` theme with `theme: dracula`, plus additional styling options.
+This Mermaid diagram uses DiagramForge front matter to override the deck-level `prism` theme with `theme: dracula`, plus additional styling options.
 
 ```mermaid
 ---
@@ -118,7 +118,7 @@ columns:
 
 ## Conceptual Matrix With Prism Theme and Custom Palette
 
-This conceptual diagram uses DiagramForge frontmatter to stay on `prism` but add a custom palette and other styling options.
+This conceptual diagram uses DiagramForge front matter to stay on `prism` but add a custom palette and other styling options.
 
 ```diagram
 ---
@@ -155,7 +155,7 @@ levels:
 
 ## Conceptual Pyramid With Dracula Theme
 
-This conceptual diagram overrides the deck-level `prism` theme with `theme: dracula` in embedded frontmatter.
+This conceptual diagram overrides the deck-level `prism` theme with `theme: dracula` in embedded front matter.
 
 ```diagram
 ---
@@ -200,7 +200,7 @@ pillars:
 
 ## Conceptual Pillars With Presentation Theme
 
-This conceptual diagram overrides the deck-level `prism` theme with `theme: presentation` in embedded frontmatter.
+This conceptual diagram overrides the deck-level `prism` theme with `theme: presentation` in embedded front matter.
 
 ```diagram
 ---
