@@ -758,9 +758,12 @@ public class PptxRendererTests
 
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.First();
-        // Image is rendered as an inline Picture shape.
-        // No slide-level Background element is added by the image syntax.
-        Assert.Null(slidePart.Slide!.CommonSlideData?.Background);
+        // Currently rendered inline: the picture's Description carries the alt text "bg".
+        // When bg is properly implemented as a slide background, AddBackground uses Description=""
+        // rather than the alt-text keyword, so this assertion will fail at that point.
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var description = picture.NonVisualPictureProperties?.NonVisualDrawingProperties?.Description?.Value;
+        Assert.Equal("bg", description);
         AssertImageRenderedWithoutError(slidePart);
     }
 
@@ -5390,6 +5393,6 @@ public class PptxRendererTests
     private static void AssertImageRenderedWithoutError(DocumentFormat.OpenXml.Packaging.SlidePart slidePart, int expectedPictureCount = 1)
     {
         Assert.Equal(expectedPictureCount, slidePart.Slide!.Descendants<P.Picture>().Count());
-        Assert.DoesNotContain("Missing image", slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text));
+        Assert.DoesNotContain(slidePart.Slide!.Descendants<A.Text>(), t => t.Text.Contains("Missing image"));
     }
 }
