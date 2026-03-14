@@ -743,17 +743,46 @@ public sealed class OpenXmlPptxRenderer
                 bodyPlaceholder,
                 bodyParagraphs));
         }
+        else if (bodyPlaceholder is null && bodyTextElements.Count > 0)
+        {
+            // Layout has no body placeholder (e.g. Title Only): route body text into the
+            // standalone residual path so content is not silently dropped.
+            nonTextElements.InsertRange(0, bodyTextElements);
+        }
 
-        // Non-text elements: render as standalone shapes using the layout engine for
-        // positioning, just as the non-placeholder path does.
+        // Non-text elements (and any body text rerouted above when no body placeholder
+        // exists): render as standalone shapes using the layout engine for positioning.
+        //
+        // For Title Only layouts (title placeholder present, no body placeholder),
+        // constrain residual content to start below the effective title region so that
+        // body content cannot overlap the title area. GetTitlePlaceholderRect checks the
+        // layout first and falls back to the slide master when no explicit transform exists
+        // on the layout.
         if (nonTextElements.Count > 0)
         {
             var residualSlide = new MarpToPptx.Core.Models.Slide { Style = slideModel.Style };
             residualSlide.Elements.AddRange(nonTextElements);
+
+            LayoutOptions? titleOnlyOptions = null;
+            if (bodyRect is null && titleHeading is not null)
+            {
+                var titleRect = SlideTemplateSelector.GetTitlePlaceholderRect(slideLayoutPart);
+                if (titleRect is not null)
+                {
+                    const double titleBodySpacer = 20.0;
+                    titleOnlyOptions = LayoutOptions.Default with
+                    {
+                        ContentTopY = titleRect.Y + titleRect.Height + titleBodySpacer,
+                    };
+                }
+            }
+
             var residualTheme = bodyRect is null
                 ? effectiveTheme
                 : ScaleThemeForTemplateBody(effectiveTheme, residualSlide, bodyRect);
-            var layoutOptions = bodyRect is null ? null : CreateBodyRectLayoutOptions(residualTheme, bodyRect);
+            var layoutOptions = bodyRect is not null
+                ? CreateBodyRectLayoutOptions(residualTheme, bodyRect)
+                : titleOnlyOptions;
             var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
             var contentRect = GetContentRect(residualTheme, layoutOptions);
             var bodyStyle = residualTheme.Body;

@@ -12,7 +12,7 @@ public sealed class LayoutEngine
         var plan = new LayoutPlan(options.SlideWidth, options.SlideHeight);
         var contentX = theme.SlidePadding.Left;
         var contentWidth = options.SlideWidth - theme.SlidePadding.Left - theme.SlidePadding.Right;
-        var y = theme.SlidePadding.Top;
+        var y = options.ContentTopY ?? theme.SlidePadding.Top;
         var isTitleSlide = slide.Elements.Count > 0 && slide.Elements[0] is HeadingElement && slide.Elements.Count <= 2;
 
         foreach (var element in slide.Elements)
@@ -124,6 +124,13 @@ public sealed class LayoutEngine
 public sealed record LayoutOptions(double SlideWidth, double SlideHeight)
 {
     public static LayoutOptions Default => new(960, 540);
+
+    /// <summary>
+    /// When set, overrides the top-of-content Y coordinate used by the layout engine,
+    /// constraining content to start at or below this value (e.g. below a title region).
+    /// When <c>null</c>, the theme's top padding is used instead.
+    /// </summary>
+    public double? ContentTopY { get; init; }
 }
 
 public sealed record LayoutPlan(double SlideWidth, double SlideHeight)
