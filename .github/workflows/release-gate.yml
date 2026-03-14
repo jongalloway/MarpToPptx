@@ -74,6 +74,33 @@ jobs:
                     }
                   }
 
+            - name: Audit Generated PPTX Contrast
+              shell: pwsh
+              run: |
+                  $reportDirectory = Join-Path $PWD "artifacts/release-gate/contrast"
+                  New-Item -ItemType Directory -Path $reportDirectory -Force | Out-Null
+
+                  $includedFiles = @(
+                    "01-minimal.pptx",
+                    "04-content-coverage.pptx",
+                    "07-presenter-notes.pptx"
+                  )
+
+                  $pptxFiles = Get-ChildItem artifacts/release-gate/samples -Filter *.pptx | Sort-Object Name
+                  foreach ($pptxFile in $pptxFiles) {
+                    if ($pptxFile.Name -notin $includedFiles) {
+                      Write-Host "Skipping contrast audit for '$($pptxFile.Name)' because it is outside the current contrast-stable validation subset." -ForegroundColor Yellow
+                      continue
+                    }
+
+                    $reportPath = Join-Path $reportDirectory ("{0}.txt" -f $pptxFile.BaseName)
+                    Write-Host "Auditing contrast for '$($pptxFile.Name)'..." -ForegroundColor Cyan
+                    dotnet run --project src/MarpToPptx.ContrastAuditor -c ${{ inputs.configuration }} -- $pptxFile.FullName 2>&1 | Tee-Object -FilePath $reportPath
+                    if ($LASTEXITCODE -ne 0) {
+                      throw "Contrast audit failed for $($pptxFile.FullName)"
+                    }
+                  }
+
             - name: Convert PPTX To PDF With LibreOffice
               shell: pwsh
               run: |

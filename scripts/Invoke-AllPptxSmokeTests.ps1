@@ -9,7 +9,9 @@ param(
     [switch]$CiSafe,
     [switch]$SkipPowerPoint,
     [switch]$SkipRoundTripSave,
-    [switch]$ContinueOnError
+    [switch]$ContinueOnError,
+    [ValidateSet("Selected", "All", "None")]
+    [string]$ContrastAuditMode = "Selected"
 )
 
 Set-StrictMode -Version Latest
@@ -53,6 +55,30 @@ function Test-IsCompatibilityGapSample {
     )
 
     return $MarkdownFile.Name -eq "05-compatibility-gaps.md"
+}
+
+function Test-ShouldRunContrastAudit {
+    param(
+        [Parameter(Mandatory = $true)]
+        [System.IO.FileInfo]$MarkdownFile,
+
+        [Parameter(Mandatory = $true)]
+        [string]$Mode
+    )
+
+    switch ($Mode) {
+        "All" { return $true }
+        "None" { return $false }
+        default {
+            $includedSamples = @(
+                "01-minimal.md",
+                "04-content-coverage.md",
+                "07-presenter-notes.md"
+            )
+
+            return $MarkdownFile.Name -in $includedSamples
+        }
+    }
 }
 
 $repoRoot = Split-Path -Parent $PSScriptRoot
@@ -122,6 +148,10 @@ foreach ($sampleFile in $sampleFiles) {
 
     if ($SkipRoundTripSave) {
         $arguments.SkipRoundTripSave = $true
+    }
+
+    if (-not (Test-ShouldRunContrastAudit -MarkdownFile $sampleFile -Mode $ContrastAuditMode)) {
+        $arguments.SkipContrastAudit = $true
     }
 
     try {

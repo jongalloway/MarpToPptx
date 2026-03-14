@@ -13,10 +13,21 @@ Purpose:
 - run restore, build, tests, and packaging in the selected configuration
 - generate the full sample set, including the remote-assets sample and the opt-in theme fixtures under `samples/themes/`
 - validate every generated PPTX with the Open XML SDK helper
+- audit a curated set of generated PPTX files with the contrast auditor and upload per-deck reports
 - import every generated PPTX into LibreOffice Impress and export it to PDF
 - upload the generated PPTX, PDF, and package artifacts for manual inspection
 
 This gate is stronger than normal CI because it checks every sample deck and forces a second PPTX consumer to load the generated files.
+
+It also adds a cross-platform rendering-focused gate by failing when the contrast auditor detects text/background pairs that do not meet the repo's WCAG-based thresholds on the curated validation subset.
+
+The current contrast-stable subset is:
+
+- `01-minimal.pptx`
+- `04-content-coverage.pptx`
+- `07-presenter-notes.pptx`
+
+Other generated decks still ship as release artifacts for manual review, but they are not yet used as hard contrast gates because several of them intentionally exercise theme or directive combinations that are not contrast-stable enough for binary pass/fail enforcement.
 
 This gate is still not equivalent to PowerPoint Desktop compatibility.
 
@@ -43,6 +54,10 @@ If you want the standard Open XML validation at the same time for a specific dec
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Configuration Release
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/06-remote-assets.md -Configuration Release -AllowRemoteAssets
 ```
+
+The single-deck smoke helper runs the contrast auditor by default and writes a sibling `*-contrast-audit.txt` report next to the generated PPTX.
+
+The aggregate smoke suite uses `-ContrastAuditMode Selected` by default so CI gets actionable rendering coverage without failing on intentionally contrast-unstable repro decks.
 
 ### Review Checklist
 
