@@ -71,7 +71,7 @@ If two layouts under different masters share the exact same name (common:
 **first match in iteration order wins**. Rename one in PowerPoint if you
 need to target the other.
 
-### 2. Title and body placeholders must exist on targeted layouts
+### 2. Title, body, and picture placeholders on targeted layouts
 
 Placeholder-based rendering maps content as follows:
 
@@ -79,7 +79,8 @@ Placeholder-based rendering maps content as follows:
 |---|---|---|
 | First heading (any level `#`–`######`) | Title | `type="title"`, `type="ctrTitle"` |
 | Remaining headings, paragraphs, bullet / numbered lists | Body | `type="body"`, `type="subTitle"`, **or typeless with `idx`** (e.g. `<p:ph idx="1"/>`) |
-| Images, video, audio, code blocks, tables | *(none — standalone shapes)* | — |
+| First `ImageElement` when a picture placeholder exists | Picture | `type="pic"` |
+| Other images, video, audio, code blocks, tables (or images when no picture placeholder) | *(none — standalone shapes)* | — |
 
 The heading level does **not** affect placeholder selection — `## Topic`
 fills the same title slot as `# Topic`. Level only matters for indentation
@@ -187,8 +188,10 @@ Names vary per template; verify with the inspection snippet above. The
   existing artwork, picks the largest upper-half text box as the title box, and
   fills the remaining text boxes top-to-bottom. It is intended for title-slide-like
   cases, not arbitrary multi-slot slide templating.
-- Picture placeholders (`type="pic"`) are not yet targeted; images render
-  as standalone positioned shapes.
+- Picture placeholders (`type="pic"`) are supported: the first `ImageElement`
+  on a slide is routed into the layout's picture placeholder when one exists.
+  Only one picture placeholder is filled per slide; additional images fall back
+  to standalone positioned shapes.
 - Slide-number, date, and footer placeholders are inherited from the
   layout but not populated by the renderer; PowerPoint fills them when
   **Insert → Header & Footer** is enabled on the finished deck.

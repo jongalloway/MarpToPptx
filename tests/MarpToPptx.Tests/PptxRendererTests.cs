@@ -1287,6 +1287,156 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_RoutesImageIntoPicturePlaceholder_WhenLayoutExposesPicturePlaceholder()
+    {
+        // Arrange: template with title + picture placeholder layout.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithTitleAndPicturePlaceholder(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- _layout: Title Plus Picture -->
+            # Slide Title
+
+            ![Alt text](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Title placeholder shape emitted.
+        Assert.Contains(slidePart.Slide!.Descendants<P.Shape>(), s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Title);
+
+        // Image is embedded into a P.Picture with type="pic" placeholder reference (no explicit transform).
+        var picturePh = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var picPh = picturePh.NonVisualPictureProperties?.ApplicationNonVisualDrawingProperties?
+            .GetFirstChild<P.PlaceholderShape>();
+        Assert.NotNull(picPh);
+        Assert.Equal(P.PlaceholderValues.Picture, picPh!.Type?.Value);
+        Assert.Null(picturePh.ShapeProperties?.Transform2D);
+
+        // Alt text is preserved on the picture's non-visual drawing properties.
+        Assert.Equal("Alt text", picturePh.NonVisualPictureProperties?
+            .NonVisualDrawingProperties?.Description?.Value);
+
+        // No standalone picture shape without a placeholder reference.
+        Assert.DoesNotContain(slidePart.Slide!.Descendants<P.Picture>(), p =>
+            p.NonVisualPictureProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>() is null);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_RoutesImageIntoPicturePlaceholder_WhenLayoutHasPictureOnlyPlaceholder()
+    {
+        // Arrange: template with picture-only layout (no title placeholder).
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPictureOnlyLayout(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- _layout: Picture Only -->
+            ![Photo](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Image is embedded into a P.Picture with type="pic" placeholder reference.
+        var picturePh = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var picPh = picturePh.NonVisualPictureProperties?.ApplicationNonVisualDrawingProperties?
+            .GetFirstChild<P.PlaceholderShape>();
+        Assert.NotNull(picPh);
+        Assert.Equal(P.PlaceholderValues.Picture, picPh!.Type?.Value);
+        Assert.Null(picturePh.ShapeProperties?.Transform2D);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FallsBackToStandaloneImage_WhenLayoutLacksPicturePlaceholder()
+    {
+        // Arrange: template with title + body placeholders only (no picture placeholder).
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- _layout: Placeholder Content -->
+            # Heading
+
+            ![Photo](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Image is present as a standalone P.Picture (no placeholder reference).
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        Assert.Null(picture.NonVisualPictureProperties?.ApplicationNonVisualDrawingProperties?
+            .GetFirstChild<P.PlaceholderShape>());
+
+        // Explicit transform is set (standalone shape, not inherited from layout).
+        Assert.NotNull(picture.ShapeProperties?.Transform2D);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_ClonesTemplateSlideArtwork_WhenTemplateSlideIsRequested()
     {
         using var workspace = TestWorkspace.Create();
@@ -1797,6 +1947,212 @@ public class PptxRendererTests
         presentationPart.Presentation.Save();
 
         doc.Save();
+    }
+
+    /// <summary>
+    /// Creates a minimal template PPTX with a single layout named "Title Plus Picture"
+    /// that carries both a title placeholder and a picture placeholder.
+    /// </summary>
+    private static void CreateTemplateWithTitleAndPicturePlaceholder(string path)
+    {
+        using var doc = PresentationDocument.Create(path, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
+        var presentationPart = doc.AddPresentationPart();
+        var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
+
+        static P.Shape MakeTitlePh(uint id)
+            => new(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = "Title Placeholder" },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = P.PlaceholderValues.Title })),
+                new P.ShapeProperties(),
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+
+        static P.Shape MakePicturePh(uint id, uint idx)
+        {
+            var ph = new P.PlaceholderShape { Type = P.PlaceholderValues.Picture, Index = idx };
+            return new P.Shape(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = "Picture Placeholder" },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(ph)),
+                new P.ShapeProperties(
+                    new A.Transform2D(
+                        new A.Offset { X = 457200L, Y = 1143000L },
+                        new A.Extents { Cx = 8229600L, Cy = 4525963L }),
+                    new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }),
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+        }
+
+        var layoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        layoutPart.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                MakeTitlePh(2U),
+                MakePicturePh(3U, 1U))),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.PictureText,
+            MatchingName = "Title Plus Picture",
+        };
+        layoutPart.SlideLayout.CommonSlideData!.Name = "Title Plus Picture";
+        layoutPart.AddPart(slideMasterPart, "rId1");
+        layoutPart.SlideLayout.Save();
+
+        AddMinimalSlideMaster(presentationPart, slideMasterPart, layoutPart);
+        doc.Save();
+    }
+
+    /// <summary>
+    /// Creates a minimal template PPTX with a layout named "Picture Only" that carries
+    /// only a picture placeholder (no title or body placeholder).
+    /// </summary>
+    private static void CreateTemplateWithPictureOnlyLayout(string path)
+    {
+        using var doc = PresentationDocument.Create(path, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
+        var presentationPart = doc.AddPresentationPart();
+        var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
+
+        var ph = new P.PlaceholderShape { Type = P.PlaceholderValues.Picture, Index = 1U };
+        var picturePh = new P.Shape(
+            new P.NonVisualShapeProperties(
+                new P.NonVisualDrawingProperties { Id = 2U, Name = "Picture Placeholder" },
+                new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                new P.ApplicationNonVisualDrawingProperties(ph)),
+            new P.ShapeProperties(
+                new A.Transform2D(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 12192000L, Cy = 6858000L }),
+                new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }),
+            new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+
+        var layoutPart = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        layoutPart.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                picturePh)),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.Blank,
+            MatchingName = "Picture Only",
+        };
+        layoutPart.SlideLayout.CommonSlideData!.Name = "Picture Only";
+        layoutPart.AddPart(slideMasterPart, "rId1");
+        layoutPart.SlideLayout.Save();
+
+        AddMinimalSlideMaster(presentationPart, slideMasterPart, layoutPart);
+        doc.Save();
+    }
+
+    /// <summary>
+    /// Adds a minimal theme, slide master, and presentation to the given parts so
+    /// the document is a valid PPTX. Used by picture-placeholder template helpers.
+    /// </summary>
+    private static void AddMinimalSlideMaster(
+        PresentationPart presentationPart,
+        SlideMasterPart slideMasterPart,
+        SlideLayoutPart layoutPart)
+    {
+        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId2");
+        themePart.Theme = new A.Theme
+        {
+            Name = "Test",
+            ThemeElements = new A.ThemeElements(
+                new A.ColorScheme(
+                    new A.Dark1Color(new A.SystemColor { Val = A.SystemColorValues.WindowText, LastColor = "000000" }),
+                    new A.Light1Color(new A.SystemColor { Val = A.SystemColorValues.Window, LastColor = "FFFFFF" }),
+                    new A.Dark2Color(new A.RgbColorModelHex { Val = "1F2937" }),
+                    new A.Light2Color(new A.RgbColorModelHex { Val = "F8FAFC" }),
+                    new A.Accent1Color(new A.RgbColorModelHex { Val = "0F766E" }),
+                    new A.Accent2Color(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.Accent3Color(new A.RgbColorModelHex { Val = "F59E0B" }),
+                    new A.Accent4Color(new A.RgbColorModelHex { Val = "DC2626" }),
+                    new A.Accent5Color(new A.RgbColorModelHex { Val = "7C3AED" }),
+                    new A.Accent6Color(new A.RgbColorModelHex { Val = "0891B2" }),
+                    new A.Hyperlink(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.FollowedHyperlinkColor(new A.RgbColorModelHex { Val = "7C3AED" }))
+                { Name = "Test" },
+                new A.FontScheme(
+                    new A.MajorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }),
+                    new A.MinorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }))
+                { Name = "Test" },
+                new A.FormatScheme(
+                    new A.FillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })),
+                    new A.LineStyleList(
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 6350 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 12700 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 19050 }),
+                    new A.EffectStyleList(
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList())),
+                    new A.BackgroundFillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })))
+                { Name = "Test" }),
+            ObjectDefaults = new A.ObjectDefaults(),
+            ExtraColorSchemeList = new A.ExtraColorSchemeList(),
+        };
+        themePart.Theme.Save();
+
+        slideMasterPart.SlideMaster = new P.SlideMaster(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })))),
+            new P.ColorMap
+            {
+                Background1 = A.ColorSchemeIndexValues.Light1,
+                Text1 = A.ColorSchemeIndexValues.Dark1,
+                Background2 = A.ColorSchemeIndexValues.Light2,
+                Text2 = A.ColorSchemeIndexValues.Dark2,
+                Accent1 = A.ColorSchemeIndexValues.Accent1,
+                Accent2 = A.ColorSchemeIndexValues.Accent2,
+                Accent3 = A.ColorSchemeIndexValues.Accent3,
+                Accent4 = A.ColorSchemeIndexValues.Accent4,
+                Accent5 = A.ColorSchemeIndexValues.Accent5,
+                Accent6 = A.ColorSchemeIndexValues.Accent6,
+                Hyperlink = A.ColorSchemeIndexValues.Hyperlink,
+                FollowedHyperlink = A.ColorSchemeIndexValues.FollowedHyperlink,
+            },
+            new P.SlideLayoutIdList(
+                new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(layoutPart) }),
+            new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
+        slideMasterPart.SlideMaster.Save();
+
+        presentationPart.Presentation = new P.Presentation(
+            new P.SlideMasterIdList(new P.SlideMasterId { Id = 2147483648U, RelationshipId = presentationPart.GetIdOfPart(slideMasterPart) }),
+            new P.SlideIdList(),
+            new P.SlideSize { Cx = 12192000, Cy = 6858000, Type = P.SlideSizeValues.Screen16x9 },
+            new P.NotesSize { Cx = 6858000, Cy = 9144000 },
+            new P.DefaultTextStyle());
+        presentationPart.Presentation.Save();
     }
 
     private static void CreateTemplateWithDecoratedTemplateSlide(string path)
