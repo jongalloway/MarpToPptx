@@ -1,4 +1,5 @@
 ﻿using MarpToPptx.Core;
+using MarpToPptx.Pptx.Contrast;
 using MarpToPptx.Pptx.Rendering;
 
 return await ProgramEntry.RunAsync(args);
@@ -19,7 +20,9 @@ internal static class ProgramEntry
 			string? outputPath = null;
 			string? templatePath = null;
 			string? themeCssPath = null;
+			string? contrastReportPath = null;
 			var allowRemoteAssets = false;
+			var contrastWarningMode = ContrastWarningMode.Off;
 
 			for (var index = 0; index < args.Length; index++)
 			{
@@ -38,6 +41,15 @@ internal static class ProgramEntry
 						break;
 					case "--allow-remote-assets":
 						allowRemoteAssets = true;
+						break;
+					case "--contrast-warnings":
+						contrastWarningMode = ParseContrastWarningMode(RequireValue(args, ref index, arg));
+						break;
+					case "--warn-low-contrast":
+						contrastWarningMode = ContrastWarningMode.Detailed;
+						break;
+					case "--contrast-report":
+						contrastReportPath = RequireValue(args, ref index, arg);
 						break;
 					default:
 						{
@@ -70,6 +82,10 @@ internal static class ProgramEntry
 
 			outputPath ??= Path.ChangeExtension(inputPath, ".pptx");
 			outputPath = Path.GetFullPath(outputPath);
+			if (!string.IsNullOrWhiteSpace(contrastReportPath))
+			{
+				contrastReportPath = Path.GetFullPath(contrastReportPath);
+			}
 
 			var markdown = File.ReadAllText(inputPath);
 			var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
@@ -86,6 +102,12 @@ internal static class ProgramEntry
 			});
 
 			Console.WriteLine($"Generated '{outputPath}'.");
+
+			if (contrastWarningMode != ContrastWarningMode.Off || !string.IsNullOrWhiteSpace(contrastReportPath))
+			{
+				RunContrastAuditDiagnostics(outputPath, contrastWarningMode, contrastReportPath);
+			}
+
 			return Task.FromResult(0);
 		}
 		catch (CliArgumentException ex)
@@ -139,12 +161,134 @@ internal static class ProgramEntry
 
 	private static void PrintUsage()
 	{
-		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets]");
+		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
 		Console.WriteLine();
 		Console.WriteLine("Options:");
 		Console.WriteLine("  -o, --output      Output .pptx path. Defaults to the input file name with a .pptx extension.");
 		Console.WriteLine("  --template        Existing .pptx template to copy masters/themes from before rendering slides.");
 		Console.WriteLine("  --theme-css       CSS file to parse for Marp-style theme values.");
 		Console.WriteLine("  --allow-remote-assets  Enable HTTP/HTTPS image downloads during rendering.");
+		Console.WriteLine("  --contrast-warnings  Contrast warning mode: off, summary, or detailed.");
+		Console.WriteLine("  --warn-low-contrast  Backward-compatible alias for '--contrast-warnings detailed'.");
+		Console.WriteLine("  --contrast-report    Write a detailed contrast audit report to a text file. Implies a contrast audit run.");
+	}
+
+	private static ContrastWarningMode ParseContrastWarningMode(string value)
+	{
+		return value.ToLowerInvariant() switch
+		{
+			"off" => ContrastWarningMode.Off,
+			"summary" => ContrastWarningMode.Summary,
+			"detailed" => ContrastWarningMode.Detailed,
+			_ => throw new CliArgumentException("Option '--contrast-warnings' requires one of: off, summary, detailed.")
+		};
+	}
+
+	private static void RunContrastAuditDiagnostics(string outputPath, ContrastWarningMode contrastWarningMode, string? contrastReportPath)
+	{
+		try
+		{
+			var auditor = new ContrastAuditor();
+			var results = auditor.Audit(outputPath);
+			var failures = results.Where(result => result.IsFailing)
+				.OrderBy(result => result.SlideNumber)
+				.ThenBy(result => result.ShapeContext, StringComparer.Ordinal)
+				.ToArray();
+
+			var reportLines = BuildDetailedContrastAuditReport(outputPath, results.Count, failures);
+			if (!string.IsNullOrWhiteSpace(contrastReportPath))
+			{
+				var reportDirectory = Path.GetDirectoryName(contrastReportPath);
+				if (!string.IsNullOrWhiteSpace(reportDirectory))
+				{
+					Directory.CreateDirectory(reportDirectory);
+				}
+
+				File.WriteAllLines(contrastReportPath, reportLines);
+				Console.WriteLine($"Contrast audit report written to '{contrastReportPath}'.");
+			}
+
+			var consoleLines = BuildConsoleContrastAuditReport(outputPath, results.Count, failures, contrastWarningMode);
+			foreach (var line in consoleLines)
+			{
+				if (failures.Length > 0)
+				{
+					Console.Error.WriteLine(line);
+				}
+				else
+				{
+					Console.WriteLine(line);
+				}
+			}
+		}
+		catch (Exception ex)
+		{
+			Console.Error.WriteLine($"Warning: Contrast audit could not be completed for '{outputPath}': {ex.Message}");
+		}
+	}
+
+	private static string[] BuildConsoleContrastAuditReport(string outputPath, int resultCount, IReadOnlyList<ContrastAuditResult> failures, ContrastWarningMode contrastWarningMode)
+	{
+		if (contrastWarningMode == ContrastWarningMode.Off)
+		{
+			return [];
+		}
+
+		if (contrastWarningMode == ContrastWarningMode.Summary)
+		{
+			if (failures.Count == 0)
+			{
+				return resultCount == 0
+					? [$"Contrast audit found no auditable color pairs in '{outputPath}'."]
+					: [$"Contrast audit passed for '{outputPath}'. {resultCount} color pair(s) checked."];
+			}
+
+			var slideList = string.Join(", ", failures.Select(failure => failure.SlideNumber).Distinct().OrderBy(slideNumber => slideNumber));
+			return [$"Warning: Slides {slideList} may have low-contrast accessibility issues."];
+		}
+
+		return BuildDetailedContrastAuditReport(outputPath, resultCount, failures);
+	}
+
+	private static string[] BuildDetailedContrastAuditReport(string outputPath, int resultCount, IReadOnlyList<ContrastAuditResult> failures)
+	{
+		if (failures.Count == 0)
+		{
+			if (resultCount == 0)
+			{
+				return
+				[
+					$"Contrast audit found no auditable color pairs in '{outputPath}'. Theme or inherited colors may not be resolvable from solid fills alone."
+				];
+			}
+
+			return
+			[
+				$"Contrast audit passed for '{outputPath}'. {resultCount} color pair(s) checked."
+			];
+		}
+
+		var lines = new List<string>
+		{
+			$"Warning: Contrast audit found {failures.Count} low-contrast text/background pair(s) in '{outputPath}'."
+		};
+
+		foreach (var failure in failures)
+		{
+			var textLabel = failure.IsLargeText ? "large text" : "normal text";
+			lines.Add(
+				$"  Slide {failure.SlideNumber} - {failure.ShapeContext}: " +
+				$"#{failure.ForegroundColor} on #{failure.BackgroundColor} = {failure.ContrastRatio:F2}:1 " +
+				$"(requires {failure.MinimumRequiredRatio:F1}:1 for {textLabel})");
+		}
+
+		return lines.ToArray();
+	}
+
+	private enum ContrastWarningMode
+	{
+		Off,
+		Summary,
+		Detailed,
 	}
 }

@@ -62,6 +62,19 @@ Or reuse an existing PowerPoint template to inherit your organization's masters 
 marp2pptx slides.md --template corporate.pptx -o slides.pptx
 ```
 
+To audit low-contrast slide text after generation, choose the warning level you want:
+
+```bash
+marp2pptx slides.md --template conference-template.pptx -o slides.pptx --contrast-warnings summary
+marp2pptx slides.md --template conference-template.pptx -o slides.pptx --contrast-warnings detailed
+```
+
+If you want a saved text report as well:
+
+```bash
+marp2pptx slides.md -o slides.pptx --contrast-report slides-contrast.txt
+```
+
 To target a specific template layout from markdown, use `layout` in front matter for the default content layout, or `layout` / `_layout` HTML-comment directives for sticky or single-slide overrides:
 
 ```md
@@ -84,7 +97,7 @@ See [doc/using-templates.md](doc/using-templates.md) for the quickstart and [doc
 ## 📋 Features
 
 | Category | What's supported |
-|---|---|
+| --- | --- |
 | **Slide structure** | Front matter directives, `---` slide splitting, presenter notes |
 | **Text content** | Headings, paragraphs, ordered and unordered lists, bold/italic/code spans |
 | **Rich content** | Local images, syntax-highlighted code blocks, native tables, Mermaid and DiagramForge diagram fences |

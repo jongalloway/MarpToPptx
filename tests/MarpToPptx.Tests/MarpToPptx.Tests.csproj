@@ -18,6 +18,7 @@
   </ItemGroup>
 
   <ItemGroup>
+    <ProjectReference Include="..\..\src\MarpToPptx.Cli\MarpToPptx.Cli.csproj" />
     <ProjectReference Include="..\..\src\MarpToPptx.Core\MarpToPptx.Core.csproj" />
     <ProjectReference Include="..\..\src\MarpToPptx.Pptx\MarpToPptx.Pptx.csproj" />
   </ItemGroup>

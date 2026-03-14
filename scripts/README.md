@@ -79,11 +79,12 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/04-content-covera
 
 ### `Invoke-PptxSmokeTest.ps1`
 
-Run the main local PPTX smoke-test flow in one command: generate with the local CLI project, validate with the .NET Open XML helper, and then open the result in PowerPoint.
+Run the main local PPTX smoke-test flow in one command: generate with the local CLI project, validate with the .NET Open XML helper, audit rendered text contrast, and then open the result in PowerPoint.
 
 When you do not provide `-OutputPath`, the script now writes default files using explicit names:
 
 - generated output: `artifacts/smoke-tests/<sample>-generated-<configuration>.pptx`
+- contrast audit report: `artifacts/smoke-tests/<sample>-generated-<configuration>-contrast-audit.txt`
 - PowerPoint-resaved copy: `artifacts/smoke-tests/<sample>-powerpoint-resaved-<configuration>.pptx`
 
 Add `-ExportSlides` to automatically export slide images after the smoke test completes. Use `-SlideExportFormat` to choose `jpg` or `png` (default `png`), and `-SlideExportDirectory` to override the output location.
@@ -101,6 +102,8 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/04-content-covera
 
 Run the smoke-test flow for each sample deck in `samples/`. By default, the script skips `samples/README.md`, the compatibility-gap repro sample, and remote-asset samples unless they are explicitly enabled.
 
+The aggregate smoke suite uses contrast auditing in `Selected` mode by default. That currently audits `01-minimal.md`, `04-content-coverage.md`, and `07-presenter-notes.md`, which gives CI a stable rendering-focused subset without failing on decks that intentionally exercise contrast-unstable theme or directive combinations. Use `-ContrastAuditMode All` to audit every selected sample or `-ContrastAuditMode None` to disable contrast checks for the batch run.
+
 ```powershell
 pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe
 pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -IncludeRemoteSamples
@@ -117,6 +120,7 @@ pwsh ./scripts/Invoke-AllPptxSmokeTests.ps1 -Configuration Release -CiSafe -Incl
 - `Invoke-TestConcierge.ps1` is the easiest way to discover the local test and export flows without remembering script parameters.
 - `Invoke-PptxSmokeTest.ps1` is the quickest end-to-end check before or after renderer/package changes.
 - `Invoke-AllPptxSmokeTests.ps1` is the quickest way to run the full local smoke suite across the sample directory.
+- `Invoke-PptxSmokeTest.ps1` runs a contrast audit by default and fails the smoke test when rendered text does not meet the auditor's thresholds. Use `-SkipContrastAudit` only when contrast is not the behavior under investigation.
 - `Invoke-PptxSmokeTest.ps1 -CiSafe` keeps the PowerPoint step when COM automation is available, but automatically falls back to generation plus .NET-hosted Open XML validation on CI agents or other environments without PowerPoint.
 - `Export-PptxSlides.ps1 -CiSafe` and `Invoke-PptxSmokeTest.ps1 -ExportSlides -CiSafe` skip the slide export step gracefully when PowerPoint is unavailable.
 - Remote asset smoke coverage is opt-in in the sample-generation helpers so the default local flow stays deterministic when working offline.
