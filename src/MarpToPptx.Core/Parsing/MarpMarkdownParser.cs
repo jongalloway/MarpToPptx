@@ -73,6 +73,16 @@ public sealed class MarpMarkdownParser
             }
         }
 
+        // diagram-theme: set deck-level preferred DiagramForge theme from front-matter.
+        if (frontMatter.TryGetValue("diagram-theme", out var diagramTheme))
+        {
+            diagramTheme = diagramTheme?.Trim();
+            if (!string.IsNullOrWhiteSpace(diagramTheme))
+            {
+                deck.DiagramTheme = diagramTheme;
+            }
+        }
+
         // style: merge inline CSS from front-matter with the external theme CSS.
         string? mergedCss = themeCss;
         if (frontMatter.TryGetValue("style", out var inlineStyle) && !string.IsNullOrWhiteSpace(inlineStyle))
