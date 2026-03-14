@@ -656,8 +656,9 @@ public sealed class OpenXmlPptxRenderer
     {
         var titlePlaceholder = SlideTemplateSelector.GetTitlePlaceholder(slideLayoutPart);
         var bodyPlaceholder = SlideTemplateSelector.GetBodyPlaceholder(slideLayoutPart);
+        var picturePlaceholder = SlideTemplateSelector.GetPicturePlaceholder(slideLayoutPart);
         var bodyRect = SlideTemplateSelector.GetBodyPlaceholderRect(slideLayoutPart, bodyPlaceholder);
-        if (titlePlaceholder is null && bodyPlaceholder is null)
+        if (titlePlaceholder is null && bodyPlaceholder is null && picturePlaceholder is null)
         {
             return false;
         }
@@ -748,6 +749,25 @@ public sealed class OpenXmlPptxRenderer
             // Layout has no body placeholder (e.g. Title Only): route body text into the
             // standalone residual path so content is not silently dropped.
             nonTextElements.InsertRange(0, bodyTextElements);
+        }
+
+        // Picture placeholder: route the first ImageElement into the layout-defined picture
+        // slot so the image inherits the placeholder's geometry and cropping behavior.
+        // Remaining non-text elements fall through to the standalone residual path below.
+        ImageElement? picturePlaceholderImage = null;
+        if (picturePlaceholder is not null)
+        {
+            var firstImageIndex = nonTextElements.FindIndex(e => e is ImageElement);
+            if (firstImageIndex >= 0)
+            {
+                picturePlaceholderImage = (ImageElement)nonTextElements[firstImageIndex];
+                nonTextElements.RemoveAt(firstImageIndex);
+            }
+        }
+
+        if (picturePlaceholderImage is not null)
+        {
+            AddImageIntoPicturePlaceholder(context, picturePlaceholderImage, picturePlaceholder!);
         }
 
         // Non-text elements (and any body text rerouted above when no body placeholder
@@ -2100,6 +2120,52 @@ public sealed class OpenXmlPptxRenderer
                     new A.Offset { X = ToEmu(x), Y = ToEmu(y) },
                     new A.Extents { Cx = ToEmu(width), Cy = ToEmu(height) }),
                 new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }));
+
+        context.ShapeTree.Append(picture);
+    }
+
+    /// <summary>
+    /// Embeds an image into a picture placeholder shape (<c>&lt;p:ph type="pic"/&gt;</c>),
+    /// inheriting the placeholder's geometry and cropping behavior from the layout.
+    /// </summary>
+    private static void AddImageIntoPicturePlaceholder(SlideRenderContext context, ImageElement image, TemplatePlaceholder picturePlaceholder)
+    {
+        // Use a zero rect for error-text fallback; the placeholder provides real geometry.
+        if (!TryResolveMediaSource(context, new Rect(0, 0, 0, 0), image.Source, "image", out var resolved))
+        {
+            return;
+        }
+
+        var contentType = GetImageContentType(resolved);
+        if (contentType is null)
+        {
+            return;
+        }
+
+        var imagePart = context.SlidePart.AddImagePart(contentType);
+        using (var imageStream = File.OpenRead(resolved))
+        {
+            imagePart.FeedData(imageStream);
+        }
+
+        var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
+        var blip = CreateImageBlip(contentType, relationshipId);
+
+        var ph = new P.PlaceholderShape { Type = P.PlaceholderValues.Picture };
+        if (picturePlaceholder.Index is { } idx)
+        {
+            ph.Index = idx;
+        }
+
+        var picture = new P.Picture(
+            new P.NonVisualPictureProperties(
+                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = IOPath.GetFileName(resolved), Description = image.AltText },
+                new P.NonVisualPictureDrawingProperties(new A.PictureLocks { NoChangeAspect = true }),
+                new P.ApplicationNonVisualDrawingProperties(ph)),
+            new P.BlipFill(
+                blip,
+                new A.Stretch(new A.FillRectangle())),
+            new P.ShapeProperties());   // Empty: inherits geometry from the layout placeholder.
 
         context.ShapeTree.Append(picture);
     }

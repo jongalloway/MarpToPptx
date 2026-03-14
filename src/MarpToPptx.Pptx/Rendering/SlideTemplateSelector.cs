@@ -197,6 +197,24 @@ internal sealed class SlideTemplateSelector
         => FindPlaceholder(layoutPart, P.PlaceholderValues.Body, P.PlaceholderValues.SubTitle)
             ?? FindTypelessIndexedPlaceholder(layoutPart);
 
+    /// <summary>
+    /// Returns the picture placeholder identity (<c>type</c>+<c>idx</c>) declared on the
+    /// given layout, or <c>null</c> if no picture placeholder exists.
+    /// </summary>
+    public static TemplatePlaceholder? GetPicturePlaceholder(SlideLayoutPart layoutPart)
+        => FindPlaceholder(layoutPart, P.PlaceholderValues.Picture);
+
+    /// <summary>
+    /// Returns the bounding rectangle (in layout units) of the picture placeholder in the
+    /// given layout, or <c>null</c> if neither the layout nor its slide master exposes
+    /// a usable transform for the inherited placeholder.
+    /// </summary>
+    public static Rect? GetPicturePlaceholderRect(SlideLayoutPart layoutPart)
+        => GetPlaceholderRect(
+            layoutPart,
+            GetPicturePlaceholder(layoutPart),
+            P.PlaceholderValues.Picture);
+
     private static TemplatePlaceholder? FindPlaceholder(SlideLayoutPart layoutPart, params P.PlaceholderValues[] types)
     {
         var shapeTree = layoutPart.SlideLayout?.CommonSlideData?.ShapeTree;
