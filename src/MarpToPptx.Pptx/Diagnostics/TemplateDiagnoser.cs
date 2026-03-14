@@ -192,10 +192,10 @@ public sealed class TemplateDiagnoser
     private static string? PickPictureCaptionLayout(IReadOnlyList<LayoutDiagnostic> layouts)
     {
         // Prefer a layout explicitly typed as PictureCaption.
-        var explicit_ = layouts.FirstOrDefault(l => l.SemanticRole == LayoutSemanticRole.PictureCaption);
-        if (explicit_ is not null)
+        var pictureCaptionLayout = layouts.FirstOrDefault(l => l.SemanticRole == LayoutSemanticRole.PictureCaption);
+        if (pictureCaptionLayout is not null)
         {
-            return explicit_.Name;
+            return pictureCaptionLayout.Name;
         }
 
         // Fall back to any layout that declares a picture placeholder.

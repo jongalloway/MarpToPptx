@@ -124,21 +124,6 @@ public class TemplateDiagnoserTests
         Assert.True(contentLayout.HasBodyPlaceholder, "Content layout should have a body placeholder.");
     }
 
-    [Fact]
-    public void TemplateDiagnoser_BuiltInContentLayout_HasBodyPlaceholder()
-    {
-        using var workspace = TestWorkspace.Create();
-        var pptxPath = RenderMinimalDeck(workspace);
-
-        using var document = PresentationDocument.Open(pptxPath, false);
-        var diagnoser = new TemplateDiagnoser();
-        var report = diagnoser.Diagnose(document, pptxPath);
-
-        var contentLayout = report.Layouts.FirstOrDefault(l => l.SemanticRole == LayoutSemanticRole.Content);
-        Assert.NotNull(contentLayout);
-        Assert.True(contentLayout.HasBodyPlaceholder, "Content layout should have a body placeholder.");
-    }
-
     // ─────────────────────────────────────────────────────────────
     // Recommendations
     // ─────────────────────────────────────────────────────────────
