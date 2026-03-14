@@ -1890,28 +1890,7 @@ public sealed class OpenXmlPptxRenderer
     }
 
     private static Theme CreateDiagramTheme(ThemeDefinition effectiveTheme)
-    {
-        var hasCodeBackground = !string.IsNullOrWhiteSpace(effectiveTheme.Code.BackgroundColor);
-
-        var nodeFillColor = hasCodeBackground
-            ? effectiveTheme.Code.BackgroundColor!
-            : effectiveTheme.BackgroundColor;
-
-        var nodeStrokeColor = effectiveTheme.GetHeadingStyle(2).Color;
-
-        var textColor = hasCodeBackground
-            ? effectiveTheme.Code.Color
-            : effectiveTheme.Body.Color;
-
-        return new Theme
-        {
-            NodeFillColor = nodeFillColor,
-            NodeStrokeColor = nodeStrokeColor,
-            TextColor = textColor,
-            FontFamily = effectiveTheme.FontFamily,
-            BorderRadius = 12,
-        };
-    }
+        => DiagramThemeFactory.Create(effectiveTheme);
 
     /// <summary>
     /// Injects a <c>theme:</c> key into the diagram source's YAML front matter when neither
