@@ -34,7 +34,8 @@ public sealed partial class PptxMarkdownExporter
         using var document = PresentationDocument.Open(pptxPath, false);
         var presentationPart = document.PresentationPart ?? throw new InvalidOperationException("The presentation is missing a presentation part.");
         var slides = GetSlidesInPresentationOrder(presentationPart);
-        var imageUseCounts = options.FilterNoise ? CountImageUses(slides) : new Dictionary<string, int>(StringComparer.Ordinal);
+        var signatureCache = new Dictionary<string, string?>(StringComparer.Ordinal);
+        var imageUseCounts = options.FilterNoise ? CountImageUses(slides, signatureCache) : new Dictionary<string, int>(StringComparer.Ordinal);
         var markdown = new List<string>();
         var usedAssetNames = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
 
@@ -47,19 +48,14 @@ public sealed partial class PptxMarkdownExporter
                 markdown.Add(string.Empty);
             }
 
-            var slideLines = ExtractSlide(slides[index], index + 1, options, usedAssetNames, imageUseCounts);
-            if (slideLines.Count == 0)
-            {
-                slideLines.Add($"<!-- Slide {index + 1} had no recoverable content -->");
-            }
-
+            var slideLines = ExtractSlide(slides[index], index + 1, options, usedAssetNames, imageUseCounts, signatureCache);
             markdown.AddRange(slideLines);
         }
 
         return string.Join(Environment.NewLine, markdown).TrimEnd() + Environment.NewLine;
     }
 
-    private static List<string> ExtractSlide(SlidePart slidePart, int slideNumber, PptxMarkdownExportOptions options, HashSet<string> usedAssetNames, IReadOnlyDictionary<string, int> imageUseCounts)
+    private static List<string> ExtractSlide(SlidePart slidePart, int slideNumber, PptxMarkdownExportOptions options, HashSet<string> usedAssetNames, IReadOnlyDictionary<string, int> imageUseCounts, Dictionary<string, string?> signatureCache)
     {
         var blocks = new List<MarkdownBlock>();
         var textShapes = GetTextShapes(slidePart);
@@ -67,7 +63,7 @@ public sealed partial class PptxMarkdownExporter
 
         blocks.AddRange(GetTextBlocks(textShapes, titleShape));
 
-        blocks.AddRange(GetImageBlocks(slidePart, options, usedAssetNames, imageUseCounts));
+        blocks.AddRange(GetImageBlocks(slidePart, options, usedAssetNames, imageUseCounts, signatureCache));
         blocks.AddRange(GetTableBlocks(slidePart));
 
         var markdown = new List<string>();

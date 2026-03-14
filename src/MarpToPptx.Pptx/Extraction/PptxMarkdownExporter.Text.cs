@@ -488,7 +488,9 @@ public sealed partial class PptxMarkdownExporter
             text.Contains("new ", StringComparison.Ordinal) ||
             text.Contains("await ", StringComparison.Ordinal) ||
             text.Contains("Console.", StringComparison.Ordinal) ||
-            text.Contains("AIAgent", StringComparison.Ordinal) ||
-            text.Contains("Workflow", StringComparison.Ordinal);
+            text.Contains("namespace ", StringComparison.Ordinal) ||
+            text.Contains("class {", StringComparison.Ordinal) ||
+            text.Contains("void ", StringComparison.Ordinal) ||
+            text.Contains("=>", StringComparison.Ordinal);
     }
 }
