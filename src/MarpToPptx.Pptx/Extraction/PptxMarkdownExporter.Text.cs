@@ -293,9 +293,34 @@ public sealed partial class PptxMarkdownExporter
         }
 
         var text = string.Join("\n", paragraphs.Select(paragraph => paragraph.Text));
+        return DetectFallbackCodeLanguage(text);
+    }
+
+    private static string DetectFallbackCodeLanguage(string text)
+    {
         if (LooksLikeCSharp(text))
         {
             return "csharp";
+        }
+
+        if (LooksLikeTypeScript(text))
+        {
+            return "typescript";
+        }
+
+        if (LooksLikeJavaScript(text))
+        {
+            return "javascript";
+        }
+
+        if (LooksLikePython(text))
+        {
+            return "python";
+        }
+
+        if (LooksLikeJava(text))
+        {
+            return "java";
         }
 
         return string.Empty;
@@ -459,22 +484,22 @@ public sealed partial class PptxMarkdownExporter
             return false;
         }
 
-        if (normalized.StartsWith("//", StringComparison.Ordinal) ||
-            normalized.StartsWith("using ", StringComparison.Ordinal) ||
-            normalized.StartsWith("var ", StringComparison.Ordinal) ||
-            normalized.StartsWith("new ", StringComparison.Ordinal) ||
-            normalized.StartsWith("await ", StringComparison.Ordinal) ||
-            normalized.StartsWith("return ", StringComparison.Ordinal))
+        if (StartsWithOrdinal(normalized, "//") ||
+            StartsWithOrdinal(normalized, "using ") ||
+            StartsWithOrdinal(normalized, "var ") ||
+            StartsWithOrdinal(normalized, "new ") ||
+            StartsWithOrdinal(normalized, "await ") ||
+            StartsWithOrdinal(normalized, "return "))
         {
             return true;
         }
 
-        if (normalized.Contains("=>", StringComparison.Ordinal) ||
-            normalized.Contains("();", StringComparison.Ordinal) ||
-            normalized.Contains(" = ", StringComparison.Ordinal) ||
-            normalized.Contains("{", StringComparison.Ordinal) ||
-            normalized.Contains("}", StringComparison.Ordinal) ||
-            normalized.EndsWith(";", StringComparison.Ordinal))
+        if (ContainsOrdinal(normalized, "=>") ||
+            ContainsOrdinal(normalized, "();") ||
+            ContainsOrdinal(normalized, " = ") ||
+            ContainsOrdinal(normalized, "{") ||
+            ContainsOrdinal(normalized, "}") ||
+            EndsWithOrdinal(normalized, ";"))
         {
             return true;
         }
@@ -484,13 +509,66 @@ public sealed partial class PptxMarkdownExporter
 
     private static bool LooksLikeCSharp(string text)
     {
-        return text.Contains("using ", StringComparison.Ordinal) ||
-            text.Contains("new ", StringComparison.Ordinal) ||
-            text.Contains("await ", StringComparison.Ordinal) ||
-            text.Contains("Console.", StringComparison.Ordinal) ||
-            text.Contains("namespace ", StringComparison.Ordinal) ||
-            text.Contains("class {", StringComparison.Ordinal) ||
-            text.Contains("void ", StringComparison.Ordinal) ||
-            text.Contains("=>", StringComparison.Ordinal);
+        return ContainsOrdinal(text, "using System") ||
+            ContainsOrdinal(text, "Console.") ||
+            ContainsOrdinal(text, "namespace ") ||
+            ContainsOrdinal(text, "async Task") ||
+            ContainsOrdinal(text, "public record ") ||
+            ContainsOrdinal(text, "public sealed class ") ||
+            ContainsOrdinal(text, "get; set;") ||
+            ContainsOrdinal(text, "using var ") ||
+            ContainsOrdinal(text, "nameof(") ||
+            ContainsOrdinal(text, "IEnumerable<");
     }
+
+    private static bool LooksLikeTypeScript(string text)
+    {
+        return ContainsOrdinal(text, "interface ") ||
+            ContainsOrdinal(text, "type ") ||
+            ContainsOrdinal(text, "implements ") ||
+            ContainsOrdinal(text, "readonly ") ||
+            ContainsOrdinal(text, ": string") ||
+            ContainsOrdinal(text, ": number") ||
+            ContainsOrdinal(text, ": boolean") ||
+            ContainsOrdinal(text, " as const");
+    }
+
+    private static bool LooksLikeJavaScript(string text)
+    {
+        return ContainsOrdinal(text, "console.log") ||
+            ContainsOrdinal(text, "function ") ||
+            ContainsOrdinal(text, "const ") ||
+            ContainsOrdinal(text, "let ") ||
+            ContainsOrdinal(text, "export default") ||
+            ContainsOrdinal(text, "module.exports") ||
+            ContainsOrdinal(text, "require(");
+    }
+
+    private static bool LooksLikePython(string text)
+    {
+        return ContainsOrdinal(text, "def ") ||
+            ContainsOrdinal(text, "print(") ||
+            ContainsOrdinal(text, "if __name__ == \"__main__\":") ||
+            ContainsOrdinal(text, "if __name__ == '__main__':") ||
+            ContainsOrdinal(text, "from ") && ContainsOrdinal(text, " import ");
+    }
+
+    private static bool LooksLikeJava(string text)
+    {
+        return ContainsOrdinal(text, "public class ") ||
+            ContainsOrdinal(text, "public static void main") ||
+            ContainsOrdinal(text, "System.out.") ||
+            ContainsOrdinal(text, "import java.") ||
+            ContainsOrdinal(text, "package ") ||
+            ContainsOrdinal(text, "private static final");
+    }
+
+    private static bool ContainsOrdinal(string text, string value)
+        => text.Contains(value, StringComparison.Ordinal);
+
+    private static bool StartsWithOrdinal(string text, string value)
+        => text.StartsWith(value, StringComparison.Ordinal);
+
+    private static bool EndsWithOrdinal(string text, string value)
+        => text.EndsWith(value, StringComparison.Ordinal);
 }

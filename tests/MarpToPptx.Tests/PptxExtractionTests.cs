@@ -386,13 +386,12 @@ public class PptxExtractionTests
             # Creating an Agent
 
             ```csharp
-            AIAgent writer = new ChatClientAgent(
-            chatClient,
-            new ChatClientAgentOptions
+            using System;
+
+            public sealed class Writer
             {
-            Name = "Writer",
-            Instructions = "Write stories that are engaging and creative."
-            });
+            public string Name { get; set; } = "Writer";
+            }
             ```
             """);
 
@@ -404,8 +403,8 @@ public class PptxExtractionTests
         var extracted = exporter.ExportToMarkdown(outputPath);
 
         Assert.Contains("```csharp", extracted);
-        Assert.Contains("AIAgent writer = new ChatClientAgent(", extracted);
-        Assert.Contains("Instructions = \"Write stories that are engaging and creative.\"", extracted);
+        Assert.Contains("using System;", extracted);
+        Assert.Contains("public string Name { get; set; } = \"Writer\";", extracted);
         Assert.Contains("```", extracted);
     }
 
@@ -420,13 +419,12 @@ public class PptxExtractionTests
             # Creating an Agent
 
             ```text
-            AIAgent writer = new ChatClientAgent(
-            chatClient,
-            new ChatClientAgentOptions
+            using System;
+
+            public sealed class Writer
             {
-            Name = "Writer",
-            Instructions = "Write stories that are engaging and creative."
-            });
+            public string Name { get; set; } = "Writer";
+            }
             ```
             """);
 
@@ -439,8 +437,67 @@ public class PptxExtractionTests
         var extracted = exporter.ExportToMarkdown(outputPath);
 
         Assert.Contains("```csharp", extracted);
-        Assert.Contains("AIAgent writer = new ChatClientAgent(", extracted);
-        Assert.Contains("Instructions = \"Write stories that are engaging and creative.\"", extracted);
+        Assert.Contains("using System;", extracted);
+        Assert.Contains("public string Name { get; set; } = \"Writer\";", extracted);
+    }
+
+    [Fact]
+    public void Extractor_InfersJavaScriptCodeBlock_WhenShapeNameIsGeneric()
+    {
+        var extracted = ExtractGenericCodeBlock(
+            """
+            const agent = createAgent();
+            console.log(agent);
+            export default agent;
+            """);
+
+        Assert.Contains("```javascript", extracted);
+        Assert.Contains("console.log(agent);", extracted);
+    }
+
+    [Fact]
+    public void Extractor_InfersTypeScriptCodeBlock_WhenShapeNameIsGeneric()
+    {
+        var extracted = ExtractGenericCodeBlock(
+            """
+            interface AgentConfig {
+                name: string;
+            }
+            const config: AgentConfig = { name: "Writer" };
+            """);
+
+        Assert.Contains("```typescript", extracted);
+        Assert.Contains("interface AgentConfig", extracted);
+    }
+
+    [Fact]
+    public void Extractor_InfersPythonCodeBlock_WhenShapeNameIsGeneric()
+    {
+        var extracted = ExtractGenericCodeBlock(
+            """
+            def greet(name):
+                print(name)
+            greet("agent")
+            """);
+
+        Assert.Contains("```python", extracted);
+        Assert.Contains("def greet(name):", extracted);
+    }
+
+    [Fact]
+    public void Extractor_InfersJavaCodeBlock_WhenShapeNameIsGeneric()
+    {
+        var extracted = ExtractGenericCodeBlock(
+            """
+            public class Demo {
+                public static void main(String[] args) {
+                    System.out.println("agent");
+                }
+            }
+            """);
+
+        Assert.Contains("```java", extracted);
+        Assert.Contains("System.out.println", extracted);
     }
 
     private static void RenderDeck(string markdownPath, string outputPath, string sourceDirectory)
@@ -452,6 +509,29 @@ public class PptxExtractionTests
         {
             SourceDirectory = sourceDirectory,
         });
+    }
+
+    private static string ExtractGenericCodeBlock(string code)
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            $$"""
+            # Creating an Agent
+
+            ```text
+            {{code}}
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+        RenameCodeShapesToText(outputPath);
+        ChangeTextFontsToConsolas(outputPath);
+
+        var exporter = new PptxMarkdownExporter();
+        return exporter.ExportToMarkdown(outputPath);
     }
 
     private static void ShrinkPicturesToDecorativeBadges(string outputPath)
