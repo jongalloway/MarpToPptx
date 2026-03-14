@@ -336,6 +336,38 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_BgImageSyntax_DirectiveTakesPrecedenceOverBgAltText()
+    {
+        // When both a backgroundImage directive and ![bg](...) are present, the directive wins.
+        // Neither image should appear as an inline picture shape; only the directive background renders.
+        using var workspace = TestWorkspace.Create();
+
+        var pngBytes = Convert.FromBase64String(OnePxPngBase64);
+        workspace.WriteFile("directive.png", pngBytes);
+        workspace.WriteFile("syntax.png", pngBytes);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- backgroundImage: directive.png -->
+            # Slide
+
+            ![bg](syntax.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        // Exactly one background picture (from the directive); syntax.png is not rendered inline.
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        // AddBackground uses empty string for the description; an inline image would carry "bg".
+        var description = picture.NonVisualPictureProperties?.NonVisualDrawingProperties?.Description?.Value;
+        Assert.Equal(string.Empty, description);
+    }
+
+    [Fact]
     public void Renderer_ResolvesRemoteImage_WhenHttpHandlerReturnsImage()
     {
         using var workspace = TestWorkspace.Create();
@@ -738,10 +770,10 @@ public class PptxRendererTests
     // The tests below capture the current rendering behavior for each representative form.
 
     [Fact]
-    public void Renderer_MarpitBgKeyword_RendersAsPictureShapeNotSlideBackground()
+    public void Renderer_MarpitBgKeyword_RendersAsSlideBackground()
     {
         // Marpit upstream: ![bg](image.jpg) sets a slide background image.
-        // Current behavior: rendered as an inline Picture shape; slide background is not affected.
+        // The image is rendered as a full-slide background picture (Description=""), not an inline shape.
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -759,12 +791,10 @@ public class PptxRendererTests
 
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.First();
-        // Currently rendered inline: the picture's Description carries the alt text "bg".
-        // When bg is properly implemented as a slide background, AddBackground uses Description=""
-        // rather than the alt-text keyword, so this assertion will fail at that point.
+        // Background picture added by AddBackground carries an empty description, not "bg".
         var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
         var description = picture.NonVisualPictureProperties?.NonVisualDrawingProperties?.Description?.Value;
-        Assert.Equal("bg", description);
+        Assert.Equal(string.Empty, description);
         AssertImageRenderedWithoutError(slidePart);
     }
 

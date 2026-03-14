@@ -49,8 +49,8 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 | Marpit | Spot directives with `_` prefix | Apply a local directive to one slide only | Supported | All recognised directive keys work with a `_` prefix (e.g. `_class`, `_paginate`, `_backgroundColor`). Spot directives apply to the current slide only and do not carry forward to subsequent slides. |
 | Marpit | `headingDivider` | Split slides before headings automatically | Supported subset | Parsed from front matter as an integer 1–6; slides are split before headings at or above that level. |
 | Marpit | Header / footer directives | Per-slide repeated content | Supported | `header` and `footer` string values are stored in `SlideStyle` and emitted into PPTX text shapes on each slide. |
-| Marpit | Extended image syntax | Width, height, filters, `bg`, split backgrounds | Partially supported | Normal Markdown images are parsed; Marpit image keywords are treated as alt text, not structured options. |
-| Marpit | Background image syntax via image alt text | `![bg](...)` and related | Not supported | Backgrounds are supported only through directives, not image syntax. |
+| Marpit | Extended image syntax | Width, height, filters, `bg`, split backgrounds | Partially supported | Normal Markdown images are parsed; `![bg](url)` is promoted to a slide background. Other Marpit image keywords (width, height, percentage, split) are treated as alt text with no effect on sizing or layout. |
+| Marpit | Background image syntax via image alt text | `![bg](...)` and related | Supported subset | `![bg](url)` sets the slide background image. Modifiers in the alt text (`bg cover`, `bg contain`, `bg left`, `bg right`, percentage sizing) are not yet parsed; the image is always rendered full-bleed. A `backgroundImage` directive on the same slide takes precedence over `![bg](...)`. See [Background Image Precedence](#background-image-precedence) below. |
 | Marpit | Fragmented lists | Incremental list reveal | Not supported | No fragment model in parser or renderer. |
 | Marpit | Theme CSS | CSS-driven slide theming | Supported subset | CSS extraction for fonts, sizes, colors, padding, background, line-height, letter-spacing, text-transform, font-weight, and code style. See the CSS property reference below. |
 | Marp Core | Built-in theme names | Themes such as `default`, `gaia`, `uncover` | Name-only unless CSS is supplied | Theme name is stored, but real styling comes from parsed CSS or defaults. |
@@ -271,7 +271,7 @@ Console.WriteLine("notes code block");
 - Local image embedding with aspect-ratio-aware placement
 - Explicit visible image captions: use the Markdown image title attribute `![alt text](url "Caption text")` to render a visible caption below the image; the caption is styled smaller than body text to distinguish it from regular content; alt text remains as accessibility metadata on the image shape and is not shown visibly
 - Solid slide background color
-- Full-slide background image via directive or theme `background-image`
+- Full-slide background image via directive, `![bg](url)` image syntax, or theme `background-image`
 - Line spacing applied from CSS `line-height`
 - Letter spacing applied from CSS `letter-spacing`
 - Text transform applied from CSS `text-transform` (`uppercase`, `lowercase`, `capitalize`)
@@ -281,7 +281,8 @@ Console.WriteLine("notes code block");
 
 ### Not Yet Supported
 
-- Native Marpit background image syntax such as `![bg](...)`
+- `![bg](url)` modifiers: `bg cover`, `bg contain`, `bg left`, `bg right`, and percentage sizing (`bg 50%`) — the image is always rendered full-bleed when using bg syntax
+- Split-background layouts from multiple `![bg](url)` images on one slide (only the first is used)
 - fragmented lists
 - Marp Core `size`
 - math
@@ -297,6 +298,16 @@ Console.WriteLine("notes code block");
 - CSS custom properties (`--var-name`) and `var()` references
 - CSS nesting, pseudo-classes (`:hover`, `:first-child`, etc.), or combinators
 - CSS `@media`, `@keyframes`, or other at-rules
+
+## Background Image Precedence
+
+When multiple background image sources are present on the same slide, the following precedence applies (highest to lowest):
+
+1. **`backgroundImage` directive** — a `<!-- backgroundImage: url -->` comment directive or front-matter `backgroundImage` key on the slide. Directives always win.
+2. **`![bg](url)` image syntax** — a Markdown image whose alt text is exactly `bg` (case-insensitive). Applied only if no directive has set a background image for that slide.
+3. **Theme `background-image`** — the background image defined in the active theme CSS. Applied at render time only if neither a directive nor `![bg](...)` syntax has set a background image.
+
+When multiple `![bg](url)` images appear on the same slide, only the first one is used. The others are silently discarded (split-background layouts are not yet supported).
 
 ## Theme CSS Property Reference
 
