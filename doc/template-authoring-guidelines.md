@@ -23,6 +23,12 @@ Use it when:
 Related: [#85 Add template diagnostics and recommended layout guidance](https://github.com/jongalloway/MarpToPptx/issues/85)
 for the automated version of the manual inspection steps below.
 
+Potential follow-up: add a `template doctor` command or utility that inspects
+real-world templates, flags layout/master problems that degrade MarpToPptx
+output, and optionally normalizes or repairs common issues such as missing
+layout names, placeholder mismatches, or placeholder geometry that only exists
+in inherited master shapes.
+
 ## How MarpToPptx consumes a template
 
 Two things happen when a `layout`/`_layout` directive names a template

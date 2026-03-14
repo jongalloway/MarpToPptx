@@ -656,6 +656,7 @@ public sealed class OpenXmlPptxRenderer
     {
         var titlePlaceholder = SlideTemplateSelector.GetTitlePlaceholder(slideLayoutPart);
         var bodyPlaceholder = SlideTemplateSelector.GetBodyPlaceholder(slideLayoutPart);
+        var bodyRect = SlideTemplateSelector.GetBodyPlaceholderRect(slideLayoutPart, bodyPlaceholder);
         if (titlePlaceholder is null && bodyPlaceholder is null)
         {
             return false;
@@ -704,6 +705,8 @@ public sealed class OpenXmlPptxRenderer
         }
 
         // Body placeholder shape: collapse all body-text elements into one shape.
+        // Non-text elements (images, code blocks, tables, etc.) are handled below via
+        // the standalone residual path regardless of whether body text is present here.
         if (bodyPlaceholder is not null && bodyTextElements.Count > 0)
         {
             var bodyParagraphs = new List<A.Paragraph>();
@@ -740,12 +743,6 @@ public sealed class OpenXmlPptxRenderer
                 bodyPlaceholder,
                 bodyParagraphs));
         }
-        else if (bodyPlaceholder is null && bodyTextElements.Count > 0)
-        {
-            // Layout has no body placeholder: route body text back through the
-            // standalone path so content is not silently dropped.
-            nonTextElements.InsertRange(0, bodyTextElements);
-        }
 
         // Non-text elements: render as standalone shapes using the layout engine for
         // positioning, just as the non-placeholder path does.
@@ -753,41 +750,50 @@ public sealed class OpenXmlPptxRenderer
         {
             var residualSlide = new MarpToPptx.Core.Models.Slide { Style = slideModel.Style };
             residualSlide.Elements.AddRange(nonTextElements);
-            var plan = _layoutEngine.LayoutSlide(residualSlide, effectiveTheme);
-            var bodyStyle = effectiveTheme.Body;
+            var residualTheme = bodyRect is null
+                ? effectiveTheme
+                : ScaleThemeForTemplateBody(effectiveTheme, residualSlide, bodyRect);
+            var layoutOptions = bodyRect is null ? null : CreateBodyRectLayoutOptions(residualTheme, bodyRect);
+            var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
+            var contentRect = GetContentRect(residualTheme, layoutOptions);
+            var bodyStyle = residualTheme.Body;
             foreach (var placed in plan.Elements)
             {
+                var frame = bodyRect is null
+                    ? placed.Frame
+                    : TranslateRect(placed.Frame, bodyRect.X - contentRect.X, bodyRect.Y - contentRect.Y);
+
                 switch (placed.Element)
                 {
                     case HeadingElement heading:
-                        AddTextShape(context, placed.Frame, heading.Spans, ResolveHeadingStyle(effectiveTheme, heading.Level), effectiveTheme.InlineCode);
+                        AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(residualTheme, heading.Level), residualTheme.InlineCode);
                         break;
                     case ParagraphElement paragraph:
-                        AddTextShape(context, placed.Frame, paragraph.Spans, bodyStyle, effectiveTheme.InlineCode);
+                        AddTextShape(context, frame, paragraph.Spans, bodyStyle, residualTheme.InlineCode);
                         break;
                     case BulletListElement list:
-                        AddBulletList(context, placed.Frame, list, bodyStyle);
+                        AddBulletList(context, frame, list, bodyStyle);
                         break;
                     case ImageElement image:
-                        AddImage(context, placed.Frame, image.Source, image.AltText);
+                        AddImage(context, frame, image.Source, image.AltText);
                         break;
                     case VideoElement video:
-                        AddVideo(context, placed.Frame, video.Source, video.AltText);
+                        AddVideo(context, frame, video.Source, video.AltText);
                         break;
                     case AudioElement audio:
-                        AddAudio(context, placed.Frame, audio.Source, audio.AltText);
+                        AddAudio(context, frame, audio.Source, audio.AltText);
                         break;
                     case CodeBlockElement code:
-                        AddCodeBlock(context, placed.Frame, code, effectiveTheme.Code);
+                        AddCodeBlock(context, frame, code, residualTheme.Code);
                         break;
                     case MermaidDiagramElement mermaid:
-                        AddDiagram(context, placed.Frame, mermaid.Source, "mermaid", effectiveTheme, effectiveTheme.Code);
+                        AddDiagram(context, frame, mermaid.Source, "mermaid", residualTheme, residualTheme.Code);
                         break;
                     case DiagramElement diagram:
-                        AddDiagram(context, placed.Frame, diagram.Source, "diagram", effectiveTheme, effectiveTheme.Code);
+                        AddDiagram(context, frame, diagram.Source, "diagram", residualTheme, residualTheme.Code);
                         break;
                     case TableElement table:
-                        AddTable(context, placed.Frame, table, bodyStyle);
+                        AddTable(context, frame, table, bodyStyle);
                         break;
                 }
             }
@@ -795,6 +801,75 @@ public sealed class OpenXmlPptxRenderer
 
         return true;
     }
+
+    private static Rect GetContentRect(ThemeDefinition theme, LayoutOptions? options = null)
+    {
+        options ??= LayoutOptions.Default;
+
+        return new(
+            theme.SlidePadding.Left,
+            theme.SlidePadding.Top,
+            options.SlideWidth - theme.SlidePadding.Left - theme.SlidePadding.Right,
+            options.SlideHeight - theme.SlidePadding.Top - theme.SlidePadding.Bottom);
+    }
+
+    private static LayoutOptions CreateBodyRectLayoutOptions(ThemeDefinition theme, Rect bodyRect)
+        => new(
+            bodyRect.Width + theme.SlidePadding.Left + theme.SlidePadding.Right,
+            bodyRect.Height + theme.SlidePadding.Top + theme.SlidePadding.Bottom);
+
+    private ThemeDefinition ScaleThemeForTemplateBody(ThemeDefinition theme, MarpToPptx.Core.Models.Slide residualSlide, Rect bodyRect)
+    {
+        var layoutOptions = CreateBodyRectLayoutOptions(theme, bodyRect);
+        var sourceRect = GetContentRect(theme, layoutOptions);
+        if (sourceRect.Width <= 0 || sourceRect.Height <= 0)
+        {
+            return theme;
+        }
+
+        var scale = 1.0;
+
+        for (var iteration = 0; iteration < 3; iteration++)
+        {
+            var candidateTheme = ScaleTheme(theme, scale);
+            var plan = _layoutEngine.LayoutSlide(residualSlide, candidateTheme, layoutOptions);
+            var maxBottom = plan.Elements.Count == 0
+                ? sourceRect.Y
+                : plan.Elements.Max(static element => element.Frame.Y + element.Frame.Height);
+            var contentHeight = Math.Max(0, maxBottom - sourceRect.Y);
+            if (contentHeight <= sourceRect.Height * 1.01)
+            {
+                return candidateTheme;
+            }
+
+            var fitRatio = sourceRect.Height / contentHeight;
+            scale = Math.Clamp(scale * fitRatio * 0.98, 0.45, 1.0);
+        }
+
+        if (scale >= 0.995)
+        {
+            return theme;
+        }
+
+        return ScaleTheme(theme, scale);
+    }
+
+    private static ThemeDefinition ScaleTheme(ThemeDefinition theme, double scale)
+        => theme with
+        {
+            Body = ScaleTextStyle(theme.Body, scale),
+            Code = ScaleTextStyle(theme.Code, scale),
+            InlineCode = ScaleTextStyle(theme.InlineCode, scale),
+            Headings = theme.Headings.ToDictionary(
+                static pair => pair.Key,
+                pair => ScaleTextStyle(pair.Value, scale)),
+        };
+
+    private static TextStyle ScaleTextStyle(TextStyle style, double scale)
+        => style with { FontSize = Math.Round(style.FontSize * scale, 2) };
+
+    private static Rect TranslateRect(Rect frame, double deltaX, double deltaY)
+        => new(frame.X + deltaX, frame.Y + deltaY, frame.Width, frame.Height);
 
     /// <summary>
     /// Reuses a real template slide as the slide base, preserving authored artwork and
