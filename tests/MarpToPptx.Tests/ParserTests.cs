@@ -1782,7 +1782,13 @@ public class ParserTests
         var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
         Assert.Contains("diagram: pillars", diagram.Source);
         // Front-matter block must survive normalization so DiagramForge can apply the theme.
-        Assert.Contains("theme: presentation", diagram.Source);
+        // Verify the --- delimiters are present and in the correct order so DiagramForge parses the block as front-matter.
+        var openDelim = diagram.Source.IndexOf("---", StringComparison.Ordinal);
+        var themeIdx = diagram.Source.IndexOf("theme: presentation", StringComparison.Ordinal);
+        var closeDelim = diagram.Source.IndexOf("---", openDelim + 3, StringComparison.Ordinal);
+        Assert.True(openDelim >= 0, "Opening --- delimiter must be present");
+        Assert.True(themeIdx > openDelim, "theme: presentation must appear after the opening --- delimiter");
+        Assert.True(closeDelim > themeIdx, "Closing --- delimiter must appear after theme: presentation");
     }
 
     [Fact]
@@ -1813,7 +1819,13 @@ public class ParserTests
         Assert.Contains("diagram: matrix", diagram.Source);
         Assert.Contains("rows:", diagram.Source);
         Assert.Contains("columns:", diagram.Source);
-        Assert.Contains("theme: presentation", diagram.Source);
+        // Verify the --- delimiters are present and in the correct order so DiagramForge parses the block as front-matter.
+        var openDelim = diagram.Source.IndexOf("---", StringComparison.Ordinal);
+        var themeIdx = diagram.Source.IndexOf("theme: presentation", StringComparison.Ordinal);
+        var closeDelim = diagram.Source.IndexOf("---", openDelim + 3, StringComparison.Ordinal);
+        Assert.True(openDelim >= 0, "Opening --- delimiter must be present");
+        Assert.True(themeIdx > openDelim, "theme: presentation must appear after the opening --- delimiter");
+        Assert.True(closeDelim > themeIdx, "Closing --- delimiter must appear after theme: presentation");
     }
 
     [Fact]
@@ -1841,7 +1853,13 @@ public class ParserTests
         var slide = Assert.Single(deck.Slides);
         var diagram = Assert.Single(slide.Elements.OfType<DiagramElement>());
         Assert.Contains("diagram: pyramid", diagram.Source);
-        Assert.Contains("theme: presentation", diagram.Source);
+        // Verify the --- delimiters are present and in the correct order so DiagramForge parses the block as front-matter.
+        var openDelim = diagram.Source.IndexOf("---", StringComparison.Ordinal);
+        var themeIdx = diagram.Source.IndexOf("theme: presentation", StringComparison.Ordinal);
+        var closeDelim = diagram.Source.IndexOf("---", openDelim + 3, StringComparison.Ordinal);
+        Assert.True(openDelim >= 0, "Opening --- delimiter must be present");
+        Assert.True(themeIdx > openDelim, "theme: presentation must appear after the opening --- delimiter");
+        Assert.True(closeDelim > themeIdx, "Closing --- delimiter must appear after theme: presentation");
     }
 
     [Fact]

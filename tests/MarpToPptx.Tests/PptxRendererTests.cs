@@ -3549,6 +3549,11 @@ public class PptxRendererTests
         var svg = new System.IO.StreamReader(stream).ReadToEnd();
         Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
 
+        // Verify that a P.Picture on the slide references the SVG part via its SVGBlip embed relationship.
+        // SVG blips use an Office2019 SVGBlip extension rather than the standard A.Blip.Embed attribute.
+        var svgRelId = slidePart.GetIdOfPart(svgPart);
+        Assert.Contains(pictures, pic => pic.Descendants<DocumentFormat.OpenXml.Office2019.Drawing.SVG.SVGBlip>().Any(b => b.Embed?.Value == svgRelId));
+
         // Must not contain a fallback error label.
         var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
         Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
@@ -3588,6 +3593,9 @@ public class PptxRendererTests
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.Single();
 
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
         var svgPart = slidePart.ImageParts
             .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(svgPart);
@@ -3596,7 +3604,12 @@ public class PptxRendererTests
         var svg = new System.IO.StreamReader(stream).ReadToEnd();
         Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
 
-        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        // Verify that a P.Picture on the slide references the SVG part via its SVGBlip embed relationship.
+        // SVG blips use an Office2019 SVGBlip extension rather than the standard A.Blip.Embed attribute.
+        var svgRelId = slidePart.GetIdOfPart(svgPart);
+        Assert.Contains(pictures, pic => pic.Descendants<DocumentFormat.OpenXml.Office2019.Drawing.SVG.SVGBlip>().Any(b => b.Embed?.Value == svgRelId));
+
+        var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
         Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
@@ -3633,6 +3646,9 @@ public class PptxRendererTests
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.Single();
 
+        var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+        Assert.NotEmpty(pictures);
+
         var svgPart = slidePart.ImageParts
             .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
         Assert.NotNull(svgPart);
@@ -3641,7 +3657,12 @@ public class PptxRendererTests
         var svg = new System.IO.StreamReader(stream).ReadToEnd();
         Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
 
-        var textRuns = slidePart.Slide!.Descendants<A.Text>().Select(t => t.Text).ToArray();
+        // Verify that a P.Picture on the slide references the SVG part via its SVGBlip embed relationship.
+        // SVG blips use an Office2019 SVGBlip extension rather than the standard A.Blip.Embed attribute.
+        var svgRelId = slidePart.GetIdOfPart(svgPart);
+        Assert.Contains(pictures, pic => pic.Descendants<DocumentFormat.OpenXml.Office2019.Drawing.SVG.SVGBlip>().Any(b => b.Embed?.Value == svgRelId));
+
+        var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
         Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
