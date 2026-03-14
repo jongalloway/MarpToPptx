@@ -656,7 +656,7 @@ public sealed class OpenXmlPptxRenderer
     {
         var titlePlaceholder = SlideTemplateSelector.GetTitlePlaceholder(slideLayoutPart);
         var bodyPlaceholder = SlideTemplateSelector.GetBodyPlaceholder(slideLayoutPart);
-        var bodyRect = SlideTemplateSelector.GetBodyPlaceholderRect(slideLayoutPart);
+        var bodyRect = SlideTemplateSelector.GetBodyPlaceholderRect(slideLayoutPart, bodyPlaceholder);
         if (titlePlaceholder is null && bodyPlaceholder is null)
         {
             return false;
@@ -705,7 +705,9 @@ public sealed class OpenXmlPptxRenderer
         }
 
         // Body placeholder shape: collapse all body-text elements into one shape.
-        if (bodyPlaceholder is not null && bodyTextElements.Count > 0 && nonTextElements.Count == 0)
+        // Non-text elements (images, code blocks, tables, etc.) are handled below via
+        // the standalone residual path regardless of whether body text is present here.
+        if (bodyPlaceholder is not null && bodyTextElements.Count > 0)
         {
             var bodyParagraphs = new List<A.Paragraph>();
             foreach (var element in bodyTextElements)
@@ -740,13 +742,6 @@ public sealed class OpenXmlPptxRenderer
                 "Content Placeholder",
                 bodyPlaceholder,
                 bodyParagraphs));
-        }
-        else if (bodyTextElements.Count > 0)
-        {
-            // When non-text content shares the body area, route all body content back
-            // through the standalone path so the layout engine can keep it coordinated
-            // inside the resolved template body region.
-            nonTextElements.InsertRange(0, bodyTextElements);
         }
 
         // Non-text elements: render as standalone shapes using the layout engine for
