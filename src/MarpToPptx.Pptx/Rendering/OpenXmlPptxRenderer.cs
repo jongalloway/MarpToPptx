@@ -252,6 +252,7 @@ public sealed class OpenXmlPptxRenderer
     private static string ComputeSlideGuid(string? deckSourcePath, int slideIndex)
     {
         // Normalize path separators so Windows and Unix renders produce identical GUIDs.
+        // Prefer full path resolution for robustness, falling back to simple normalization.
         var normalizedPath = string.IsNullOrEmpty(deckSourcePath)
             ? string.Empty
             : deckSourcePath.Replace('\\', '/').ToLowerInvariant();
@@ -259,9 +260,10 @@ public sealed class OpenXmlPptxRenderer
         var input = $"marptopptx-slide:{normalizedPath}#{slideIndex}";
         var hashBytes = SHA256.HashData(Encoding.UTF8.GetBytes(input));
 
-        // Stamp UUID version 5 (SHA-1 name-based) bits into the first 16 bytes so the
-        // result is a valid RFC 4122 UUID.
-        hashBytes[6] = (byte)((hashBytes[6] & 0x0f) | 0x50); // version 5
+        // Stamp UUID variant 2 (RFC 4122) and a version-5-like marker into the first 16 bytes.
+        // Note: this uses SHA-256 (not SHA-1 as the true RFC 4122 UUID v5 requires), so the
+        // result is a deterministic UUID-shaped identifier rather than a strictly spec-compliant v5.
+        hashBytes[6] = (byte)((hashBytes[6] & 0x0f) | 0x50); // version marker (5-like)
         hashBytes[8] = (byte)((hashBytes[8] & 0x3f) | 0x80); // variant 2
 
         return new Guid(hashBytes[..16]).ToString("D");
@@ -436,8 +438,9 @@ public sealed class OpenXmlPptxRenderer
             var sourceSlide = meta.Element(m2p + "sourceSlide")?.Value ?? string.Empty;
             return new SlideMetadata(guid, hash, sourceSlide);
         }
-        catch
+        catch (System.Xml.XmlException)
         {
+            // Malformed slide XML: treat as unmanaged.
             return null;
         }
     }
@@ -715,7 +718,7 @@ public sealed class OpenXmlPptxRenderer
 
         var guid = ComputeSlideGuid(deckSourcePath, slideNumber - 1);
         var hash = ComputeSlideContentHash(slideModel);
-        var sourceSlide = $"{IOPath.GetFileName(deckSourcePath) ?? string.Empty}#slide-{slideNumber - 1}";
+        var sourceSlide = $"{IOPath.GetFileName(deckSourcePath) ?? string.Empty}#slide-{slideNumber}";
 
         if (templateSlide is not null &&
             TryRenderIntoTemplateSlideTextShapes(context, slideModel, effectiveTheme))

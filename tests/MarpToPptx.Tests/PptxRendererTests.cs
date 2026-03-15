@@ -6379,10 +6379,11 @@ public class PptxRendererTests
                 new XAttribute("uri", unknownUri),
                 new XElement(testNs + "data", "preserved")));
 
+            // Delete the old entry first, then create the replacement (required by ZipArchive).
+            slideEntry.Delete();
             var replacement = archive.CreateEntry("ppt/slides/slide1.xml");
             using var outStream = replacement.Open();
             slideDoc.Save(outStream);
-            slideEntry.Delete();
         }
 
         // Re-render the slide with changed content in update mode.

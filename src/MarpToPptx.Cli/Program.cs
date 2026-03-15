@@ -22,6 +22,7 @@ internal static class ProgramEntry
 			string? themeCssPath = null;
 			string? contrastReportPath = null;
 			string? existingDeckPath = null;
+			var updateExisting = false;
 			var allowRemoteAssets = false;
 			var contrastWarningMode = ContrastWarningMode.Off;
 
@@ -47,14 +48,11 @@ internal static class ProgramEntry
 						// Update the existing output deck in place rather than rebuilding it
 						// from scratch. When set without an argument the output path is used.
 						// Accepts an optional explicit path: --update-existing [path]
+						updateExisting = true;
 						if (index + 1 < args.Length && !args[index + 1].StartsWith('-'))
 						{
 							index++;
 							existingDeckPath = args[index];
-						}
-						else
-						{
-							existingDeckPath = "__use_output__";
 						}
 						break;
 					case "--contrast-warnings":
@@ -103,15 +101,12 @@ internal static class ProgramEntry
 			}
 
 			// Resolve the existing deck path for update mode.
-			// The sentinel "__use_output__" means the user passed --update-existing without
-			// an explicit path, so we update the output file itself.
-			if (existingDeckPath == "__use_output__")
+			// When --update-existing was specified without an explicit path, use the output path.
+			if (updateExisting)
 			{
-				existingDeckPath = outputPath;
-			}
-			else if (!string.IsNullOrWhiteSpace(existingDeckPath))
-			{
-				existingDeckPath = Path.GetFullPath(existingDeckPath);
+				existingDeckPath = string.IsNullOrWhiteSpace(existingDeckPath)
+					? outputPath
+					: Path.GetFullPath(existingDeckPath);
 			}
 
 			var markdown = File.ReadAllText(inputPath);
