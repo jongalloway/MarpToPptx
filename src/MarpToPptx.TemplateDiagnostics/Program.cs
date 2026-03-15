@@ -109,7 +109,7 @@ static Task<int> RunDoctorAsync(string[] subArgs)
             default:
                 if (arg.StartsWith('-'))
                 {
-                    Console.Error.WriteLine($"Unknown option '{arg}'. Run 'doctor --help' for usage.");
+                    Console.Error.WriteLine($"Unknown option '{arg}'. Run 'template-diagnostics doctor --help' for usage.");
                     return Task.FromResult(1);
                 }
 

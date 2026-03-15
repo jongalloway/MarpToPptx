@@ -6,7 +6,8 @@ namespace MarpToPptx.Pptx.Diagnostics;
 /// </summary>
 /// <param name="TemplatePath">Path of the template that was inspected.</param>
 /// <param name="Issues">
-/// All structural issues and observations found, ordered by severity then by layout order.
+/// All structural issues and observations found, in the order the checks were run
+/// (template-wide checks first, then per-layout checks in layout order).
 /// </param>
 /// <param name="WroteFixedTemplate">
 /// <see langword="true"/> when the doctor wrote a repaired copy of the template.

@@ -144,11 +144,12 @@ public sealed class TemplateDoctor
 
             if (!hasMatchingName && !hasCsdName)
             {
+                var fallbackName = $"Layout {i + 1}";
                 issues.Add(new TemplateDoctorIssue(
-                    LayoutName: null,
+                    LayoutName: fallbackName,
                     Severity: IssueSeverity.Warning,
                     Code: "EmptyLayoutName",
-                    Description: $"Layout at position {i + 1} has no name and will be referenced as \"Layout {i + 1}\". " +
+                    Description: $"Layout at position {i + 1} has no name and will be referenced as \"{fallbackName}\". " +
                         "Unnamed layouts are hard to target by name in Markdown directives."));
             }
         }
@@ -465,6 +466,12 @@ public sealed class TemplateDoctor
                 .GetFirstChild<P.PlaceholderShape>();
 
             if (ph is null)
+            {
+                continue;
+            }
+
+            // When an index is specified, it must match.
+            if (placeholder.Index is not null && ph.Index?.Value != placeholder.Index)
             {
                 continue;
             }

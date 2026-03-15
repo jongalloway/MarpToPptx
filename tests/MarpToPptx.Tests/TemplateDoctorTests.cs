@@ -95,18 +95,13 @@ public class TemplateDoctorTests
         var doctor = new TemplateDoctor();
         var report = doctor.Analyze(pptxPath);
 
-        // The built-in "tx" layout has a body placeholder — no issue should be raised for it.
+        // The built-in "tx" layout has a body placeholder — no ContentLayoutMissingBodyPlaceholder
+        // issue should be raised at all for the built-in template.
         var missingBodyIssues = report.Issues
             .Where(i => i.Code == "ContentLayoutMissingBodyPlaceholder")
             .ToList();
 
-        // There should be no such issue on the built-in content layout (which has a body).
-        foreach (var issue in missingBodyIssues)
-        {
-            // If any are reported, they must not be for the content layout.
-            Assert.NotEqual("Title and Content", issue.LayoutName,
-                StringComparer.OrdinalIgnoreCase);
-        }
+        Assert.Empty(missingBodyIssues);
     }
 
     // ─────────────────────────────────────────────────────────────
