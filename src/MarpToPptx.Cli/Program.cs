@@ -21,6 +21,7 @@ internal static class ProgramEntry
 			string? templatePath = null;
 			string? themeCssPath = null;
 			string? contrastReportPath = null;
+			string? existingDeckPath = null;
 			var allowRemoteAssets = false;
 			var contrastWarningMode = ContrastWarningMode.Off;
 
@@ -41,6 +42,20 @@ internal static class ProgramEntry
 						break;
 					case "--allow-remote-assets":
 						allowRemoteAssets = true;
+						break;
+					case "--update-existing":
+						// Update the existing output deck in place rather than rebuilding it
+						// from scratch. When set without an argument the output path is used.
+						// Accepts an optional explicit path: --update-existing [path]
+						if (index + 1 < args.Length && !args[index + 1].StartsWith('-'))
+						{
+							index++;
+							existingDeckPath = args[index];
+						}
+						else
+						{
+							existingDeckPath = "__use_output__";
+						}
 						break;
 					case "--contrast-warnings":
 						contrastWarningMode = ParseContrastWarningMode(RequireValue(args, ref index, arg));
@@ -87,6 +102,18 @@ internal static class ProgramEntry
 				contrastReportPath = Path.GetFullPath(contrastReportPath);
 			}
 
+			// Resolve the existing deck path for update mode.
+			// The sentinel "__use_output__" means the user passed --update-existing without
+			// an explicit path, so we update the output file itself.
+			if (existingDeckPath == "__use_output__")
+			{
+				existingDeckPath = outputPath;
+			}
+			else if (!string.IsNullOrWhiteSpace(existingDeckPath))
+			{
+				existingDeckPath = Path.GetFullPath(existingDeckPath);
+			}
+
 			var markdown = File.ReadAllText(inputPath);
 			var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
 
@@ -99,9 +126,13 @@ internal static class ProgramEntry
 				TemplatePath = templatePath,
 				SourceDirectory = Path.GetDirectoryName(inputPath),
 				AllowRemoteAssets = allowRemoteAssets,
+				ExistingDeckPath = existingDeckPath,
 			});
 
-			Console.WriteLine($"Generated '{outputPath}'.");
+			var updateMode = !string.IsNullOrEmpty(existingDeckPath) && File.Exists(existingDeckPath);
+			Console.WriteLine(updateMode
+				? $"Updated '{outputPath}'."
+				: $"Generated '{outputPath}'.");
 
 			if (contrastWarningMode != ContrastWarningMode.Off || !string.IsNullOrWhiteSpace(contrastReportPath))
 			{
@@ -161,13 +192,16 @@ internal static class ProgramEntry
 
 	private static void PrintUsage()
 	{
-		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
+		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--update-existing [path]] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
 		Console.WriteLine();
 		Console.WriteLine("Options:");
 		Console.WriteLine("  -o, --output      Output .pptx path. Defaults to the input file name with a .pptx extension.");
 		Console.WriteLine("  --template        Existing .pptx template to copy masters/themes from before rendering slides.");
 		Console.WriteLine("  --theme-css       CSS file to parse for Marp-style theme values.");
 		Console.WriteLine("  --allow-remote-assets  Enable HTTP/HTTPS image downloads during rendering.");
+		Console.WriteLine("  --update-existing [path]  Update an existing MarpToPptx-generated deck instead of rebuilding from");
+		Console.WriteLine("                    scratch. Preserves manually added slides. Optionally specify a source path;");
+		Console.WriteLine("                    defaults to the output file when omitted.");
 		Console.WriteLine("  --contrast-warnings  Contrast warning mode: off, summary, or detailed.");
 		Console.WriteLine("  --warn-low-contrast  Backward-compatible alias for '--contrast-warnings detailed'.");
 		Console.WriteLine("  --contrast-report    Write a detailed contrast audit report to a text file. Implies a contrast audit run.");

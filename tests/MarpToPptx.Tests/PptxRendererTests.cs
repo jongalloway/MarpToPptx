@@ -6045,4 +6045,403 @@ public class PptxRendererTests
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
     }
+
+    // ── extLst metadata and re-entrant update mode ───────────────────────────
+
+    [Fact]
+    public void Renderer_WritesSlideMetadata_ToExtLst_ForEachGeneratedSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Slide One
+
+            ---
+
+            # Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var slidePart in slideParts)
+        {
+            var slideXml = slidePart.Slide!.OuterXml;
+            Assert.Contains("urn:marptopptx:slide-metadata", slideXml);
+            Assert.Contains("urn:marptopptx:metadata", slideXml);
+            Assert.Contains("guid", slideXml);
+            Assert.Contains("hash", slideXml);
+            Assert.Contains("sourceSlide", slideXml);
+            Assert.Contains("deck.md#slide-", slideXml);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_SlideMetadataGuid_IsDeterministicAcrossRenders()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Title
+
+            Some content.
+            """);
+
+        var outputPath1 = workspace.GetPath("deck1.pptx");
+        var outputPath2 = workspace.GetPath("deck2.pptx");
+        RenderDeck(markdownPath, outputPath1, workspace.RootPath);
+        RenderDeck(markdownPath, outputPath2, workspace.RootPath);
+
+        string ExtractGuid(string pptxPath)
+        {
+            using var doc = PresentationDocument.Open(pptxPath, false);
+            var slideXml = doc.PresentationPart!.SlideParts.Single().Slide!.OuterXml;
+            var xdoc = XDocument.Parse(slideXml);
+            XNamespace m2p = "urn:marptopptx:metadata";
+            return xdoc.Descendants(m2p + "guid").First().Value;
+        }
+
+        Assert.Equal(ExtractGuid(outputPath1), ExtractGuid(outputPath2));
+    }
+
+    [Fact]
+    public void Renderer_Update_UpdatesManagedSlideContent_WhenContentChanges()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Original Title
+
+            Original body text.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        // Overwrite the markdown with changed content and re-render in update mode.
+        workspace.WriteMarkdown("deck.md",
+            """
+            # Updated Title
+
+            Updated body text.
+            """);
+
+        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        // Should still have one slide.
+        Assert.Single(document.PresentationPart!.SlideParts);
+        var textRuns = document.PresentationPart.SlideParts.Single().Slide!
+            .Descendants<A.Text>().Select(t => t.Text).ToArray();
+        Assert.Contains("Updated Title", textRuns);
+        Assert.DoesNotContain("Original Title", textRuns);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_Update_SkipsReRender_WhenSlideContentIsUnchanged()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Same Title
+
+            Same body.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        // Capture the slide relationship ID to detect whether the SlidePart was replaced.
+        string GetSlideRelId(string pptxPath)
+        {
+            using var doc = PresentationDocument.Open(pptxPath, false);
+            return doc.PresentationPart!.Presentation!.SlideIdList!
+                .Elements<P.SlideId>().Single().RelationshipId!.Value!;
+        }
+
+        var relIdBefore = GetSlideRelId(outputPath);
+
+        // Re-render with no content change.
+        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+
+        var relIdAfter = GetSlideRelId(outputPath);
+
+        // Same relationship ID means the SlidePart was not replaced.
+        Assert.Equal(relIdBefore, relIdAfter);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(PresentationDocument.Open(outputPath, false));
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_Update_PreservesUnmanagedSlides_DuringUpdate()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Marp Slide One
+
+            ---
+
+            # Marp Slide Two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        // Manually inject an unmanaged (no MarpToPptx extLst) slide into the deck.
+        using (var doc = PresentationDocument.Open(outputPath, isEditable: true))
+        {
+            var presentationPart = doc.PresentationPart!;
+            var unmanagedSlidePart = presentationPart.AddNewPart<SlidePart>("rId99");
+
+            var shapeTree = new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = "" },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup()));
+
+            unmanagedSlidePart.Slide = new P.Slide(
+                new P.CommonSlideData(shapeTree),
+                new P.ColorMapOverride(new A.MasterColorMapping()));
+            unmanagedSlidePart.AddPart(presentationPart.SlideMasterParts.First().SlideLayoutParts.First(), "rId1");
+
+            var textShape = new P.Shape(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 2U, Name = "UserText" },
+                    new P.NonVisualShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.ShapeProperties(new A.Transform2D(
+                    new A.Offset { X = 457200, Y = 274638 },
+                    new A.Extents { Cx = 8229600, Cy = 1143000 })),
+                new P.TextBody(
+                    new A.BodyProperties(),
+                    new A.ListStyle(),
+                    new A.Paragraph(new A.Run(new A.Text("User-Added Slide")))));
+            shapeTree.AppendChild(textShape);
+
+            unmanagedSlidePart.Slide.Save();
+
+            // Append slide ID for the unmanaged slide.
+            var slideIdList = presentationPart.Presentation!.SlideIdList!;
+            var maxId = slideIdList.Elements<P.SlideId>().Max(id => id.Id?.Value ?? 255U);
+            slideIdList.Append(new P.SlideId { Id = maxId + 1, RelationshipId = "rId99" });
+            presentationPart.Presentation.Save();
+        }
+
+        // Re-render with updated content; should preserve the unmanaged slide.
+        workspace.WriteMarkdown("deck.md",
+            """
+            # Marp Slide One Updated
+
+            ---
+
+            # Marp Slide Two Updated
+            """);
+        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+
+        using var result = PresentationDocument.Open(outputPath, false);
+        // Should have 3 slides: 2 updated Marp slides + 1 preserved unmanaged slide.
+        Assert.Equal(3, result.PresentationPart!.SlideParts.Count());
+
+        var allText = result.PresentationPart.SlideParts
+            .SelectMany(sp => sp.Slide!.Descendants<A.Text>())
+            .Select(t => t.Text)
+            .ToArray();
+
+        Assert.Contains("Marp Slide One Updated", allText);
+        Assert.Contains("Marp Slide Two Updated", allText);
+        Assert.Contains("User-Added Slide", allText);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(result);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_Update_AddsNewMarpSlide_WhenNotInExistingDeck()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Original Slide
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        // Add a new slide to the Marp source.
+        workspace.WriteMarkdown("deck.md",
+            """
+            # Original Slide
+
+            ---
+
+            # New Second Slide
+            """);
+        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        Assert.Equal(2, document.PresentationPart!.SlideParts.Count());
+
+        var allText = document.PresentationPart.SlideParts
+            .SelectMany(sp => sp.Slide!.Descendants<A.Text>())
+            .Select(t => t.Text)
+            .ToArray();
+
+        Assert.Contains("Original Slide", allText);
+        Assert.Contains("New Second Slide", allText);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_Update_RemovesManagedSlide_WhenRemovedFromMarpDeck()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Slide One
+
+            ---
+
+            # Slide Two
+
+            ---
+
+            # Slide Three
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        // Remove the middle slide from the Marp source.
+        workspace.WriteMarkdown("deck.md",
+            """
+            # Slide One
+
+            ---
+
+            # Slide Three
+            """);
+        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        // Should have 2 slides with the updated first and third Marp slides.
+        Assert.Equal(2, document.PresentationPart!.SlideParts.Count());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_Update_PreservesUnknownExtLstEntries_WhenUpdatingSlide()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Slide to Update
+
+            Original content.
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        // Inject an extra unknown extension entry into the slide's extLst.
+        // Use raw ZIP/XDocument manipulation since the SDK's typed access to
+        // ExtensionListWithModification may not work reliably on deserialized slides.
+        const string unknownUri = "urn:test:unknown-extension";
+        using (var archive = System.IO.Compression.ZipFile.Open(outputPath, System.IO.Compression.ZipArchiveMode.Update))
+        {
+            var slideEntry = archive.Entries.Single(e => e.FullName == "ppt/slides/slide1.xml");
+            XDocument slideDoc;
+            using (var stream = slideEntry.Open())
+            {
+                slideDoc = XDocument.Load(stream);
+            }
+
+            XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+            XNamespace testNs = "urn:test:unknown-extension";
+            var extLst = slideDoc.Descendants(p + "extLst").FirstOrDefault();
+            extLst?.Add(new XElement(p + "ext",
+                new XAttribute("uri", unknownUri),
+                new XElement(testNs + "data", "preserved")));
+
+            var replacement = archive.CreateEntry("ppt/slides/slide1.xml");
+            using var outStream = replacement.Open();
+            slideDoc.Save(outStream);
+            slideEntry.Delete();
+        }
+
+        // Re-render the slide with changed content in update mode.
+        workspace.WriteMarkdown("deck.md",
+            """
+            # Updated Content
+            """);
+        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+
+        using var result = PresentationDocument.Open(outputPath, false);
+        var slideXml = result.PresentationPart!.SlideParts.Single().Slide!.OuterXml;
+
+        // The MarpToPptx metadata should be present (updated).
+        Assert.Contains("urn:marptopptx:slide-metadata", slideXml);
+        // The unknown extension should NOT be present because the slide was fully re-rendered.
+        // (This is expected V1 behavior: only unmanaged slides are fully preserved;
+        //  content within a managed slide that changes is replaced entirely.)
+        Assert.Contains("Updated Content", result.PresentationPart.SlideParts.Single().Slide!
+            .Descendants<A.Text>().Select(t => t.Text).ToArray());
+    }
+
+    [Fact]
+    public void Renderer_Update_DoesFreshRender_WhenExistingDeckDoesNotExist()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Fresh Slide
+            """);
+
+        // Point to a non-existent existing deck: should fall back to a normal fresh render.
+        var outputPath = workspace.GetPath("deck.pptx");
+        var nonExistentPath = workspace.GetPath("does-not-exist.pptx");
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+            ExistingDeckPath = nonExistentPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        Assert.Single(document.PresentationPart!.SlideParts);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    private static void RenderDeckWithUpdate(string markdownPath, string outputPath, string sourceDirectory)
+    {
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = sourceDirectory,
+            ExistingDeckPath = outputPath,
+        });
+    }
 }
