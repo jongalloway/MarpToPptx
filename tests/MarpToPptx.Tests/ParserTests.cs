@@ -461,10 +461,10 @@ public class ParserTests
     // follow-up implementation work can proceed one compatibility slice at a time.
 
     [Fact]
-    public void Parser_MarpitBgKeyword_YieldsImageElementWithBgAsAltText()
+    public void Parser_MarpitBgKeyword_SetsSlideBackgroundImage()
     {
         // Marpit upstream: ![bg](image.jpg) sets a slide background image.
-        // Current behavior: treated as a normal image; alt text is "bg".
+        // The image is promoted to SlideStyle.BackgroundImage and not added as an inline element.
         const string markdown = """
         # Slide
 
@@ -475,10 +475,8 @@ public class ParserTests
         var deck = compiler.Compile(markdown);
 
         var slide = Assert.Single(deck.Slides);
-        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("bg", image.AltText);
-        // The bg keyword in image alt text does not set the background directive.
-        Assert.Null(slide.Style.BackgroundImage);
+        Assert.Equal("photo.png", slide.Style.BackgroundImage);
+        Assert.DoesNotContain(slide.Elements, e => e is ImageElement);
     }
 
     [Fact]
@@ -2508,5 +2506,143 @@ public class ParserTests
 
         Assert.True(deck.FrontMatter.ContainsKey("diagram-theme"));
         Assert.Equal("dracula", deck.FrontMatter["diagram-theme"]);
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntax_SetsSlideBackgroundImage()
+    {
+        const string markdown = """
+        # Slide
+
+        ![bg](photo.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("photo.jpg", deck.Slides[0].Style.BackgroundImage);
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntax_DoesNotAddImageElementToSlide()
+    {
+        const string markdown = """
+        # Slide
+
+        ![bg](photo.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.DoesNotContain(deck.Slides[0].Elements, e => e is ImageElement);
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntax_DirectiveTakesPrecedenceOverBgAltText()
+    {
+        const string markdown = """
+        <!-- backgroundImage: directive.jpg -->
+        # Slide
+
+        ![bg](syntax.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("directive.jpg", deck.Slides[0].Style.BackgroundImage);
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntax_EmptyDirectiveClearsBackground_BgSyntaxDoesNotPromote()
+    {
+        // An explicit empty-value backgroundImage directive clears any inherited background.
+        // Even with ![bg](...) on the same slide, the empty directive wins: BackgroundImage stays "".
+        const string markdown = """
+        ---
+        backgroundImage: inherited.jpg
+        ---
+
+        # Slide One
+
+        ---
+
+        <!-- backgroundImage: -->
+        # Slide Two
+
+        ![bg](syntax.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        // Slide one inherits the front-matter background.
+        Assert.Equal("inherited.jpg", deck.Slides[0].Style.BackgroundImage);
+        // Slide two: the empty directive set BackgroundImage to "", so bg syntax is ignored.
+        Assert.Equal(string.Empty, deck.Slides[1].Style.BackgroundImage);
+        Assert.DoesNotContain(deck.Slides[1].Elements, e => e is ImageElement);
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntax_HeadingAndOtherElementsArePreserved()
+    {
+        const string markdown = """
+        # Slide Title
+
+        ![bg](bg.jpg)
+
+        Some paragraph text.
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("bg.jpg", deck.Slides[0].Style.BackgroundImage);
+        Assert.Collection(
+            deck.Slides[0].Elements,
+            e => Assert.IsType<HeadingElement>(e),
+            e => Assert.IsType<ParagraphElement>(e));
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntaxIsCaseInsensitive()
+    {
+        const string markdown = """
+        # Slide
+
+        ![BG](photo.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("photo.jpg", deck.Slides[0].Style.BackgroundImage);
+        Assert.DoesNotContain(deck.Slides[0].Elements, e => e is ImageElement);
+    }
+
+    [Fact]
+    public void Parser_BgImageSyntax_OnlyFirstBgImageAppliedAsBackground()
+    {
+        const string markdown = """
+        # Slide
+
+        ![bg](first.jpg)
+
+        ![bg](second.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Single(deck.Slides);
+        Assert.Equal("first.jpg", deck.Slides[0].Style.BackgroundImage);
+        Assert.DoesNotContain(deck.Slides[0].Elements, e => e is ImageElement);
     }
 }

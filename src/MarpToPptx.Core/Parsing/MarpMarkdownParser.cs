@@ -111,9 +111,30 @@ public sealed class MarpMarkdownParser
             var (effectiveStyle, newCarryForward, cleaned, notes) = MarpDirectiveParser.Parse(chunk, carryForwardStyle);
             carryForwardStyle = newCarryForward;
 
-            var slide = new Slide { Style = effectiveStyle, Notes = notes, NoteSpans = ParseNoteSpans(notes) };
-            foreach (var element in ParseElements(cleaned))
+            var allElements = ParseElements(cleaned);
+
+            // Promote any ![bg](url) images to slide background image.
+            // Only exact "bg" alt text (case-insensitive) is recognized in this slice.
+            // A directive-specified backgroundImage always takes precedence: if a directive
+            // (including an empty-value clear) has set BackgroundImage, bg syntax is ignored.
+            var bgImages = allElements
+                .OfType<ImageElement>()
+                .Where(img => IsBgAltText(img.AltText))
+                .ToList();
+
+            if (bgImages.Count > 0 && effectiveStyle.BackgroundImage is null)
             {
+                effectiveStyle = MarpDirectiveParser.ApplyDirective(effectiveStyle, "backgroundimage", bgImages[0].Source);
+            }
+
+            var slide = new Slide { Style = effectiveStyle, Notes = notes, NoteSpans = ParseNoteSpans(notes) };
+            foreach (var element in allElements)
+            {
+                if (element is ImageElement img && IsBgAltText(img.AltText))
+                {
+                    continue;
+                }
+
                 slide.Elements.Add(element);
             }
 
@@ -638,4 +659,11 @@ public sealed class MarpMarkdownParser
 
         return string.Concat(parts);
     }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="altText"/> is exactly <c>bg</c>
+    /// (case-insensitive), indicating a Marpit background image marker.
+    /// </summary>
+    private static bool IsBgAltText(string altText) =>
+        string.Equals(altText.Trim(), "bg", StringComparison.OrdinalIgnoreCase);
 }
