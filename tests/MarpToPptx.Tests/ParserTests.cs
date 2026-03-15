@@ -2558,6 +2558,37 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_BgImageSyntax_EmptyDirectiveClearsBackground_BgSyntaxDoesNotPromote()
+    {
+        // An explicit empty-value backgroundImage directive clears any inherited background.
+        // Even with ![bg](...) on the same slide, the empty directive wins: BackgroundImage stays "".
+        const string markdown = """
+        ---
+        backgroundImage: inherited.jpg
+        ---
+
+        # Slide One
+
+        ---
+
+        <!-- backgroundImage: -->
+        # Slide Two
+
+        ![bg](syntax.jpg)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        // Slide one inherits the front-matter background.
+        Assert.Equal("inherited.jpg", deck.Slides[0].Style.BackgroundImage);
+        // Slide two: the empty directive set BackgroundImage to "", so bg syntax is ignored.
+        Assert.Equal(string.Empty, deck.Slides[1].Style.BackgroundImage);
+        Assert.DoesNotContain(deck.Slides[1].Elements, e => e is ImageElement);
+    }
+
+    [Fact]
     public void Parser_BgImageSyntax_HeadingAndOtherElementsArePreserved()
     {
         const string markdown = """

@@ -115,13 +115,14 @@ public sealed class MarpMarkdownParser
 
             // Promote any ![bg](url) images to slide background image.
             // Only exact "bg" alt text (case-insensitive) is recognized in this slice.
-            // A directive-specified backgroundImage always takes precedence.
+            // A directive-specified backgroundImage always takes precedence: if a directive
+            // (including an empty-value clear) has set BackgroundImage, bg syntax is ignored.
             var bgImages = allElements
                 .OfType<ImageElement>()
                 .Where(img => IsBgAltText(img.AltText))
                 .ToList();
 
-            if (bgImages.Count > 0 && string.IsNullOrWhiteSpace(effectiveStyle.BackgroundImage))
+            if (bgImages.Count > 0 && effectiveStyle.BackgroundImage is null)
             {
                 effectiveStyle = MarpDirectiveParser.ApplyDirective(effectiveStyle, "backgroundimage", bgImages[0].Source);
             }
@@ -129,7 +130,7 @@ public sealed class MarpMarkdownParser
             var slide = new Slide { Style = effectiveStyle, Notes = notes, NoteSpans = ParseNoteSpans(notes) };
             foreach (var element in allElements)
             {
-                if (bgImages.Contains(element))
+                if (element is ImageElement img && IsBgAltText(img.AltText))
                 {
                     continue;
                 }
