@@ -136,9 +136,9 @@ Add a one-click export task to any content repository with a `.vscode/tasks.json
 
 Run **Terminal → Run Task → Export to PPTX** while editing a Markdown file. The `.pptx` appears next to your source file.
 
-This repo also publishes example Copilot skills under `.github/skills/` for users who want agent-driven export flows in their own content repositories. Those skills wrap the published CLI contract such as `dnx MarpToPptx` and `marp2pptx`; they are not tied to this repo's maintainer-only PowerShell scripts.
+This repo also publishes example Agent Skills under `.github/skills/` for users who want agent-driven export flows in their own content repositories. Those skills wrap the published CLI contract such as `dnx MarpToPptx` and `marp2pptx`; they are not tied to this repo's maintainer-only PowerShell scripts and are intended to stay portable across skills-compatible tools.
 
-For template-based export, version pinning, team sharing, example Copilot skills, and integrating the Marp for VS Code preview extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
+For template-based export, version pinning, team sharing, example Agent Skills, and integrating the Marp for VS Code preview extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
 
 ## 🎯 Sample Decks
 
@@ -173,4 +173,5 @@ See [`CONTRIBUTING.md`](CONTRIBUTING.md) for repository structure, conventions, 
 - [Template authoring guidelines](doc/template-authoring-guidelines.md)
 - [PPTX compatibility notes](doc/pptx-compatibility-notes.md)
 - [VS Code workflow integration](doc/vscode-workflow.md)
+- [Agent Skills](doc/agent-skills.md)
 - [Release validation checklist](doc/release-validation.md)

@@ -135,9 +135,9 @@ my-content-repo/
 └── README.md
 ```
 
-## Example Copilot Skills
+## Example Agent Skills
 
-This repository includes example Copilot skills under `.github/skills/` for users who prefer agent-driven export flows in addition to VS Code tasks.
+This repository includes example Agent Skills under `.github/skills/` for users who prefer agent-driven export flows in addition to VS Code tasks.
 
 The current examples cover:
 
@@ -145,16 +145,20 @@ The current examples cover:
 - exporting with a PowerPoint template
 - exporting with a theme CSS file
 - exporting diagram-heavy decks that use Mermaid or `diagram` fences
+- updating a previously exported managed deck with `slideId`, `--write-slide-ids`, and `--update-existing`
 
 These are example assets intended to be copied into a separate content repository, typically under that repository's own `.github/skills/` folder.
 
 Important boundaries:
 
-- These example skills target the published CLI surface such as `dnx MarpToPptx`, `marp2pptx`, and `dotnet tool run marp2pptx`.
+- These example Agent Skills target the published CLI surface such as `dnx MarpToPptx`, `marp2pptx`, and `dotnet tool run marp2pptx`.
 - They do not assume access to this source repository.
 - They do not depend on the maintainer-focused PowerShell helpers in `scripts/`.
+- They are meant to stay portable across skills-compatible agents and tools rather than being VS Code-only repo automation.
 
 Use tasks when you want a deterministic one-click export button. Use skills when you want an agent to choose the right published CLI invocation, detect a companion CSS file, or recognize that a deck is diagram-focused.
+
+For a short index of the example Agent Skills in this repository, see [doc/agent-skills.md](../doc/agent-skills.md).
 
 ## The Edit / Preview / Export Loop
 
