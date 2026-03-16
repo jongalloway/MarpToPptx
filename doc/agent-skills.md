@@ -16,4 +16,10 @@ For how to add Agent Skills to your own repository, see the official VS Code doc
 
 - [Use Agent Skills in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
 
+Related ecosystem references:
+
+- [Claude Agent Skills overview](https://platform.claude.com/docs/agents-and-tools/agent-skills/overview)
+- [Microsoft Agent Framework skills](https://learn.microsoft.com/agent-framework/agents/skills)
+- [OpenAI Codex skills](https://developers.openai.com/codex/skills)
+
 Review and adapt any copied skill for your own repo conventions before using it.
