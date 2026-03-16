@@ -1,4 +1,5 @@
 ﻿using MarpToPptx.Core;
+using MarpToPptx.Core.Authoring;
 using MarpToPptx.Pptx.Contrast;
 using MarpToPptx.Pptx.Rendering;
 
@@ -22,8 +23,8 @@ internal static class ProgramEntry
 			string? themeCssPath = null;
 			string? contrastReportPath = null;
 			string? existingDeckPath = null;
-			var updateExisting = false;
 			var allowRemoteAssets = false;
+			var writeSlideIds = false;
 			var contrastWarningMode = ContrastWarningMode.Off;
 
 			for (var index = 0; index < args.Length; index++)
@@ -44,16 +45,11 @@ internal static class ProgramEntry
 					case "--allow-remote-assets":
 						allowRemoteAssets = true;
 						break;
+					case "--write-slide-ids":
+						writeSlideIds = true;
+						break;
 					case "--update-existing":
-						// Update the existing output deck in place rather than rebuilding it
-						// from scratch. When set without an argument the output path is used.
-						// Accepts an optional explicit path: --update-existing [path]
-						updateExisting = true;
-						if (index + 1 < args.Length && !args[index + 1].StartsWith('-'))
-						{
-							index++;
-							existingDeckPath = args[index];
-						}
+						existingDeckPath = RequireValue(args, ref index, arg);
 						break;
 					case "--contrast-warnings":
 						contrastWarningMode = ParseContrastWarningMode(RequireValue(args, ref index, arg));
@@ -100,13 +96,9 @@ internal static class ProgramEntry
 				contrastReportPath = Path.GetFullPath(contrastReportPath);
 			}
 
-			// Resolve the existing deck path for update mode.
-			// When --update-existing was specified without an explicit path, use the output path.
-			if (updateExisting)
+			if (!string.IsNullOrWhiteSpace(existingDeckPath))
 			{
-				existingDeckPath = string.IsNullOrWhiteSpace(existingDeckPath)
-					? outputPath
-					: Path.GetFullPath(existingDeckPath);
+				existingDeckPath = RequireExistingFile(existingDeckPath, "Existing deck");
 			}
 
 			var markdown = File.ReadAllText(inputPath);
@@ -114,6 +106,18 @@ internal static class ProgramEntry
 
 			var compiler = new MarpCompiler();
 			var deck = compiler.Compile(markdown, inputPath, themeCss);
+
+			if (writeSlideIds)
+			{
+				var rewriteResult = SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
+				if (rewriteResult.AddedCount > 0)
+				{
+					File.WriteAllText(inputPath, rewriteResult.UpdatedMarkdown);
+					markdown = rewriteResult.UpdatedMarkdown;
+					deck = compiler.Compile(markdown, inputPath, themeCss);
+					Console.WriteLine($"Added {rewriteResult.AddedCount} slideId directive(s) to '{inputPath}'.");
+				}
+			}
 
 			var renderer = new OpenXmlPptxRenderer();
 			renderer.Render(deck, outputPath, new PptxRenderOptions
@@ -124,7 +128,7 @@ internal static class ProgramEntry
 				ExistingDeckPath = existingDeckPath,
 			});
 
-			var updateMode = !string.IsNullOrEmpty(existingDeckPath) && File.Exists(existingDeckPath);
+			var updateMode = !string.IsNullOrEmpty(existingDeckPath);
 			Console.WriteLine(updateMode
 				? $"Updated '{outputPath}'."
 				: $"Generated '{outputPath}'.");
@@ -187,16 +191,18 @@ internal static class ProgramEntry
 
 	private static void PrintUsage()
 	{
-		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--update-existing [path]] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
+		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--write-slide-ids] [--update-existing previous.pptx] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
 		Console.WriteLine();
 		Console.WriteLine("Options:");
 		Console.WriteLine("  -o, --output      Output .pptx path. Defaults to the input file name with a .pptx extension.");
 		Console.WriteLine("  --template        Existing .pptx template to copy masters/themes from before rendering slides.");
 		Console.WriteLine("  --theme-css       CSS file to parse for Marp-style theme values.");
 		Console.WriteLine("  --allow-remote-assets  Enable HTTP/HTTPS image downloads during rendering.");
-		Console.WriteLine("  --update-existing [path]  Update an existing MarpToPptx-generated deck instead of rebuilding from");
-		Console.WriteLine("                    scratch. Preserves manually added slides. Optionally specify a source path;");
-		Console.WriteLine("                    defaults to the output file when omitted.");
+		Console.WriteLine("  --write-slide-ids  Add missing per-slide '<!-- slideId: ... -->' directives to the");
+		Console.WriteLine("                    input Markdown before rendering. Existing slideId directives are preserved.");
+		Console.WriteLine("  --update-existing  Reconcile against an existing MarpToPptx-generated deck instead of");
+		Console.WriteLine("                    rebuilding from scratch. Requires the previous deck path and preserves");
+		Console.WriteLine("                    manually added slides.");
 		Console.WriteLine("  --contrast-warnings  Contrast warning mode: off, summary, or detailed.");
 		Console.WriteLine("  --warn-low-contrast  Backward-compatible alias for '--contrast-warnings detailed'.");
 		Console.WriteLine("  --contrast-report    Write a detailed contrast audit report to a text file. Implies a contrast audit run.");

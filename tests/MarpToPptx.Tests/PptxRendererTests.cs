@@ -6073,9 +6073,12 @@ public class PptxRendererTests
             var slideXml = slidePart.Slide!.OuterXml;
             Assert.Contains("urn:marptopptx:slide-metadata", slideXml);
             Assert.Contains("urn:marptopptx:metadata", slideXml);
-            Assert.Contains("guid", slideXml);
+            Assert.Contains("slideId", slideXml);
+            Assert.Contains("deckId", slideXml);
+            Assert.Contains("title", slideXml);
             Assert.Contains("hash", slideXml);
             Assert.Contains("sourceSlide", slideXml);
+            Assert.Contains("generatorVersion", slideXml);
             Assert.Contains("deck.md#slide-", slideXml);
         }
 
@@ -6084,7 +6087,7 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_SlideMetadataGuid_IsDeterministicAcrossRenders()
+    public void Renderer_SlideMetadataSlideId_IsDeterministicAcrossRenders()
     {
         using var workspace = TestWorkspace.Create();
         var markdownPath = workspace.WriteMarkdown("deck.md",
@@ -6099,16 +6102,16 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath1, workspace.RootPath);
         RenderDeck(markdownPath, outputPath2, workspace.RootPath);
 
-        string ExtractGuid(string pptxPath)
+        string ExtractSlideId(string pptxPath)
         {
             using var doc = PresentationDocument.Open(pptxPath, false);
             var slideXml = doc.PresentationPart!.SlideParts.Single().Slide!.OuterXml;
             var xdoc = XDocument.Parse(slideXml);
             XNamespace m2p = "urn:marptopptx:metadata";
-            return xdoc.Descendants(m2p + "guid").First().Value;
+            return xdoc.Descendants(m2p + "slideId").First().Value;
         }
 
-        Assert.Equal(ExtractGuid(outputPath1), ExtractGuid(outputPath2));
+        Assert.Equal(ExtractSlideId(outputPath1), ExtractSlideId(outputPath2));
     }
 
     [Fact]
@@ -6133,7 +6136,7 @@ public class PptxRendererTests
             Updated body text.
             """);
 
-        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
         // Should still have one slide.
@@ -6172,7 +6175,7 @@ public class PptxRendererTests
         var relIdBefore = GetSlideRelId(outputPath);
 
         // Re-render with no content change.
-        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
 
         var relIdAfter = GetSlideRelId(outputPath);
 
@@ -6249,7 +6252,7 @@ public class PptxRendererTests
 
             # Marp Slide Two Updated
             """);
-        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
 
         using var result = PresentationDocument.Open(outputPath, false);
         // Should have 3 slides: 2 updated Marp slides + 1 preserved unmanaged slide.
@@ -6289,7 +6292,7 @@ public class PptxRendererTests
 
             # New Second Slide
             """);
-        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
         Assert.Equal(2, document.PresentationPart!.SlideParts.Count());
@@ -6335,7 +6338,7 @@ public class PptxRendererTests
 
             # Slide Three
             """);
-        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
         // Should have 2 slides with the updated first and third Marp slides.
@@ -6391,7 +6394,7 @@ public class PptxRendererTests
             """
             # Updated Content
             """);
-        RenderDeckWithUpdate(markdownPath, outputPath, workspace.RootPath);
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
 
         using var result = PresentationDocument.Open(outputPath, false);
         var slideXml = result.PresentationPart!.SlideParts.Single().Slide!.OuterXml;
@@ -6406,7 +6409,7 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_Update_DoesFreshRender_WhenExistingDeckDoesNotExist()
+    public void Renderer_Update_Throws_WhenExistingDeckDoesNotExist()
     {
         using var workspace = TestWorkspace.Create();
         var markdownPath = workspace.WriteMarkdown("deck.md",
@@ -6414,27 +6417,172 @@ public class PptxRendererTests
             # Fresh Slide
             """);
 
-        // Point to a non-existent existing deck: should fall back to a normal fresh render.
+        // Point to a non-existent existing deck: should fail fast.
         var outputPath = workspace.GetPath("deck.pptx");
         var nonExistentPath = workspace.GetPath("does-not-exist.pptx");
 
         var compiler = new MarpCompiler();
         var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
         var renderer = new OpenXmlPptxRenderer();
-        renderer.Render(deck, outputPath, new PptxRenderOptions
+        Assert.Throws<FileNotFoundException>(() => renderer.Render(deck, outputPath, new PptxRenderOptions
         {
             SourceDirectory = workspace.RootPath,
             ExistingDeckPath = nonExistentPath,
-        });
+        }));
+    }
+
+    [Fact]
+    public void Renderer_Update_InsertsNewMarpSlide_WithoutRekeyingLaterSlides()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Intro
+
+            ---
+
+            # Details
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        string GetSlideRelIdByTitle(string pptxPath, string title)
+        {
+            using var doc = PresentationDocument.Open(pptxPath, false);
+            var slideIds = doc.PresentationPart!.Presentation!.SlideIdList!.Elements<P.SlideId>().ToArray();
+            foreach (var slideId in slideIds)
+            {
+                var slidePart = (SlidePart)doc.PresentationPart.GetPartById(slideId.RelationshipId!);
+                if (slidePart.Slide!.Descendants<A.Text>().Any(t => t.Text == title))
+                {
+                    return slideId.RelationshipId!;
+                }
+            }
+
+            throw new InvalidOperationException($"Slide '{title}' was not found.");
+        }
+
+        var detailsRelIdBefore = GetSlideRelIdByTitle(outputPath, "Details");
+
+        workspace.WriteMarkdown("deck.md",
+            """
+            # Intro
+
+            ---
+
+            # Agenda
+
+            ---
+
+            # Details
+            """);
+
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
+
+        var detailsRelIdAfter = GetSlideRelIdByTitle(outputPath, "Details");
+        Assert.Equal(detailsRelIdBefore, detailsRelIdAfter);
+    }
+
+    [Fact]
+    public void Renderer_Update_UsesExplicitSlideIdDirective_WhenTitleChanges()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- slideId: agenda -->
+            # Original Agenda
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        string GetSingleSlideId(string pptxPath)
+        {
+            using var doc = PresentationDocument.Open(pptxPath, false);
+            var xdoc = XDocument.Parse(doc.PresentationPart!.SlideParts.Single().Slide!.OuterXml);
+            XNamespace m2p = "urn:marptopptx:metadata";
+            return xdoc.Descendants(m2p + "slideId").Single().Value;
+        }
+
+        workspace.WriteMarkdown("deck.md",
+            """
+            <!-- slideId: agenda -->
+            # Updated Agenda Title
+            """);
+
+        RenderDeckWithUpdate(markdownPath, outputPath, outputPath, workspace.RootPath);
+
+        Assert.Equal("agenda", GetSingleSlideId(outputPath));
 
         using var document = PresentationDocument.Open(outputPath, false);
-        Assert.Single(document.PresentationPart!.SlideParts);
+        Assert.Contains(document.PresentationPart!.SlideParts.Single().Slide!.Descendants<A.Text>(), text => text.Text == "Updated Agenda Title");
+    }
+
+    [Fact]
+    public void Renderer_Update_UsesSeparateTemplateSource_ForTemplateSlides()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithDecoratedTemplateSlide(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _layout: Template[1] -->
+            # Session Title
+
+            Speaker Name\
+            Title\
+            Organization
+
+            Level: Intermediate
+            """);
+
+        var previousDeckPath = workspace.GetPath("previous.pptx");
+        RenderDeck(markdownPath, previousDeckPath, workspace.RootPath);
+
+        workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _layout: Template[1] -->
+            # Updated Session Title
+
+            Speaker Name\
+            Principal Engineer\
+            Organization
+
+            Level: Advanced
+            """);
+
+        var updatedOutputPath = workspace.GetPath("updated.pptx");
+        RenderDeckWithUpdate(markdownPath, previousDeckPath, updatedOutputPath, workspace.RootPath, templatePath);
+
+        using var document = PresentationDocument.Open(updatedOutputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        Assert.Contains(slidePart.Slide.Descendants<A.Text>(), text => text.Text == "Updated Session Title");
+        Assert.Contains(slidePart.Slide.Descendants<A.Text>(), text => text.Text == "Level: Advanced");
+
+        var referencedMasterRelIds = document.PresentationPart.SlideParts
+            .Select(sp => sp.SlideLayoutPart?.SlideMasterPart)
+            .Where(static master => master is not null)
+            .Select(master => document.PresentationPart.Parts.FirstOrDefault(part => ReferenceEquals(part.OpenXmlPart, master!)).RelationshipId)
+            .Where(static relId => !string.IsNullOrWhiteSpace(relId))
+            .Select(static relId => relId!)
+            .ToHashSet(StringComparer.Ordinal);
+        var listedMasterRelIds = document.PresentationPart.Presentation!.SlideMasterIdList!
+            .Elements<P.SlideMasterId>()
+            .Select(id => id.RelationshipId!.Value)
+            .ToHashSet(StringComparer.Ordinal);
+        Assert.True(referencedMasterRelIds.IsSubsetOf(listedMasterRelIds));
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
     }
 
-    private static void RenderDeckWithUpdate(string markdownPath, string outputPath, string sourceDirectory)
+    private static void RenderDeckWithUpdate(string markdownPath, string previousDeckPath, string outputPath, string sourceDirectory, string? templatePath = null)
     {
         var compiler = new MarpCompiler();
         var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
@@ -6442,7 +6590,8 @@ public class PptxRendererTests
         renderer.Render(deck, outputPath, new PptxRenderOptions
         {
             SourceDirectory = sourceDirectory,
-            ExistingDeckPath = outputPath,
+            ExistingDeckPath = previousDeckPath,
+            TemplatePath = templatePath,
         });
     }
 }

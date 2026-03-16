@@ -1291,6 +1291,25 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_SlideIdDirective_AppliesToCurrentSlideOnly()
+    {
+        const string markdown = """
+        <!-- slideId: intro -->
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal("intro", deck.Slides[0].Style.SlideId);
+        Assert.Null(deck.Slides[1].Style.SlideId);
+    }
+
+    [Fact]
     public void Parser_LocalThenSpotOnSameKey_CarriesLocalOnly()
     {
         const string markdown = """

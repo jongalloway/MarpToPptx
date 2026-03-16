@@ -45,6 +45,8 @@ public sealed class Slide
 
 public sealed class SlideStyle
 {
+    public string? SlideId { get; init; }
+
     public string? ThemeName { get; init; }
 
     public bool? Paginate { get; init; }
