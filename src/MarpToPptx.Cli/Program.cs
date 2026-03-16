@@ -1,4 +1,5 @@
 ﻿using MarpToPptx.Core;
+using MarpToPptx.Core.Authoring;
 using MarpToPptx.Pptx.Contrast;
 using MarpToPptx.Pptx.Rendering;
 
@@ -21,7 +22,9 @@ internal static class ProgramEntry
 			string? templatePath = null;
 			string? themeCssPath = null;
 			string? contrastReportPath = null;
+			string? existingDeckPath = null;
 			var allowRemoteAssets = false;
+			var writeSlideIds = false;
 			var contrastWarningMode = ContrastWarningMode.Off;
 
 			for (var index = 0; index < args.Length; index++)
@@ -41,6 +44,12 @@ internal static class ProgramEntry
 						break;
 					case "--allow-remote-assets":
 						allowRemoteAssets = true;
+						break;
+					case "--write-slide-ids":
+						writeSlideIds = true;
+						break;
+					case "--update-existing":
+						existingDeckPath = RequireValue(args, ref index, arg);
 						break;
 					case "--contrast-warnings":
 						contrastWarningMode = ParseContrastWarningMode(RequireValue(args, ref index, arg));
@@ -87,11 +96,28 @@ internal static class ProgramEntry
 				contrastReportPath = Path.GetFullPath(contrastReportPath);
 			}
 
+			if (!string.IsNullOrWhiteSpace(existingDeckPath))
+			{
+				existingDeckPath = RequireExistingFile(existingDeckPath, "Existing deck");
+			}
+
 			var markdown = File.ReadAllText(inputPath);
 			var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
 
 			var compiler = new MarpCompiler();
 			var deck = compiler.Compile(markdown, inputPath, themeCss);
+
+			if (writeSlideIds)
+			{
+				var rewriteResult = SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
+				if (rewriteResult.AddedCount > 0)
+				{
+					File.WriteAllText(inputPath, rewriteResult.UpdatedMarkdown);
+					markdown = rewriteResult.UpdatedMarkdown;
+					deck = compiler.Compile(markdown, inputPath, themeCss);
+					Console.WriteLine($"Added {rewriteResult.AddedCount} slideId directive(s) to '{inputPath}'.");
+				}
+			}
 
 			var renderer = new OpenXmlPptxRenderer();
 			renderer.Render(deck, outputPath, new PptxRenderOptions
@@ -99,9 +125,13 @@ internal static class ProgramEntry
 				TemplatePath = templatePath,
 				SourceDirectory = Path.GetDirectoryName(inputPath),
 				AllowRemoteAssets = allowRemoteAssets,
+				ExistingDeckPath = existingDeckPath,
 			});
 
-			Console.WriteLine($"Generated '{outputPath}'.");
+			var updateMode = !string.IsNullOrEmpty(existingDeckPath);
+			Console.WriteLine(updateMode
+				? $"Updated '{outputPath}'."
+				: $"Generated '{outputPath}'.");
 
 			if (contrastWarningMode != ContrastWarningMode.Off || !string.IsNullOrWhiteSpace(contrastReportPath))
 			{
@@ -161,13 +191,18 @@ internal static class ProgramEntry
 
 	private static void PrintUsage()
 	{
-		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
+		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--write-slide-ids] [--update-existing previous.pptx] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
 		Console.WriteLine();
 		Console.WriteLine("Options:");
 		Console.WriteLine("  -o, --output      Output .pptx path. Defaults to the input file name with a .pptx extension.");
 		Console.WriteLine("  --template        Existing .pptx template to copy masters/themes from before rendering slides.");
 		Console.WriteLine("  --theme-css       CSS file to parse for Marp-style theme values.");
 		Console.WriteLine("  --allow-remote-assets  Enable HTTP/HTTPS image downloads during rendering.");
+		Console.WriteLine("  --write-slide-ids  Add missing per-slide '<!-- slideId: ... -->' directives to the");
+		Console.WriteLine("                    input Markdown before rendering. Existing slideId directives are preserved.");
+		Console.WriteLine("  --update-existing  Reconcile against an existing MarpToPptx-generated deck instead of");
+		Console.WriteLine("                    rebuilding from scratch. Requires the previous deck path and preserves");
+		Console.WriteLine("                    manually added slides.");
 		Console.WriteLine("  --contrast-warnings  Contrast warning mode: off, summary, or detailed.");
 		Console.WriteLine("  --warn-low-contrast  Backward-compatible alias for '--contrast-warnings detailed'.");
 		Console.WriteLine("  --contrast-report    Write a detailed contrast audit report to a text file. Implies a contrast audit run.");

@@ -1291,6 +1291,25 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_SlideIdDirective_AppliesToCurrentSlideOnly()
+    {
+        const string markdown = """
+        <!-- slideId: intro -->
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal("intro", deck.Slides[0].Style.SlideId);
+        Assert.Null(deck.Slides[1].Style.SlideId);
+    }
+
+    [Fact]
     public void Parser_LocalThenSpotOnSameKey_CarriesLocalOnly()
     {
         const string markdown = """
@@ -2644,5 +2663,36 @@ public class ParserTests
         Assert.Single(deck.Slides);
         Assert.Equal("first.jpg", deck.Slides[0].Style.BackgroundImage);
         Assert.DoesNotContain(deck.Slides[0].Elements, e => e is ImageElement);
+    }
+
+    [Fact]
+    public void SlideIdDirectiveWriter_PreservesCrlfLineEndings_InFrontMatter()
+    {
+        // Arrange: CRLF front matter + CRLF body
+        var markdown = "---\r\ntheme: default\r\n---\r\n\r\n# Intro\r\n\r\n---\r\n\r\n# Details\r\n";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+        var result = MarpToPptx.Core.Authoring.SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
+
+        // The rewritten output should not mix LF-only inside the front matter with CRLF body.
+        Assert.Equal(2, result.AddedCount);
+
+        // Front matter block should use CRLF
+        Assert.Contains("---\r\ntheme: default\r\n---\r\n", result.UpdatedMarkdown);
+    }
+
+    [Fact]
+    public void SlideIdDirectiveWriter_PreservesLfLineEndings_WhenInputIsLf()
+    {
+        var markdown = "---\ntheme: default\n---\n\n# Intro\n\n---\n\n# Details\n";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+        var result = MarpToPptx.Core.Authoring.SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
+
+        Assert.Equal(2, result.AddedCount);
+        // No CRLF should be present when the input uses LF only.
+        Assert.DoesNotContain("\r\n", result.UpdatedMarkdown);
     }
 }

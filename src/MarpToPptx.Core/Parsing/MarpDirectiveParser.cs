@@ -46,6 +46,13 @@ public static partial class MarpDirectiveParser
                     continue;
                 }
 
+                if (string.Equals(key, "slideid", StringComparison.OrdinalIgnoreCase) ||
+                    string.Equals(key, "slide-id", StringComparison.OrdinalIgnoreCase))
+                {
+                    spotOverrides[key] = value;
+                    continue;
+                }
+
                 if (isSpot)
                 {
                     spotOverrides[key] = value;
@@ -85,6 +92,7 @@ public static partial class MarpDirectiveParser
     {
         return key.ToLowerInvariant() switch
         {
+            "slideid" or "slide-id" => Clone(style, slideId: value),
             "theme" => Clone(style, themeName: value),
             "paginate" => Clone(style, paginate: bool.TryParse(value, out var p) ? p : null),
             "layout" => Clone(style, layout: value),
@@ -135,6 +143,7 @@ public static partial class MarpDirectiveParser
 
     private static SlideStyle Clone(
         SlideStyle source,
+        string? slideId = null,
         string? themeName = null,
         bool? paginate = null,
         string? layout = null,
@@ -149,6 +158,7 @@ public static partial class MarpDirectiveParser
     {
         var clone = new SlideStyle
         {
+            SlideId = slideId ?? source.SlideId,
             ThemeName = themeName ?? source.ThemeName,
             Paginate = paginate ?? source.Paginate,
             Layout = layout ?? source.Layout,

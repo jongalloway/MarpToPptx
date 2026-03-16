@@ -1,5 +1,6 @@
 namespace MarpToPptx.Tests;
 
+[Collection(CliSerialCollection.Name)]
 public class CliContrastAuditTests
 {
     [Fact]

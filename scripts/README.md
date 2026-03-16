@@ -98,6 +98,30 @@ pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/01-minimal.md -Ex
 pwsh ./scripts/Invoke-PptxSmokeTest.ps1 -InputMarkdown samples/04-content-coverage.md -ExportSlides -SlideExportFormat jpg -CiSafe
 ```
 
+### `Invoke-ReentrantUpdateE2ESmokeTest.ps1`
+
+Run a local end-to-end re-entrant update scenario using a real PowerPoint template. The script creates a small Marp deck, generates an initial template-backed PPTX, optionally makes manual edits through PowerPoint COM automation, updates the Marp source, regenerates with `--update-existing`, validates the package, and reopens the final output in PowerPoint.
+
+This is intended as a repeatable local smoke test that a human or an LLM client can invoke directly.
+
+LLM prompt file:
+
+- `.github/prompts/run-reentrant-update-e2e-smoke-test.prompt.md`
+
+```powershell
+pwsh ./scripts/Invoke-ReentrantUpdateE2ESmokeTest.ps1
+pwsh ./scripts/Invoke-ReentrantUpdateE2ESmokeTest.ps1 -Configuration Release
+pwsh ./scripts/Invoke-ReentrantUpdateE2ESmokeTest.ps1 -OutputDirectory artifacts/smoke-tests/e2e-update-my-run
+pwsh ./scripts/Invoke-ReentrantUpdateE2ESmokeTest.ps1 -CiSafe
+```
+
+Notes:
+
+- By default the script uses the VS Live Vegas real-world template under `artifacts/real-world/`.
+- The default successful update path reuses the previously generated template-origin deck with `--update-existing` and does not re-pass `--template` on the update command.
+- Pass `-PassTemplateOnUpdate` only when you explicitly want to exercise the separate-template-on-update path.
+- PowerPoint COM automation is required for the manual-edit and final open-validation steps unless you run with `-CiSafe`.
+
 ### `Invoke-AllPptxSmokeTests.ps1`
 
 Run the smoke-test flow for each sample deck in `samples/`. By default, the script skips `samples/README.md`, the compatibility-gap repro sample, and remote-asset samples unless they are explicitly enabled.

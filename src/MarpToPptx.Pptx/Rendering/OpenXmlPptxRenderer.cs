@@ -3,12 +3,15 @@ using DocumentFormat.OpenXml.Packaging;
 using DocumentFormat.OpenXml.Office2010.PowerPoint;
 using DiagramForge;
 using DiagramForge.Abstractions;
+using MarpToPptx.Core.Authoring;
 using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Models;
 using MarpToPptx.Core.Themes;
 using DiagramForge.Models;
 using System.Globalization;
 using System.IO.Compression;
+using System.Security.Cryptography;
+using System.Text;
 using System.Xml.Linq;
 using A = DocumentFormat.OpenXml.Drawing;
 using IOPath = System.IO.Path;
@@ -25,6 +28,13 @@ public sealed class OpenXmlPptxRenderer
     private const string SvgBlipExtensionUri = "{96DAC541-7B7A-43D3-8B79-37D633B846F1}";
     private const double DiagramErrorLabelVerticalGap = 4;
     private const double DiagramErrorLabelHeight = 20;
+
+    // Slide-level extLst metadata constants for the re-entrant update mode.
+    private const string SlideMetadataExtUri = "urn:marptopptx:slide-metadata";
+    private const string SlideMetadataNamespace = "urn:marptopptx:metadata";
+    private const string SlideMetadataPrefix = "m2p";
+    private const string SlideMetadataSchemaVersion = "2";
+
     private static readonly byte[] MediaPlaceholderImage = Convert.FromBase64String(
         "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
     private static readonly DiagramRenderer _diagramRenderer = new();
@@ -45,48 +55,72 @@ public sealed class OpenXmlPptxRenderer
             ? new RemoteAssetResolver(options.RemoteAssetHandler)
             : null;
 
-        using (var document = OpenPresentation(outputPath, options.TemplatePath))
+        var existingDeckPath = options.ExistingDeckPath;
+        if (!string.IsNullOrWhiteSpace(existingDeckPath) && !File.Exists(existingDeckPath))
         {
-            var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
-            if (string.IsNullOrEmpty(options.TemplatePath))
+            throw new FileNotFoundException("Existing deck file was not found.", existingDeckPath);
+        }
+
+        var isUpdateMode = !string.IsNullOrWhiteSpace(existingDeckPath);
+        var slideMetadata = BuildRenderedSlideMetadata(deck, options.TemplatePath);
+
+        if (isUpdateMode)
+        {
+            // Copy the existing deck to the output path if they differ, then update in place.
+            if (!string.Equals(existingDeckPath, outputPath, StringComparison.OrdinalIgnoreCase))
             {
-                EnsureRelationshipId(document, presentationPart, "rId1");
-            }
-            var allLayouts = EnsurePresentationScaffold(presentationPart);
-            var templateSlides = GetSlidesInPresentationOrder(presentationPart);
-
-            // Pre-clone all template slide parts before ClearSlides runs.
-            // In some SDK environments (e.g., DocumentFormat.OpenXml 3.x on .NET 10),
-            // removing a slide's <p:sldId> XML reference automatically destroys the
-            // SlidePart and ALL its sub-parts (images, layouts, etc.). By pre-cloning
-            // each template slide into a new SlidePart first, we add an extra OPC
-            // relationship from the pre-clone to every sub-part, keeping those sub-parts
-            // alive even after the original SlidePart is destroyed.
-            var preClonedTemplateSlides = templateSlides.Count > 0
-                ? templateSlides.Select(sp => PreCloneTemplateSlidePart(presentationPart, sp)).ToArray()
-                : [];
-
-            var templateSelector = new SlideTemplateSelector(allLayouts, preClonedTemplateSlides);
-
-            ClearSlides(presentationPart);
-
-            var language = deck.Language ?? "en-US";
-            var slideNumber = 1;
-            foreach (var slideModel in deck.Slides)
-            {
-                var slideKind = SlideTemplateSelector.Classify(slideModel);
-                var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout);
-                AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
-                slideNumber++;
+                File.Copy(existingDeckPath!, outputPath, overwrite: true);
             }
 
-            DeleteSlideParts(presentationPart, templateSlides);
-            // Remove pre-cloned orphaned slides. Shared sub-parts (images, layouts) are
-            // preserved because they are also referenced by the rendered slide parts.
-            DeleteSlideParts(presentationPart, preClonedTemplateSlides);
+            using var document = PresentationDocument.Open(outputPath, isEditable: true);
+            UpdateExistingPresentation(document, deck, slideMetadata, options, remoteAssets, outputPath);
+        }
+        else
+        {
+            using (var document = OpenPresentation(outputPath, options.TemplatePath))
+            {
+                var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
+                if (string.IsNullOrEmpty(options.TemplatePath))
+                {
+                    EnsureRelationshipId(document, presentationPart, "rId1");
+                }
+                var allLayouts = EnsurePresentationScaffold(presentationPart);
+                var templateSlides = GetSlidesInPresentationOrder(presentationPart);
 
-            EnsureDocumentProperties(document, deck, options.TemplatePath);
-            presentationPart.Presentation!.Save();
+                // Pre-clone all template slide parts before ClearSlides runs.
+                // In some SDK environments (e.g., DocumentFormat.OpenXml 3.x on .NET 10),
+                // removing a slide's <p:sldId> XML reference automatically destroys the
+                // SlidePart and ALL its sub-parts (images, layouts, etc.). By pre-cloning
+                // each template slide into a new SlidePart first, we add an extra OPC
+                // relationship from the pre-clone to every sub-part, keeping those sub-parts
+                // alive even after the original SlidePart is destroyed.
+                var preClonedTemplateSlides = templateSlides.Count > 0
+                    ? templateSlides.Select(sp => PreCloneTemplateSlidePart(presentationPart, sp)).ToArray()
+                    : [];
+
+                var templateSelector = new SlideTemplateSelector(allLayouts, preClonedTemplateSlides);
+
+                ClearSlides(presentationPart);
+
+                var language = deck.Language ?? "en-US";
+                var slideNumber = 1;
+                foreach (var slideModel in deck.Slides)
+                {
+                    var slideKind = SlideTemplateSelector.Classify(slideModel);
+                    var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout);
+                    var sp = AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, slideMetadata[slideNumber - 1], deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
+                    AppendSlideId(presentationPart, sp);
+                    slideNumber++;
+                }
+
+                DeleteSlideParts(presentationPart, templateSlides);
+                // Remove pre-cloned orphaned slides. Shared sub-parts (images, layouts) are
+                // preserved because they are also referenced by the rendered slide parts.
+                DeleteSlideParts(presentationPart, preClonedTemplateSlides);
+
+                EnsureDocumentProperties(document, deck, options.TemplatePath);
+                presentationPart.Presentation!.Save();
+            }
         }
 
         NormalizePackage(outputPath);
@@ -94,6 +128,316 @@ public sealed class OpenXmlPptxRenderer
 
     private static string? GetSourceDirectory(string? sourcePath)
         => string.IsNullOrWhiteSpace(sourcePath) ? null : IOPath.GetDirectoryName(sourcePath);
+
+    private static IReadOnlyList<SlideLayoutPart> GetPresentationLayouts(PresentationPart presentationPart)
+        => presentationPart.SlideMasterParts
+            .SelectMany(static master => master.SlideLayoutParts)
+            .ToArray();
+
+    /// <summary>
+    /// Reconciles an existing MarpToPptx-generated deck against a new Marp source.
+    /// <list type="bullet">
+    ///   <item>Managed slides (those with MarpToPptx <c>extLst</c> metadata) are updated in place when their content hash has changed, or kept as-is when unchanged.</item>
+    ///   <item>Managed slides with no matching Marp slide (removed from source) are deleted.</item>
+    ///   <item>Unmanaged slides (no MarpToPptx metadata) are preserved in their original positions.</item>
+    ///   <item>New Marp slides are appended after the existing content.</item>
+    /// </list>
+    /// </summary>
+    private void UpdateExistingPresentation(PresentationDocument document, SlideDeck deck, IReadOnlyList<SlideMetadata> slideMetadata, PptxRenderOptions options, RemoteAssetResolver? remoteAssets, string outputPath)
+    {
+        var presentationPart = document.PresentationPart ?? document.AddPresentationPart();
+        EnsurePresentationScaffold(presentationPart);
+
+        IReadOnlyList<SlideLayoutPart> allLayouts;
+        SlidePart[] preClonedTemplateSlides;
+        PresentationDocument? templateDocument = null;
+
+        if (!string.IsNullOrWhiteSpace(options.TemplatePath) &&
+            !string.Equals(options.TemplatePath, outputPath, StringComparison.OrdinalIgnoreCase))
+        {
+            templateDocument = PresentationDocument.Open(options.TemplatePath, false);
+            var templatePresentationPart = templateDocument.PresentationPart
+                ?? throw new InvalidOperationException("The template presentation is missing a presentation part.");
+            allLayouts = GetPresentationLayouts(templatePresentationPart);
+            if (allLayouts.Count == 0)
+            {
+                throw new InvalidOperationException("The template presentation does not contain any slide layouts.");
+            }
+
+            var templateSlides = GetSlidesInPresentationOrder(templatePresentationPart);
+            preClonedTemplateSlides = templateSlides.Count > 0
+                ? templateSlides.Select(sp => PreCloneTemplateSlidePart(presentationPart, sp)).ToArray()
+                : [];
+        }
+        else
+        {
+            allLayouts = GetPresentationLayouts(presentationPart);
+            preClonedTemplateSlides = [];
+        }
+
+        var language = deck.Language ?? "en-US";
+        var sourceDirectory = options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath);
+
+        // Read existing slides and their MarpToPptx metadata.
+        var existingSlides = GetSlidesInPresentationOrder(presentationPart);
+        var existingMeta = existingSlides.Select(ReadSlideMetadata).ToArray();
+
+        var templateSelector = new SlideTemplateSelector(allLayouts, preClonedTemplateSlides);
+
+        var managedSlidesById = new Dictionary<string, (SlidePart Part, SlideMetadata Metadata)>(StringComparer.OrdinalIgnoreCase);
+        var managedSlideOrder = new List<string>();
+        var leadingUnmanagedSlides = new List<SlidePart>();
+        var unmanagedSlidesAfterManaged = new Dictionary<string, List<SlidePart>>(StringComparer.OrdinalIgnoreCase);
+        string? lastManagedSlideId = null;
+
+        for (var i = 0; i < existingSlides.Count; i++)
+        {
+            var slidePart = existingSlides[i];
+            var metadata = existingMeta[i];
+
+            if (metadata is null)
+            {
+                if (lastManagedSlideId is null)
+                {
+                    leadingUnmanagedSlides.Add(slidePart);
+                }
+                else
+                {
+                    if (!unmanagedSlidesAfterManaged.TryGetValue(lastManagedSlideId, out var attachedSlides))
+                    {
+                        attachedSlides = [];
+                        unmanagedSlidesAfterManaged[lastManagedSlideId] = attachedSlides;
+                    }
+
+                    attachedSlides.Add(slidePart);
+                }
+
+                continue;
+            }
+
+            if (!managedSlidesById.ContainsKey(metadata.SlideId))
+            {
+                managedSlidesById[metadata.SlideId] = (slidePart, metadata);
+                managedSlideOrder.Add(metadata.SlideId);
+            }
+
+            lastManagedSlideId = metadata.SlideId;
+        }
+
+        var newSlideParts = new List<SlidePart>(leadingUnmanagedSlides);
+        var consumedUnmanagedAnchors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+        for (var i = 0; i < deck.Slides.Count; i++)
+        {
+            var marpSlide = deck.Slides[i];
+            var metadata = slideMetadata[i];
+
+            SlidePart nextSlidePart;
+            if (managedSlidesById.TryGetValue(metadata.SlideId, out var existingManaged))
+            {
+                if (existingManaged.Metadata.Hash == metadata.Hash)
+                {
+                    nextSlidePart = existingManaged.Part;
+                }
+                else
+                {
+                    var slideKind = SlideTemplateSelector.Classify(marpSlide);
+                    var selectedLayout = templateSelector.SelectLayout(marpSlide, slideKind, deck.DefaultContentLayout);
+                    nextSlidePart = AddSlide(presentationPart, selectedLayout.LayoutPart, marpSlide, metadata, deck.Theme, sourceDirectory, remoteAssets, selectedLayout.UseTemplateStyle, i + 1, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
+                }
+            }
+            else
+            {
+                var slideKind = SlideTemplateSelector.Classify(marpSlide);
+                var selectedLayout = templateSelector.SelectLayout(marpSlide, slideKind, deck.DefaultContentLayout);
+                nextSlidePart = AddSlide(presentationPart, selectedLayout.LayoutPart, marpSlide, metadata, deck.Theme, sourceDirectory, remoteAssets, selectedLayout.UseTemplateStyle, i + 1, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
+            }
+
+            newSlideParts.Add(nextSlidePart);
+
+            if (unmanagedSlidesAfterManaged.TryGetValue(metadata.SlideId, out var attachedSlides))
+            {
+                newSlideParts.AddRange(attachedSlides);
+                consumedUnmanagedAnchors.Add(metadata.SlideId);
+            }
+        }
+
+        foreach (var managedSlideId in managedSlideOrder)
+        {
+            if (!consumedUnmanagedAnchors.Contains(managedSlideId) &&
+                unmanagedSlidesAfterManaged.TryGetValue(managedSlideId, out var attachedSlides))
+            {
+                newSlideParts.AddRange(attachedSlides);
+            }
+        }
+
+        // Delete orphaned and replaced slide parts (including their sub-parts).
+        // Compute the set of parts we want to KEEP, then delete everything else.
+        // This is more robust than tracking individual parts to delete because it
+        // accounts for any parts added by AddSlide that are not in newSlideParts.
+        var partsToKeep = new HashSet<SlidePart>(newSlideParts, ReferenceEqualityComparer.Instance);
+        foreach (var sp in presentationPart.SlideParts.ToArray())
+        {
+            if (!partsToKeep.Contains(sp))
+            {
+                presentationPart.DeletePart(sp);
+            }
+        }
+
+        // Rebuild the slide ID list in the new order.
+        var slideIdList = presentationPart.Presentation!.SlideIdList ??= new P.SlideIdList();
+        foreach (var slideId in slideIdList.Elements<P.SlideId>().ToList())
+        {
+            slideId.Remove();
+        }
+
+        foreach (var sp in newSlideParts)
+        {
+            AppendSlideId(presentationPart, sp);
+        }
+
+        EnsureSlideMasterIdsMatchParts(presentationPart);
+        EnsureDocumentProperties(document, deck, options.TemplatePath);
+        presentationPart.Presentation!.Save();
+        templateDocument?.Dispose();
+    }
+
+    /// <summary>
+    /// Builds the slide metadata that MarpToPptx writes into each managed slide.
+    /// </summary>
+    private static SlideMetadata[] BuildRenderedSlideMetadata(SlideDeck deck, string? templatePath)
+    {
+        var deckId = SlideIdentityGenerator.ComputeDeckId(deck);
+        var computedIdentities = SlideIdentityGenerator.BuildSlideIdentities(deck);
+        var templateRef = string.IsNullOrWhiteSpace(templatePath) ? null : IOPath.GetFileName(templatePath);
+        var generatorVersion = typeof(OpenXmlPptxRenderer).Assembly.GetName().Version?.ToString() ?? "0.0.0";
+        var metadata = new SlideMetadata[deck.Slides.Count];
+
+        for (var i = 0; i < deck.Slides.Count; i++)
+        {
+            var slide = deck.Slides[i];
+            var identity = computedIdentities[i];
+
+            var layoutRef = !string.IsNullOrWhiteSpace(slide.Style.Layout)
+                ? slide.Style.Layout
+                : SlideTemplateSelector.Classify(slide) == SlideKind.Content
+                    ? deck.DefaultContentLayout
+                    : null;
+
+            metadata[i] = new SlideMetadata(
+                SchemaVersion: SlideMetadataSchemaVersion,
+                DeckId: deckId,
+                SlideId: identity.SlideId,
+                Title: identity.Title,
+                Hash: identity.Hash,
+                SourceSlide: identity.SourceSlide,
+                GeneratorVersion: generatorVersion,
+                LayoutRef: layoutRef,
+                TemplateRef: templateRef);
+        }
+
+        return metadata;
+    }
+
+    /// <summary>
+    /// Upserts MarpToPptx slide metadata into the slide's <c>p:extLst</c>.
+    /// Only the MarpToPptx-owned <c>p:ext</c> entry is touched; unknown extension
+    /// children are left untouched.
+    /// </summary>
+    private static void WriteSlideMetadata(P.Slide slide, SlideMetadata metadata)
+    {
+        var extLst = slide.GetFirstChild<P.ExtensionListWithModification>();
+        if (extLst is null)
+        {
+            extLst = new P.ExtensionListWithModification();
+            slide.AppendChild(extLst);
+        }
+
+        // Remove any pre-existing MarpToPptx extension so we do a clean upsert.
+        var existingExt = extLst.Elements<P.Extension>()
+            .FirstOrDefault(e => e.Uri?.Value == SlideMetadataExtUri);
+        existingExt?.Remove();
+
+        // Build inner XML using XElement so values are properly XML-escaped.
+        var ns = XNamespace.Get(SlideMetadataNamespace);
+        var metaXml = new XElement(
+            ns + "meta",
+            new XAttribute("version", metadata.SchemaVersion),
+            new XAttribute(XNamespace.Xmlns + SlideMetadataPrefix, SlideMetadataNamespace),
+            new XElement(ns + "deckId", metadata.DeckId),
+            new XElement(ns + "slideId", metadata.SlideId),
+            new XElement(ns + "title", metadata.Title),
+            new XElement(ns + "hash", metadata.Hash),
+            new XElement(ns + "sourceSlide", metadata.SourceSlide),
+            new XElement(ns + "generatorVersion", metadata.GeneratorVersion),
+            metadata.LayoutRef is null ? null : new XElement(ns + "layoutRef", metadata.LayoutRef),
+            metadata.TemplateRef is null ? null : new XElement(ns + "templateRef", metadata.TemplateRef))
+            .ToString(SaveOptions.DisableFormatting);
+
+        var ext = new P.Extension { Uri = SlideMetadataExtUri };
+        ext.InnerXml = metaXml;
+        extLst.AppendChild(ext);
+    }
+
+    /// <summary>
+    /// Reads MarpToPptx slide metadata from the slide's <c>p:extLst</c>.
+    /// Returns <c>null</c> when the slide has no MarpToPptx metadata (unmanaged slide).
+    /// Uses raw XML parsing to avoid OpenXML SDK type-mapping issues with custom extension elements.
+    /// </summary>
+    private static SlideMetadata? ReadSlideMetadata(SlidePart slidePart)
+    {
+        var slide = slidePart.Slide;
+        if (slide is null)
+        {
+            return null;
+        }
+
+        // Parse the slide's outer XML with XDocument for robust, type-independent access.
+        // The SDK's typed API may not reliably reflect custom extension content in
+        // deserialized in-memory elements (e.g., GetFirstChild<P.ExtensionListWithModification>
+        // may return null for slides that were serialized/deserialized through the SDK).
+        try
+        {
+            XNamespace p = "http://schemas.openxmlformats.org/presentationml/2006/main";
+            XNamespace m2p = SlideMetadataNamespace;
+
+            var slideDoc = XDocument.Parse(slide.OuterXml);
+            var ext = slideDoc.Descendants(p + "ext")
+                .FirstOrDefault(e => (string?)e.Attribute("uri") == SlideMetadataExtUri);
+
+            if (ext is null)
+            {
+                return null;
+            }
+
+            var meta = ext.Descendants(m2p + "meta").FirstOrDefault();
+            if (meta is null)
+            {
+                return null;
+            }
+
+            var slideId = meta.Element(m2p + "slideId")?.Value;
+            if (string.IsNullOrEmpty(slideId))
+            {
+                return null;
+            }
+
+            var schemaVersion = meta.Attribute("version")?.Value ?? "1";
+            var deckId = meta.Element(m2p + "deckId")?.Value ?? string.Empty;
+            var title = meta.Element(m2p + "title")?.Value ?? string.Empty;
+            var hash = meta.Element(m2p + "hash")?.Value ?? string.Empty;
+            var sourceSlide = meta.Element(m2p + "sourceSlide")?.Value ?? string.Empty;
+            var generatorVersion = meta.Element(m2p + "generatorVersion")?.Value ?? string.Empty;
+            var layoutRef = meta.Element(m2p + "layoutRef")?.Value;
+            var templateRef = meta.Element(m2p + "templateRef")?.Value;
+            return new SlideMetadata(schemaVersion, deckId, slideId, title, hash, sourceSlide, generatorVersion, layoutRef, templateRef);
+        }
+        catch (System.Xml.XmlException)
+        {
+            // Malformed slide XML: treat as unmanaged.
+            return null;
+        }
+    }
 
     private static PresentationDocument OpenPresentation(string outputPath, string? templatePath)
     {
@@ -267,6 +611,57 @@ public sealed class OpenXmlPptxRenderer
         tableStylesPart.TableStyleList.Save();
     }
 
+    private static void EnsureSlideMasterIdsMatchParts(PresentationPart presentationPart)
+    {
+        var presentation = presentationPart.Presentation ?? throw new InvalidOperationException("The presentation part is missing a presentation document.");
+        var slideMasterIdList = presentation.SlideMasterIdList ??= new P.SlideMasterIdList();
+
+        var existingByRelId = slideMasterIdList.Elements<P.SlideMasterId>()
+            .Select(static id => id.RelationshipId?.Value)
+            .Where(static relId => !string.IsNullOrWhiteSpace(relId))
+            .ToDictionary(static relId => relId!, StringComparer.Ordinal);
+
+        var nextMasterId = slideMasterIdList.Elements<P.SlideMasterId>()
+            .Select(static id => id.Id?.Value ?? 2147483647U)
+            .DefaultIfEmpty(2147483647U)
+            .Max() + 1U;
+
+        var allReferencedSlideMasters = presentationPart.SlideParts
+            .Select(static slidePart => slidePart.SlideLayoutPart?.SlideMasterPart)
+            .Where(static master => master is not null)
+            .Distinct()
+            .Cast<SlideMasterPart>()
+            .Concat(presentationPart.SlideMasterParts)
+            .Distinct()
+            .ToArray();
+
+        foreach (var slideMasterPart in allReferencedSlideMasters)
+        {
+            var relId = presentationPart.Parts
+                .FirstOrDefault(part => ReferenceEquals(part.OpenXmlPart, slideMasterPart))
+                .RelationshipId;
+
+            if (string.IsNullOrWhiteSpace(relId))
+            {
+                relId = GetNextRelationshipId(presentationPart);
+                presentationPart.AddPart(slideMasterPart, relId);
+            }
+
+            if (existingByRelId.ContainsKey(relId))
+            {
+                continue;
+            }
+
+            slideMasterIdList.Append(new P.SlideMasterId
+            {
+                Id = nextMasterId++,
+                RelationshipId = relId,
+            });
+
+            existingByRelId[relId] = relId;
+        }
+    }
+
     private static void EnsureDocumentProperties(PresentationDocument document, SlideDeck deck, string? templatePath)
     {
         var now = DateTime.UtcNow;
@@ -317,7 +712,7 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private void AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language, TemplateSlideReference? templateSlide = null, string? globalDiagramTheme = null)
+    private SlidePart AddSlide(PresentationPart presentationPart, SlideLayoutPart slideLayoutPart, MarpToPptx.Core.Models.Slide slideModel, SlideMetadata metadata, ThemeDefinition theme, string? sourceDirectory, RemoteAssetResolver? remoteAssets, bool useTemplateStyle, int slideNumber, string language, TemplateSlideReference? templateSlide = null, string? globalDiagramTheme = null)
     {
         SlidePart slidePart;
         P.ShapeTree shapeTree;
@@ -374,13 +769,13 @@ public sealed class OpenXmlPptxRenderer
                 AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
             }
             ApplyTransition(slidePart.Slide, slideModel.Style.Transition);
+            WriteSlideMetadata(slidePart.Slide, metadata);
             slidePart.Slide.Save();
-            AppendSlideId(presentationPart, slidePart);
             if (!string.IsNullOrWhiteSpace(slideModel.Notes))
             {
                 AddNotesSlide(presentationPart, slidePart, slideModel.NoteSpans, slideModel.Notes!, effectiveTheme, language);
             }
-            return;
+            return slidePart;
         }
 
         // Placeholder-based rendering: when a named layout matched, write text content
@@ -393,13 +788,13 @@ public sealed class OpenXmlPptxRenderer
         {
             AddHeaderFooterAndPageNumber(context, slideModel.Style, effectiveTheme.Body, slideNumber);
             ApplyTransition(slidePart.Slide, slideModel.Style.Transition);
+            WriteSlideMetadata(slidePart.Slide, metadata);
             slidePart.Slide.Save();
-            AppendSlideId(presentationPart, slidePart);
             if (!string.IsNullOrWhiteSpace(slideModel.Notes))
             {
                 AddNotesSlide(presentationPart, slidePart, slideModel.NoteSpans, slideModel.Notes!, effectiveTheme, language);
             }
-            return;
+            return slidePart;
         }
 
         // Read placeholder bounds from the selected layout. When the title placeholder
@@ -471,13 +866,15 @@ public sealed class OpenXmlPptxRenderer
         AddHeaderFooterAndPageNumber(context, slideModel.Style, bodyStyle, slideNumber);
 
         ApplyTransition(slidePart.Slide, slideModel.Style.Transition);
+        WriteSlideMetadata(slidePart.Slide, metadata);
         slidePart.Slide.Save();
-        AppendSlideId(presentationPart, slidePart);
 
         if (!string.IsNullOrWhiteSpace(slideModel.Notes))
         {
             AddNotesSlide(presentationPart, slidePart, slideModel.NoteSpans, slideModel.Notes!, effectiveTheme, language);
         }
+
+        return slidePart;
     }
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
@@ -2998,14 +3395,10 @@ public sealed class OpenXmlPptxRenderer
         };
 
     private static string GetPresentationTitle(SlideDeck deck)
-        => deck.Slides
-            .Select(GetSlideTitle)
-            .FirstOrDefault(static title => !string.IsNullOrWhiteSpace(title))
-            ?? (string.IsNullOrWhiteSpace(deck.SourcePath) ? "PowerPoint Presentation" : IOPath.GetFileNameWithoutExtension(deck.SourcePath));
+        => SlideIdentityGenerator.GetPresentationTitle(deck);
 
     private static string GetSlideTitle(MarpToPptx.Core.Models.Slide slide)
-        => slide.Elements.OfType<HeadingElement>().FirstOrDefault()?.Text?.Trim()
-            ?? "PowerPoint Presentation";
+        => SlideIdentityGenerator.GetSlideTitle(slide);
 
     private static XDocument CreateExtendedPropertiesDocument(SlideDeck deck)
     {
@@ -3291,6 +3684,13 @@ public sealed class OpenXmlPptxRenderer
     private static void EnsureRelationshipId(OpenXmlPartContainer container, OpenXmlPart part, string relationshipId)
     {
         if (container.GetIdOfPart(part) == relationshipId)
+        {
+            return;
+        }
+
+        if (container.Parts.Any(existingPart =>
+            string.Equals(existingPart.RelationshipId, relationshipId, StringComparison.Ordinal) &&
+            !ReferenceEquals(existingPart.OpenXmlPart, part)))
         {
             return;
         }
