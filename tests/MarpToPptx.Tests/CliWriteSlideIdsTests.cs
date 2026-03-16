@@ -2,6 +2,7 @@ using System.Text.RegularExpressions;
 
 namespace MarpToPptx.Tests;
 
+[Collection(CliSerialCollection.Name)]
 public class CliWriteSlideIdsTests
 {
     [Fact]

@@ -61,7 +61,7 @@ public sealed class OpenXmlPptxRenderer
             throw new FileNotFoundException("Existing deck file was not found.", existingDeckPath);
         }
 
-        var isUpdateMode = !string.IsNullOrEmpty(existingDeckPath);
+        var isUpdateMode = !string.IsNullOrWhiteSpace(existingDeckPath);
         var slideMetadata = BuildRenderedSlideMetadata(deck, options.TemplatePath);
 
         if (isUpdateMode)
@@ -181,18 +181,6 @@ public sealed class OpenXmlPptxRenderer
         // Read existing slides and their MarpToPptx metadata.
         var existingSlides = GetSlidesInPresentationOrder(presentationPart);
         var existingMeta = existingSlides.Select(ReadSlideMetadata).ToArray();
-
-        // Compute stable slide identities for the current Marp slides.
-        var marpSlideIds = slideMetadata
-            .Select(static metadata => metadata.SlideId)
-            .ToArray();
-
-        // Build a reverse lookup: slideId → Marp slide index.
-        var marpBySlideId = new Dictionary<string, int>(StringComparer.OrdinalIgnoreCase);
-        for (var i = 0; i < marpSlideIds.Length; i++)
-        {
-            marpBySlideId[marpSlideIds[i]] = i;
-        }
 
         var templateSelector = new SlideTemplateSelector(allLayouts, preClonedTemplateSlides);
 

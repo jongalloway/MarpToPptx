@@ -123,8 +123,20 @@ public static class SlideIdentityGenerator
         sb.Append("notes\x01").Append(slideModel.Notes ?? string.Empty);
         sb.Append("\x01bg\x01").Append(slideModel.Style.BackgroundColor ?? string.Empty);
         sb.Append("\x01bgImg\x01").Append(slideModel.Style.BackgroundImage ?? string.Empty);
+        sb.Append("\x01bgSize\x01").Append(slideModel.Style.BackgroundSize ?? string.Empty);
+        sb.Append("\x01bgPos\x01").Append(slideModel.Style.BackgroundPosition ?? string.Empty);
         sb.Append("\x01layout\x01").Append(slideModel.Style.Layout ?? string.Empty);
         sb.Append("\x01class\x01").Append(slideModel.Style.ClassName ?? string.Empty);
+        sb.Append("\x01theme\x01").Append(slideModel.Style.ThemeName ?? string.Empty);
+        sb.Append("\x01header\x01").Append(slideModel.Style.Header ?? string.Empty);
+        sb.Append("\x01footer\x01").Append(slideModel.Style.Footer ?? string.Empty);
+        sb.Append("\x01paginate\x01").Append(slideModel.Style.Paginate?.ToString() ?? string.Empty);
+        if (slideModel.Style.Transition is { } t)
+        {
+            // \x01 separates this field from others; \x01 again separates the sub-fields
+            // (type, direction, durationMs) within the transition value.
+            sb.Append("\x01transition\x01").Append(t.Type).Append('\x01').Append(t.Direction ?? string.Empty).Append('\x01').Append(t.DurationMs?.ToString() ?? string.Empty);
+        }
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();

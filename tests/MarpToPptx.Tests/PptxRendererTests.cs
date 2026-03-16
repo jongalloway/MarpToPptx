@@ -6349,7 +6349,7 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_Update_PreservesUnknownExtLstEntries_WhenUpdatingSlide()
+    public void Renderer_Update_ReplacesChangedManagedSlideCompletely_IncludingUnknownExtensions()
     {
         using var workspace = TestWorkspace.Create();
         var markdownPath = workspace.WriteMarkdown("deck.md",
@@ -6401,9 +6401,9 @@ public class PptxRendererTests
 
         // The MarpToPptx metadata should be present (updated).
         Assert.Contains("urn:marptopptx:slide-metadata", slideXml);
-        // The unknown extension should NOT be present because the slide was fully re-rendered.
-        // (This is expected V1 behavior: only unmanaged slides are fully preserved;
-        //  content within a managed slide that changes is replaced entirely.)
+        // Unknown extensions injected into the old slide are NOT preserved because a changed
+        // managed slide is fully replaced in V1. This is expected behavior.
+        Assert.DoesNotContain(unknownUri, slideXml);
         Assert.Contains("Updated Content", result.PresentationPart.SlideParts.Single().Slide!
             .Descendants<A.Text>().Select(t => t.Text).ToArray());
     }
@@ -6574,7 +6574,9 @@ public class PptxRendererTests
             .ToHashSet(StringComparer.Ordinal);
         var listedMasterRelIds = document.PresentationPart.Presentation!.SlideMasterIdList!
             .Elements<P.SlideMasterId>()
-            .Select(id => id.RelationshipId!.Value)
+            .Select(id => id.RelationshipId?.Value)
+            .Where(static id => id is not null)
+            .Select(static id => id!)
             .ToHashSet(StringComparer.Ordinal);
         Assert.True(referencedMasterRelIds.IsSubsetOf(listedMasterRelIds));
 

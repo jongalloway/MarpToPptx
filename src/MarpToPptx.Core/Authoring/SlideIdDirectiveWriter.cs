@@ -12,7 +12,7 @@ public static partial class SlideIdDirectiveWriter
     public static SlideIdRewriteResult WriteMissingSlideIds(string markdown, SlideDeck deck)
     {
         var newline = markdown.Contains("\r\n", StringComparison.Ordinal) ? "\r\n" : "\n";
-        var (prefix, body) = SplitFrontMatter(markdown);
+        var (prefix, body) = SplitFrontMatter(markdown, newline);
         var headingDivider = TryParseHeadingDivider(deck.FrontMatter);
         var chunks = SplitSlidesPreservingBody(body, headingDivider);
         if (chunks.Count != deck.Slides.Count)
@@ -57,7 +57,7 @@ public static partial class SlideIdDirectiveWriter
             ? hdLevel
             : null;
 
-    private static (string Prefix, string Body) SplitFrontMatter(string markdown)
+    private static (string Prefix, string Body) SplitFrontMatter(string markdown, string newline)
     {
         var normalized = markdown.Replace("\r\n", "\n");
         if (!normalized.StartsWith("---\n", StringComparison.Ordinal))
@@ -72,7 +72,8 @@ public static partial class SlideIdDirectiveWriter
             return (string.Empty, normalized);
         }
 
-        var prefix = string.Join('\n', lines[..(closingIndex + 1)]) + "\n";
+        // Rebuild prefix using the detected newline style of the original input.
+        var prefix = string.Join(newline, lines[..(closingIndex + 1)]) + newline;
         var body = string.Join('\n', lines[(closingIndex + 1)..]);
         return (prefix, body);
     }
