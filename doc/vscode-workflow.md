@@ -78,7 +78,7 @@ This example adds two tasks: one that exports the currently open file to a `.ppt
 }
 ```
 
-Run either task from **Terminal → Run Task** or by pressing <kbd>Ctrl+Shift+B</kbd> (Windows / Linux) or <kbd>⌘⇧B</kbd> (macOS) if you mark it as the default build task.
+Run either task from **Terminal → Run Task** or by pressing `Ctrl+Shift+B` (Windows / Linux) or `Cmd+Shift+B` (macOS) if you mark it as the default build task.
 
 ### Variable reference
 
@@ -121,7 +121,7 @@ Commit `.vscode/tasks.json` to your content repository. Because `dnx` resolves t
 
 Typical content repository layout:
 
-```
+```text
 my-content-repo/
 ├── .vscode/
 │   └── tasks.json          ← commit this
@@ -134,6 +134,27 @@ my-content-repo/
 │   └── deck-two.md
 └── README.md
 ```
+
+## Example Copilot Skills
+
+This repository includes example Copilot skills under `.github/skills/` for users who prefer agent-driven export flows in addition to VS Code tasks.
+
+The current examples cover:
+
+- exporting the current deck to PPTX
+- exporting with a PowerPoint template
+- exporting with a theme CSS file
+- exporting diagram-heavy decks that use Mermaid or `diagram` fences
+
+These are example assets intended to be copied into a separate content repository, typically under that repository's own `.github/skills/` folder.
+
+Important boundaries:
+
+- These example skills target the published CLI surface such as `dnx MarpToPptx`, `marp2pptx`, and `dotnet tool run marp2pptx`.
+- They do not assume access to this source repository.
+- They do not depend on the maintainer-focused PowerShell helpers in `scripts/`.
+
+Use tasks when you want a deterministic one-click export button. Use skills when you want an agent to choose the right published CLI invocation, detect a companion CSS file, or recognize that a deck is diagram-focused.
 
 ## The Edit / Preview / Export Loop
 

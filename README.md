@@ -136,7 +136,9 @@ Add a one-click export task to any content repository with a `.vscode/tasks.json
 
 Run **Terminal → Run Task → Export to PPTX** while editing a Markdown file. The `.pptx` appears next to your source file.
 
-For template-based export, version pinning, team sharing, and integrating the Marp for VS Code preview extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
+This repo also publishes example Copilot skills under `.github/skills/` for users who want agent-driven export flows in their own content repositories. Those skills wrap the published CLI contract such as `dnx MarpToPptx` and `marp2pptx`; they are not tied to this repo's maintainer-only PowerShell scripts.
+
+For template-based export, version pinning, team sharing, example Copilot skills, and integrating the Marp for VS Code preview extension, see [`doc/vscode-workflow.md`](doc/vscode-workflow.md).
 
 ## 🎯 Sample Decks
 
