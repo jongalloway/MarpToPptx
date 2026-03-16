@@ -15,3 +15,5 @@ Agent Skills are part of the broader skills ecosystem and are designed to be por
 For how to add Agent Skills to your own repository, see the official VS Code documentation:
 
 - [Use Agent Skills in VS Code](https://code.visualstudio.com/docs/copilot/customization/agent-skills)
+
+Review and adapt any copied skill for your own repo conventions before using it.
