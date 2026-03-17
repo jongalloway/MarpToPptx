@@ -221,3 +221,33 @@ pillars:
       - OpenAI
       - Search
 ```
+
+---
+
+## Conceptual Funnel
+
+Uses the deck-level `diagram-theme: prism`.
+
+```diagram
+diagram: funnel
+stages:
+  - Awareness
+  - Evaluation
+  - Conversion
+```
+
+---
+
+## Conceptual Radial
+
+Uses the deck-level `diagram-theme: prism`.
+
+```diagram
+diagram: radial
+center: Platform
+items:
+  - Security
+  - Reliability
+  - Observability
+  - Developer Experience
+```

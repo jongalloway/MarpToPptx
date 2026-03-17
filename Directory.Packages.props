@@ -3,7 +3,7 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="DiagramForge" Version="1.0.0" />
+    <PackageVersion Include="DiagramForge" Version="1.1.0" />
     <PackageVersion Include="DocumentFormat.OpenXml" Version="3.4.1" />
     <PackageVersion Include="Markdig" Version="1.1.1" />
     <PackageVersion Include="MinVer" Version="7.0.0" />
