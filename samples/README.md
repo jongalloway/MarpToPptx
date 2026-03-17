@@ -31,7 +31,7 @@ Dedicated smoke deck for presenter notes packaging, including note-bearing slide
 Speaker-style showcase deck generated from repo content, using `08-showcase.css` plus local Marp SVG assets to cover the Marp ecosystem, MarpToPptx capabilities, presenter notes, and the recommended VS Code task configuration.
 
 9. `09-diagrams.md`
-Diagram-focused sample deck that mixes Mermaid fences and `diagram` fences to exercise DiagramForge-backed flowchart, block, state, mindmap, matrix, and pyramid output with the companion `09-diagrams.css` theme.
+Diagram-focused sample deck that mixes Mermaid fences and `diagram` fences to exercise DiagramForge-backed flowchart, block, state, mindmap, matrix, pyramid, funnel, and radial output with the companion `09-diagrams.css` theme.
 
 ## Theme Decks
 

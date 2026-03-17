@@ -5384,6 +5384,76 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_DiagramFence_FunnelAndRadial_WithEmbeddedFrontMatter_RenderSvg()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Funnel Diagram
+
+            ```diagram
+            ---
+            theme: presentation
+            ---
+            diagram: funnel
+            stages:
+              - Awareness
+              - Evaluation
+              - Conversion
+            ```
+
+            ---
+
+            # Radial Diagram
+
+            ```diagram
+            ---
+            theme: presentation
+            ---
+            diagram: radial
+            center: Platform
+            items:
+              - Security
+              - Reliability
+              - Observability
+              - Developer Experience
+            ```
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(2, slideParts.Length);
+
+        foreach (var slidePart in slideParts)
+        {
+            var pictures = slidePart.Slide!.Descendants<P.Picture>().ToArray();
+            Assert.NotEmpty(pictures);
+
+            var svgPart = slidePart.ImageParts
+                .FirstOrDefault(p => string.Equals(p.ContentType, "image/svg+xml", StringComparison.OrdinalIgnoreCase));
+            Assert.NotNull(svgPart);
+
+            using var stream = svgPart!.GetStream();
+            var svg = new StreamReader(stream).ReadToEnd();
+            Assert.Contains("<svg", svg, StringComparison.OrdinalIgnoreCase);
+
+            var svgRelId = slidePart.GetIdOfPart(svgPart);
+            Assert.Contains(pictures, pic => pic.Descendants<DocumentFormat.OpenXml.Office2019.Drawing.SVG.SVGBlip>().Any(b => b.Embed?.Value == svgRelId));
+
+            var textRuns = slidePart.Slide.Descendants<A.Text>().Select(t => t.Text).ToArray();
+            Assert.DoesNotContain(textRuns, t => t.StartsWith("Diagram parse error:", StringComparison.Ordinal));
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_DiagramFence_Pyramid_WithEmbeddedFrontMatter_RendersSvg()
     {
         // Real-world authored fence: pyramid diagram with embedded --- theme: presentation --- block.

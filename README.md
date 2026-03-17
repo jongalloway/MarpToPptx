@@ -18,7 +18,7 @@ There's just one hangup. When you're asked to turn in a PowerPoint deck at a con
 
 **That's where MarpToPptx comes in. 🎉** It reads your Marp-flavored Markdown and produces native Open XML PowerPoint files where every heading, bullet, table, and code block is a real, selectable, editable PowerPoint shape. The output opens cleanly in PowerPoint — no repair prompts, no surprises.
 
-> Diagram support: MarpToPptx renders both `mermaid` fences and `diagram` fences through [DiagramForge](https://github.com/jongalloway/DiagramForge), so Mermaid subsets plus conceptual layouts like matrix and pyramid can be embedded directly in your deck source.
+> Diagram support: MarpToPptx renders both `mermaid` fences and `diagram` fences through [DiagramForge](https://github.com/jongalloway/DiagramForge), so Mermaid subsets plus conceptual layouts like matrix, pyramid, funnel, and radial can be embedded directly in your deck source.
 
 ```mermaid
 flowchart LR
