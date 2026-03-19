@@ -840,13 +840,13 @@ public sealed class OpenXmlPptxRenderer
                     AddBulletList(context, frame, list, bodyStyle);
                     break;
                 case ImageElement image:
-                    AddImage(context, frame, image.Source, image.AltText, image.Caption);
+                    AddImage(context, frame, image.Source, image.AltText, image.Caption,
+                        explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
                     break;
                 case VideoElement video:
                     AddVideo(context, frame, video.Source, video.AltText);
                     break;
-                case AudioElement audio:
-                    AddAudio(context, frame, audio.Source, audio.AltText);
+                case AudioElement audio:                    AddAudio(context, frame, audio.Source, audio.AltText);
                     break;
                 case CodeBlockElement code:
                     AddCodeBlock(context, frame, code, effectiveTheme.Code);
@@ -1222,7 +1222,8 @@ public sealed class OpenXmlPptxRenderer
                         AddBulletList(context, frame, list, bodyStyle);
                         break;
                     case ImageElement image:
-                        AddImage(context, frame, image.Source, image.AltText, image.Caption);
+                        AddImage(context, frame, image.Source, image.AltText, image.Caption,
+                            explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
                         break;
                     case VideoElement video:
                         AddVideo(context, frame, video.Source, video.AltText);
@@ -1412,7 +1413,8 @@ public sealed class OpenXmlPptxRenderer
                         AddBulletList(context, placed.Frame, list, bodyStyle);
                         break;
                     case ImageElement image:
-                        AddImage(context, placed.Frame, image.Source, image.AltText, image.Caption);
+                        AddImage(context, placed.Frame, image.Source, image.AltText, image.Caption,
+                            explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
                         break;
                     case VideoElement video:
                         AddVideo(context, placed.Frame, video.Source, video.AltText);
@@ -2610,7 +2612,7 @@ public sealed class OpenXmlPptxRenderer
         return luminance >= 160 ? "1F2937" : "FFFFFF";
     }
 
-    private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, string? caption = null, bool useFullBleed = false, double xAlign = 0.5, double yAlign = 0.5)
+    private static void AddImage(SlideRenderContext context, Rect frame, string source, string altText, string? caption = null, bool useFullBleed = false, double xAlign = 0.5, double yAlign = 0.5, double? explicitWidth = null, double? explicitHeight = null, double? sizePercent = null)
     {
         // When a visible caption is requested, reserve a strip at the bottom of the frame.
         const double captionGap = 4.0;           // gap between image and caption, in points
@@ -2640,7 +2642,7 @@ public sealed class OpenXmlPptxRenderer
             imagePart.FeedData(imageStream);
         }
 
-        var (x, y, width, height) = CalculateImagePlacement(imageFrame, resolved, useFullBleed, xAlign, yAlign);
+        var (x, y, width, height) = CalculateImagePlacement(imageFrame, resolved, useFullBleed, xAlign, yAlign, explicitWidth, explicitHeight, sizePercent);
         var relationshipId = context.SlidePart.GetIdOfPart(imagePart);
         var blip = CreateImageBlip(contentType, relationshipId);
 
@@ -2958,38 +2960,84 @@ public sealed class OpenXmlPptxRenderer
         }
     }
 
-    private static (double X, double Y, double Width, double Height) CalculateImagePlacement(Rect frame, string imagePath, bool useFullBleed, double xAlign = 0.5, double yAlign = 0.5)
+    private static (double X, double Y, double Width, double Height) CalculateImagePlacement(Rect frame, string imagePath, bool useFullBleed, double xAlign = 0.5, double yAlign = 0.5, double? explicitWidth = null, double? explicitHeight = null, double? sizePercent = null)
     {
+        // --- Explicit / percentage sizing path ---
+        // When any Marpit sizing directive is present, bypass the normal fit-to-frame logic
+        // and compute dimensions directly from the requested size, preserving aspect ratio when
+        // only one dimension is specified. The image is centred within the allocated frame.
+        if (explicitWidth.HasValue || explicitHeight.HasValue || sizePercent.HasValue)
+        {
+            if (!ImageMetadataReader.TryReadSize(imagePath, out var pw, out var ph) || pw <= 0 || ph <= 0)
+            {
+                // No size metadata: fall back to the frame dimensions.
+                return (frame.X, frame.Y, frame.Width, frame.Height);
+            }
+
+            var imageAspect = (double)pw / ph;
+            double finalWidth, finalHeight;
+
+            if (explicitWidth.HasValue && explicitHeight.HasValue)
+            {
+                // Both axes specified: use them verbatim (may distort aspect ratio, Marpit-compatible).
+                finalWidth = explicitWidth.Value;
+                finalHeight = explicitHeight.Value;
+            }
+            else if (explicitWidth.HasValue)
+            {
+                finalWidth = explicitWidth.Value;
+                finalHeight = finalWidth / imageAspect;
+            }
+            else if (explicitHeight.HasValue)
+            {
+                finalHeight = explicitHeight.Value;
+                finalWidth = finalHeight * imageAspect;
+            }
+            else
+            {
+                // Percentage sizing: N% of the full slide width.
+                const double slideWidth = SlideWidthEmu / (double)LayoutScale;
+                finalWidth = slideWidth * (sizePercent!.Value / 100.0);
+                finalHeight = finalWidth / imageAspect;
+            }
+
+            // Centre the image within the allocated frame.
+            var cx = frame.X + Math.Max(0, (frame.Width - finalWidth) * xAlign);
+            var cy = frame.Y + Math.Max(0, (frame.Height - finalHeight) * yAlign);
+            return (cx, cy, finalWidth, finalHeight);
+        }
+
+        // --- Default fit-to-frame path (unchanged) ---
         if (!ImageMetadataReader.TryReadSize(imagePath, out var pixelWidth, out var pixelHeight) || pixelWidth <= 0 || pixelHeight <= 0)
         {
             return (frame.X, frame.Y, frame.Width, frame.Height);
         }
 
-        var imageAspect = (double)pixelWidth / pixelHeight;
+        var aspect = (double)pixelWidth / pixelHeight;
         var frameAspect = frame.Width / frame.Height;
 
         if (useFullBleed)
         {
-            if (imageAspect > frameAspect)
+            if (aspect > frameAspect)
             {
-                var scaledWidth = frame.Height * imageAspect;
+                var scaledWidth = frame.Height * aspect;
                 var overflow = scaledWidth - frame.Width;
                 return (frame.X - overflow * xAlign, frame.Y, scaledWidth, frame.Height);
             }
 
-            var scaledHeight = frame.Width / imageAspect;
+            var scaledHeight = frame.Width / aspect;
             var overflowY = scaledHeight - frame.Height;
             return (frame.X, frame.Y - overflowY * yAlign, frame.Width, scaledHeight);
         }
 
-        if (imageAspect > frameAspect)
+        if (aspect > frameAspect)
         {
-            var fittedHeight = frame.Width / imageAspect;
+            var fittedHeight = frame.Width / aspect;
             var gapY = frame.Height - fittedHeight;
             return (frame.X, frame.Y + gapY * yAlign, frame.Width, fittedHeight);
         }
 
-        var fittedWidth = frame.Height * imageAspect;
+        var fittedWidth = frame.Height * aspect;
         var gapX = frame.Width - fittedWidth;
         return (frame.X + gapX * xAlign, frame.Y, fittedWidth, frame.Height);
     }

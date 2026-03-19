@@ -506,7 +506,23 @@ public sealed class MarpMarkdownParser
                     }
                     else
                     {
-                        yield return new ImageElement(url, altText, caption);
+                        // Skip Marpit sizing parsing for alt texts that start with the "bg" keyword
+                        // (e.g. "bg 50%", "bg left"). Background-image sizing is handled separately
+                        // and is not yet implemented; stripping tokens from those alt texts would
+                        // incorrectly promote "bg 50%" to a background image via the IsBgAltText check.
+                        var trimmedAlt = altText.Trim();
+                        var isBgAlt = string.Equals(trimmedAlt, "bg", StringComparison.OrdinalIgnoreCase)
+                            || trimmedAlt.StartsWith("bg ", StringComparison.OrdinalIgnoreCase);
+
+                        if (!isBgAlt)
+                        {
+                            var (explicitWidth, explicitHeight, sizePercent, cleanAltText) = MarpitImageSizingParser.Parse(altText);
+                            yield return new ImageElement(url, cleanAltText, caption, explicitWidth, explicitHeight, sizePercent);
+                        }
+                        else
+                        {
+                            yield return new ImageElement(url, altText, caption);
+                        }
                     }
 
                     break;

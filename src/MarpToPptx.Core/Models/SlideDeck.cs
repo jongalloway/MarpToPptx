@@ -127,7 +127,29 @@ public sealed record BulletListItem(IReadOnlyList<InlineSpan> Spans, int Depth =
 /// Optional visible caption rendered below the image.
 /// Specify via the Markdown image title attribute: <c>![alt](url "Caption text")</c>.
 /// </param>
-public sealed record ImageElement(string Source, string AltText, string? Caption = null) : ISlideElement;
+/// <param name="ExplicitWidth">
+/// Explicit image width in layout units (points), parsed from a Marpit <c>w:</c> sizing directive
+/// (e.g. <c>![w:200px](img.png)</c>). When set, the renderer scales the image to this width;
+/// height is preserved from the image's aspect ratio unless <see cref="ExplicitHeight"/> is also set.
+/// </param>
+/// <param name="ExplicitHeight">
+/// Explicit image height in layout units (points), parsed from a Marpit <c>h:</c> sizing directive
+/// (e.g. <c>![h:150px](img.png)</c>). When set, the renderer scales the image to this height;
+/// width is preserved from the image's aspect ratio unless <see cref="ExplicitWidth"/> is also set.
+/// </param>
+/// <param name="SizePercent">
+/// Percentage of the slide width to use for the image, parsed from a Marpit percentage sizing
+/// directive (e.g. <c>![50%](img.png)</c>). Values are in the range 0–100. The renderer scales the
+/// image width to this percentage of the full slide width; height is preserved from aspect ratio.
+/// Ignored when <see cref="ExplicitWidth"/> or <see cref="ExplicitHeight"/> is set.
+/// </param>
+public sealed record ImageElement(
+    string Source,
+    string AltText,
+    string? Caption = null,
+    double? ExplicitWidth = null,
+    double? ExplicitHeight = null,
+    double? SizePercent = null) : ISlideElement;
 
 public sealed record VideoElement(string Source, string AltText) : ISlideElement;
 

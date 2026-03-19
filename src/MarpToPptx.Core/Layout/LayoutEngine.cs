@@ -22,7 +22,7 @@ public sealed class LayoutEngine
                 HeadingElement heading => CreateHeadingFrame(heading, theme, contentX, contentWidth, ref y, isTitleSlide),
                 ParagraphElement paragraph => CreateParagraphFrame(paragraph.Text, theme.Body.FontSize, contentX, contentWidth, ref y),
                 BulletListElement list => CreateParagraphFrame(string.Join("\n", list.Items.Select(item => item.Text)), theme.Body.FontSize, contentX, contentWidth, ref y, 1.2),
-                ImageElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
+                ImageElement image => CreateImageFrame(image, contentX, contentWidth, ref y),
                 VideoElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 AudioElement => CreateFixedFrame(contentX, contentWidth, ref y, 80),
                 MermaidDiagramElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
@@ -53,6 +53,39 @@ public sealed class LayoutEngine
         var frame = new Rect(x, y, width, height);
         y += height + 12;
         return frame;
+    }
+
+    private static Rect CreateImageFrame(ImageElement image, double x, double width, ref double y)
+    {
+        // When an explicit height is given, honour it so subsequent elements are placed below.
+        // When only a width is given, estimate height from a 4:3 aspect ratio as a conservative
+        // placeholder (the renderer will compute the exact aspect-ratio-correct height).
+        // Percentage sizing uses the same estimation.
+        const double defaultHeight = 220;
+        double height;
+
+        if (image.ExplicitHeight.HasValue)
+        {
+            height = image.ExplicitHeight.Value;
+        }
+        else if (image.ExplicitWidth.HasValue)
+        {
+            // Estimate: width / (4/3) → preserve an approximate 4:3 ratio.
+            height = image.ExplicitWidth.Value * 0.75;
+        }
+        else if (image.SizePercent.HasValue)
+        {
+            // Estimate using the frame width (100%) scaled to the percentage.
+            var scaledWidth = width * (image.SizePercent.Value / 100.0);
+            height = scaledWidth * 0.75;
+        }
+        else
+        {
+            height = defaultHeight;
+        }
+
+        height = Math.Max(20, height);
+        return CreateFixedFrame(x, width, ref y, height);
     }
 
     private static Rect CreateFixedFrame(double x, double width, ref double y, double height)

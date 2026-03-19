@@ -500,10 +500,8 @@ public class ParserTests
     }
 
     [Fact]
-    public void Parser_MarpitWidthDirective_YieldsImageElementWithKeywordsAsAltText()
+    public void Parser_MarpitWidthDirective_YieldsImageElementWithExplicitWidth()
     {
-        // Marpit upstream: ![w:200px](image.jpg) renders the image at 200 px wide.
-        // Current behavior: treated as a normal image; alt text is "w:200px".
         const string markdown = """
         # Slide
 
@@ -515,14 +513,16 @@ public class ParserTests
 
         var slide = Assert.Single(deck.Slides);
         var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("w:200px", image.AltText);
+        // Sizing token is stripped from alt text; 200px → 150 layout units (0.75 conversion).
+        Assert.Equal(string.Empty, image.AltText);
+        Assert.Equal(150.0, image.ExplicitWidth);
+        Assert.Null(image.ExplicitHeight);
+        Assert.Null(image.SizePercent);
     }
 
     [Fact]
-    public void Parser_MarpitHeightDirective_YieldsImageElementWithKeywordsAsAltText()
+    public void Parser_MarpitHeightDirective_YieldsImageElementWithExplicitHeight()
     {
-        // Marpit upstream: ![h:150px](image.jpg) renders the image at 150 px tall.
-        // Current behavior: treated as a normal image; alt text is "h:150px".
         const string markdown = """
         # Slide
 
@@ -534,14 +534,16 @@ public class ParserTests
 
         var slide = Assert.Single(deck.Slides);
         var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("h:150px", image.AltText);
+        // Sizing token is stripped from alt text; 150px → 112.5 layout units (0.75 conversion).
+        Assert.Equal(string.Empty, image.AltText);
+        Assert.Null(image.ExplicitWidth);
+        Assert.Equal(112.5, image.ExplicitHeight);
+        Assert.Null(image.SizePercent);
     }
 
     [Fact]
-    public void Parser_MarpitWidthAndHeightDirectives_YieldsImageElementWithKeywordsAsAltText()
+    public void Parser_MarpitWidthAndHeightDirectives_YieldsImageElementWithBothDimensions()
     {
-        // Marpit upstream: ![w:200px h:150px](image.jpg) renders at explicit dimensions.
-        // Current behavior: treated as a normal image; alt text is "w:200px h:150px".
         const string markdown = """
         # Slide
 
@@ -553,14 +555,16 @@ public class ParserTests
 
         var slide = Assert.Single(deck.Slides);
         var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("w:200px h:150px", image.AltText);
+        // Both sizing tokens stripped; 200px → 150 lu, 150px → 112.5 lu (0.75 conversion).
+        Assert.Equal(string.Empty, image.AltText);
+        Assert.Equal(150.0, image.ExplicitWidth);
+        Assert.Equal(112.5, image.ExplicitHeight);
+        Assert.Null(image.SizePercent);
     }
 
     [Fact]
-    public void Parser_MarpitPercentageSizing_YieldsImageElementWithKeywordsAsAltText()
+    public void Parser_MarpitPercentageSizing_YieldsImageElementWithSizePercent()
     {
-        // Marpit upstream: ![50%](image.jpg) renders the image at 50% of the slide width.
-        // Current behavior: treated as a normal image; alt text is "50%".
         const string markdown = """
         # Slide
 
@@ -572,7 +576,32 @@ public class ParserTests
 
         var slide = Assert.Single(deck.Slides);
         var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("50%", image.AltText);
+        // Percentage token stripped from alt text; stored as SizePercent = 50.
+        Assert.Equal(string.Empty, image.AltText);
+        Assert.Null(image.ExplicitWidth);
+        Assert.Null(image.ExplicitHeight);
+        Assert.Equal(50.0, image.SizePercent);
+    }
+
+    [Fact]
+    public void Parser_MarpitSizingWithDescriptiveText_StripsTokensAndPreservesDescription()
+    {
+        // Sizing tokens are stripped; any remaining text becomes the accessible alt description.
+        const string markdown = """
+        # Slide
+
+        ![w:200px My photo](photo.png)
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        var image = Assert.Single(slide.Elements.OfType<ImageElement>());
+        Assert.Equal("My photo", image.AltText);
+        Assert.Equal(150.0, image.ExplicitWidth);
+        Assert.Null(image.ExplicitHeight);
+        Assert.Null(image.SizePercent);
     }
 
     [Fact]
