@@ -846,7 +846,8 @@ public sealed class OpenXmlPptxRenderer
                 case VideoElement video:
                     AddVideo(context, frame, video.Source, video.AltText);
                     break;
-                case AudioElement audio:                    AddAudio(context, frame, audio.Source, audio.AltText);
+                case AudioElement audio:
+                    AddAudio(context, frame, audio.Source, audio.AltText);
                     break;
                 case CodeBlockElement code:
                     AddCodeBlock(context, frame, code, effectiveTheme.Code);
@@ -2970,7 +2971,18 @@ public sealed class OpenXmlPptxRenderer
         {
             if (!ImageMetadataReader.TryReadSize(imagePath, out var pw, out var ph) || pw <= 0 || ph <= 0)
             {
-                // No size metadata: fall back to the frame dimensions.
+                // No size metadata. When both dimensions are explicitly specified, honour them
+                // without needing the intrinsic image size. For single-axis or percentage sizing
+                // the aspect ratio is required, so fall back to the frame dimensions.
+                if (explicitWidth.HasValue && explicitHeight.HasValue)
+                {
+                    return (
+                        frame.X + (frame.Width - explicitWidth.Value) * xAlign,
+                        frame.Y + (frame.Height - explicitHeight.Value) * yAlign,
+                        explicitWidth.Value,
+                        explicitHeight.Value);
+                }
+
                 return (frame.X, frame.Y, frame.Width, frame.Height);
             }
 
@@ -3001,9 +3013,9 @@ public sealed class OpenXmlPptxRenderer
                 finalHeight = finalWidth / imageAspect;
             }
 
-            // Centre the image within the allocated frame.
-            var cx = frame.X + Math.Max(0, (frame.Width - finalWidth) * xAlign);
-            var cy = frame.Y + Math.Max(0, (frame.Height - finalHeight) * yAlign);
+            // Centre the image within the allocated frame, honoring alignment even when oversized.
+            var cx = frame.X + (frame.Width - finalWidth) * xAlign;
+            var cy = frame.Y + (frame.Height - finalHeight) * yAlign;
             return (cx, cy, finalWidth, finalHeight);
         }
 

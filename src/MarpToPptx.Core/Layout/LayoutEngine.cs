@@ -58,9 +58,12 @@ public sealed class LayoutEngine
     private static Rect CreateImageFrame(ImageElement image, double x, double width, ref double y)
     {
         // When an explicit height is given, honour it so subsequent elements are placed below.
-        // When only a width is given, estimate height from a 4:3 aspect ratio as a conservative
-        // placeholder (the renderer will compute the exact aspect-ratio-correct height).
-        // Percentage sizing uses the same estimation.
+        // When only a width or a percentage is given, we don't know the image's aspect ratio at
+        // layout time. Use a 1:1 (square) estimate for width-only cases — this is intentionally
+        // conservative for typical landscape images; portrait or square images will use the full
+        // estimated space. Percentage sizing scales the square estimate by the percentage.
+        // The renderer uses the actual image aspect ratio, so tall images may still overflow;
+        // this heuristic minimises overlap for the common wide-image case.
         const double defaultHeight = 220;
         double height;
 
@@ -70,14 +73,14 @@ public sealed class LayoutEngine
         }
         else if (image.ExplicitWidth.HasValue)
         {
-            // Estimate: width / (4/3) → preserve an approximate 4:3 ratio.
-            height = image.ExplicitWidth.Value * 0.75;
+            // Use a 1:1 estimate. Wide images will have extra space below; tall images may overlap.
+            height = image.ExplicitWidth.Value;
         }
         else if (image.SizePercent.HasValue)
         {
-            // Estimate using the frame width (100%) scaled to the percentage.
+            // Estimate using the frame width (100%) scaled to the percentage, assuming 1:1.
             var scaledWidth = width * (image.SizePercent.Value / 100.0);
-            height = scaledWidth * 0.75;
+            height = scaledWidth;
         }
         else
         {

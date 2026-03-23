@@ -149,7 +149,16 @@ public sealed record ImageElement(
     string? Caption = null,
     double? ExplicitWidth = null,
     double? ExplicitHeight = null,
-    double? SizePercent = null) : ISlideElement;
+    double? SizePercent = null) : ISlideElement
+{
+    /// <summary>
+    /// Backward-compatible constructor matching the original 3-parameter signature.
+    /// </summary>
+    public ImageElement(string Source, string AltText, string? Caption = null)
+        : this(Source, AltText, Caption, null, null, null)
+    {
+    }
+}
 
 public sealed record VideoElement(string Source, string AltText) : ISlideElement;
 

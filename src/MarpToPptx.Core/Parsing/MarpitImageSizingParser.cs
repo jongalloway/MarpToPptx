@@ -80,22 +80,22 @@ internal static partial class MarpitImageSizingParser
             return string.Empty;
         });
 
-        // Process percentage tokens (only when no explicit px dimensions are present).
-        if (explicitWidth is null && explicitHeight is null)
+        // Process percentage tokens:
+        // - Always strip them from the alt text (even when w:/h: directives are present).
+        // - Only apply SizePercent when no explicit px dimensions are present.
+        cleaned = PercentPattern().Replace(cleaned, match =>
         {
-            cleaned = PercentPattern().Replace(cleaned, match =>
-            {
-                if (double.TryParse(match.Groups[1].Value,
+            if (explicitWidth is null && explicitHeight is null &&
+                double.TryParse(match.Groups[1].Value,
                     System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture,
                     out var pct))
-                {
-                    sizePercent = pct;
-                }
+            {
+                sizePercent = Math.Clamp(pct, 0.0, 100.0);
+            }
 
-                return string.Empty;
-            });
-        }
+            return string.Empty;
+        });
 
         // Normalise whitespace left by removed tokens.
         cleaned = string.Join(' ', cleaned.Split(' ', StringSplitOptions.RemoveEmptyEntries));
