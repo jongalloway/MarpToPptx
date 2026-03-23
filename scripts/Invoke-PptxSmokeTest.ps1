@@ -130,6 +130,16 @@ $repoRoot = Split-Path -Parent $PSScriptRoot
 $generateScript = Join-Path $PSScriptRoot "Generate-LocalPptx.ps1"
 $powerPointScript = Join-Path $PSScriptRoot "Test-PowerPointOpen.ps1"
 $exportSlidesScript = Join-Path $PSScriptRoot "Export-PptxSlides.ps1"
+
+if (-not $ThemeCss) {
+	$resolvedInput = [System.IO.Path]::GetFullPath($InputMarkdown, $repoRoot)
+	$companionCss = [System.IO.Path]::ChangeExtension($resolvedInput, ".css")
+	if (Test-Path $companionCss -PathType Leaf) {
+		$ThemeCss = $companionCss
+		Write-Host "Auto-detected companion theme CSS: $ThemeCss" -ForegroundColor DarkGray
+	}
+}
+
 $usedDefaultOutputPath = $false
 
 if (-not $OutputPath) {

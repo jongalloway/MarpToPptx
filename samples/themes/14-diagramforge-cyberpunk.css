@@ -1,0 +1,76 @@
+/* @theme diagramforge-cyberpunk */
+
+:root {
+    font-family: "Segoe UI", "Aptos", sans-serif;
+    font-size: 28px;
+    color: #E0E0F0;
+    background-color: #0A0A1A;
+    padding: 44px 58px;
+    line-height: 1.4;
+}
+
+h1 {
+    font-family: "Aptos Display", "Segoe UI", sans-serif;
+    font-size: 58px;
+    color: #FF2D95;
+    font-weight: 700;
+}
+
+h2 {
+    font-size: 40px;
+    color: #00F0FF;
+    font-weight: 700;
+}
+
+h3 {
+    font-size: 30px;
+    color: #8B5CF6;
+    font-weight: 700;
+}
+
+pre,
+code {
+    font-family: "Cascadia Mono", monospace;
+    font-size: 18px;
+    color: #E0E0F0;
+    background: #12122A;
+    line-height: 1.45;
+}
+
+section.lead {
+    background-color: #12122A;
+    color: #E0E0F0;
+}
+
+section.lead h1 {
+    color: #00F0FF;
+}
+
+section.neon {
+    background-color: #0F0F28;
+    color: #E0E0F0;
+}
+
+section.neon h2 {
+    color: #39FF14;
+}
+
+section.accent {
+    background-color: #18082E;
+    color: #E0E0F0;
+}
+
+section.accent h2 {
+    color: #FF2D95;
+}
+
+section.compact {
+    background-color: #0A0A1A;
+    color: #E0E0F0;
+    font-size: 22px;
+}
+
+section.compact h2 {
+    color: #8B5CF6;
+    font-size: 30px;
+}
