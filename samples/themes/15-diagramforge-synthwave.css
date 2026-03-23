@@ -1,0 +1,76 @@
+/* @theme diagramforge-synthwave */
+
+:root {
+    font-family: "Segoe UI", "Aptos", sans-serif;
+    font-size: 28px;
+    color: #F0E0FF;
+    background-color: #1A0030;
+    padding: 44px 58px;
+    line-height: 1.4;
+}
+
+h1 {
+    font-family: "Aptos Display", "Segoe UI", sans-serif;
+    font-size: 58px;
+    color: #FF6EC7;
+    font-weight: 700;
+}
+
+h2 {
+    font-size: 40px;
+    color: #FFB347;
+    font-weight: 700;
+}
+
+h3 {
+    font-size: 30px;
+    color: #B24BF3;
+    font-weight: 700;
+}
+
+pre,
+code {
+    font-family: "Cascadia Mono", monospace;
+    font-size: 18px;
+    color: #F0E0FF;
+    background: #2A1040;
+    line-height: 1.45;
+}
+
+section.lead {
+    background-color: #2A1040;
+    color: #F0E0FF;
+}
+
+section.lead h1 {
+    color: #FFB347;
+}
+
+section.sunset {
+    background-color: #220838;
+    color: #F0E0FF;
+}
+
+section.sunset h2 {
+    color: #FF3864;
+}
+
+section.accent {
+    background-color: #2E0A48;
+    color: #F0E0FF;
+}
+
+section.accent h2 {
+    color: #FF6EC7;
+}
+
+section.compact {
+    background-color: #1A0030;
+    color: #F0E0FF;
+    font-size: 22px;
+}
+
+section.compact h2 {
+    color: #B24BF3;
+    font-size: 30px;
+}

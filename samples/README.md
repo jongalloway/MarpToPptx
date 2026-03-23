@@ -31,7 +31,7 @@ Dedicated smoke deck for presenter notes packaging, including note-bearing slide
 Speaker-style showcase deck generated from repo content, using `08-showcase.css` plus local Marp SVG assets to cover the Marp ecosystem, MarpToPptx capabilities, presenter notes, and the recommended VS Code task configuration.
 
 9. `09-diagrams.md`
-Diagram-focused sample deck that mixes Mermaid fences and `diagram` fences to exercise DiagramForge-backed flowchart, block, state, mindmap, matrix, pyramid, funnel, and radial output with the companion `09-diagrams.css` theme.
+Diagram-focused sample deck that mixes Mermaid fences and `diagram` fences to exercise DiagramForge-backed flowchart, block, state, mindmap, matrix, and pyramid output with the companion `09-diagrams.css` theme.
 
 ## Theme Decks
 
@@ -51,6 +51,12 @@ Dark-theme smoke deck inspired by the community Dracula theme, using `themes/12-
 
 5. `themes/13-popular-gaia.md`
 Bright-theme smoke deck inspired by Marp's popular built-in Gaia direction, using `themes/13-popular-gaia.css` to exercise large-scale typography, clean surfaces, and bold section breaks.
+
+6. `themes/14-diagramforge-cyberpunk.md`
+Neon-noir dark theme shared with DiagramForge, using `themes/14-diagramforge-cyberpunk.css` to stress near-black backgrounds, hot-pink/cyan/purple accent hierarchy, and code readability on dark surfaces.
+
+7. `themes/15-diagramforge-synthwave.md`
+Retro-future dark theme shared with DiagramForge, using `themes/15-diagramforge-synthwave.css` to exercise deep-purple backgrounds, sunset-orange/hot-pink accents, and warm dark-stage typography.
 
 ## Running The Samples
 
