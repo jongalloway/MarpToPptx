@@ -12,8 +12,8 @@
     <PackageId>MarpToPptx</PackageId>
     <PackageOutputPath>..\..\artifacts\nupkg</PackageOutputPath>
     <Authors>Jon Galloway</Authors>
-    <Description>Compile Marp-flavored Markdown into editable PowerPoint presentations.</Description>
-    <PackageTags>marp;markdown;pptx;powerpoint;dotnet-tool</PackageTags>
+    <Description>Compile Marp-flavored Markdown into editable PowerPoint presentations. Pass --mcp to start as an MCP server for AI assistants.</Description>
+    <PackageTags>marp;markdown;pptx;powerpoint;dotnet-tool;mcp;ai</PackageTags>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <RepositoryUrl>https://github.com/jongalloway/MarpToPptx</RepositoryUrl>
     <PublishRepositoryUrl>true</PublishRepositoryUrl>
@@ -25,7 +25,9 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Hosting" />
     <PackageReference Include="MinVer" PrivateAssets="All" />
+    <PackageReference Include="ModelContextProtocol" />
     <None Include="..\..\README.md" Pack="true" PackagePath="\" Link="README.md" />
   </ItemGroup>
 

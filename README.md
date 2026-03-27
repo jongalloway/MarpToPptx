@@ -153,6 +153,36 @@ dnx MarpToPptx samples/09-diagrams.md --theme-css samples/09-diagrams.css -o art
 
 See [`samples/README.md`](samples/README.md) for the full list and suggested progression.
 
+## 🧪 MCP Server (Experimental)
+
+Pass `--mcp` to start the tool as a [Model Context Protocol](https://modelcontextprotocol.io/) server over stdio, giving AI assistants (GitHub Copilot, Claude, etc.) direct access to the MarpToPptx pipeline — render decks, inspect metadata, write slide IDs, and update existing presentations.
+
+```bash
+marp2pptx --mcp
+```
+
+Or with `dnx` (no install needed):
+
+```bash
+dnx MarpToPptx --mcp
+```
+
+**VS Code MCP configuration:**
+
+```json
+{
+  "marp2pptx": {
+    "type": "stdio",
+    "command": "dnx",
+    "args": ["MarpToPptx", "--mcp", "--yes"]
+  }
+}
+```
+
+See [doc/mcp-server.md](doc/mcp-server.md) for available tools, the iterative workflow, and Claude Desktop setup.
+
+> **⚠️ Experimental:** The MCP server's tool surface may change between releases without notice.
+
 ## 🗺️ Roadmap
 
 - Broader CSS coverage for advanced Marp theme features
