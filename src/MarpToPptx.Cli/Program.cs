@@ -3,6 +3,17 @@ using MarpToPptx.Core.Authoring;
 using MarpToPptx.Pptx.Contrast;
 using MarpToPptx.Pptx.Rendering;
 
+if (args.Contains("--mcp", StringComparer.OrdinalIgnoreCase))
+{
+	// If help is requested, show standard CLI help instead of starting the MCP server.
+	if (args.Contains("-h", StringComparer.OrdinalIgnoreCase) || args.Contains("--help", StringComparer.OrdinalIgnoreCase))
+	{
+		return await ProgramEntry.RunAsync(args);
+	}
+
+	return await McpEntry.RunAsync(args);
+}
+
 return await ProgramEntry.RunAsync(args);
 
 internal static class ProgramEntry
@@ -191,7 +202,9 @@ internal static class ProgramEntry
 
 	private static void PrintUsage()
 	{
-		Console.WriteLine("marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--write-slide-ids] [--update-existing previous.pptx] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
+		Console.WriteLine("Usage:");
+		Console.WriteLine("  marp2pptx <input.md> [-o output.pptx] [--template theme.pptx] [--theme-css theme.css] [--allow-remote-assets] [--write-slide-ids] [--update-existing previous.pptx] [--contrast-warnings off|summary|detailed] [--contrast-report report.txt]");
+		Console.WriteLine("  marp2pptx --mcp");
 		Console.WriteLine();
 		Console.WriteLine("Options:");
 		Console.WriteLine("  -o, --output      Output .pptx path. Defaults to the input file name with a .pptx extension.");
@@ -206,6 +219,7 @@ internal static class ProgramEntry
 		Console.WriteLine("  --contrast-warnings  Contrast warning mode: off, summary, or detailed.");
 		Console.WriteLine("  --warn-low-contrast  Backward-compatible alias for '--contrast-warnings detailed'.");
 		Console.WriteLine("  --contrast-report    Write a detailed contrast audit report to a text file. Implies a contrast audit run.");
+		Console.WriteLine("  --mcp             Start as an MCP (Model Context Protocol) server over stdio for AI assistants.");
 	}
 
 	private static ContrastWarningMode ParseContrastWarningMode(string value)
