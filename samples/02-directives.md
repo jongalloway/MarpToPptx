@@ -15,7 +15,7 @@ style: |
     font-weight: 600;
   }
   section.contrast {
-    font-weight: 600;
+    letter-spacing: 0.5px;
   }
 ---
 
