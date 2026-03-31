@@ -122,6 +122,7 @@ public static class SlideIdentityGenerator
 
         sb.Append("notes\x01").Append(slideModel.Notes ?? string.Empty);
         sb.Append("\x01bg\x01").Append(slideModel.Style.BackgroundColor ?? string.Empty);
+        sb.Append("\x01color\x01").Append(slideModel.Style.Color ?? string.Empty);
         sb.Append("\x01bgImg\x01").Append(slideModel.Style.BackgroundImage ?? string.Empty);
         sb.Append("\x01bgSize\x01").Append(slideModel.Style.BackgroundSize ?? string.Empty);
         sb.Append("\x01bgPos\x01").Append(slideModel.Style.BackgroundPosition ?? string.Empty);

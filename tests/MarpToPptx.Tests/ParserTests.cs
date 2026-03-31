@@ -1320,6 +1320,29 @@ public class ParserTests
     }
 
     [Fact]
+    public void Parser_FrontMatterColor_AppliesToAllSlidesByDefault()
+    {
+        const string markdown = """
+        ---
+        color: #FFFFFF
+        ---
+
+        # Slide One
+
+        ---
+
+        # Slide Two
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal("#FFFFFF", deck.Slides[0].Style.Color);
+        Assert.Equal("#FFFFFF", deck.Slides[1].Style.Color);
+    }
+
+    [Fact]
     public void Parser_SlideIdDirective_AppliesToCurrentSlideOnly()
     {
         const string markdown = """
@@ -1387,6 +1410,32 @@ public class ParserTests
         Assert.Equal(3, deck.Slides.Count);
         Assert.Equal("red", deck.Slides[1].Style.BackgroundColor);
         Assert.Null(deck.Slides[2].Style.BackgroundColor);
+    }
+
+    [Fact]
+    public void Parser_SpotColor_DoesNotCarryForward()
+    {
+        const string markdown = """
+        <!-- color: #FFFFFF -->
+        # Slide One
+
+        ---
+
+        <!-- _color: #FF0000 -->
+        # Slide Two
+
+        ---
+
+        # Slide Three
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Equal("#FFFFFF", deck.Slides[0].Style.Color);
+        Assert.Equal("#FF0000", deck.Slides[1].Style.Color);
+        Assert.Equal("#FFFFFF", deck.Slides[2].Style.Color);
     }
 
     [Fact]

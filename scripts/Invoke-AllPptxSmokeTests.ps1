@@ -72,6 +72,7 @@ function Test-ShouldRunContrastAudit {
         default {
             $includedSamples = @(
                 "01-minimal.md",
+                "02-directives.md",
                 "04-content-coverage.md",
                 "07-presenter-notes.md"
             )
