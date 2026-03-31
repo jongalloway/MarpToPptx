@@ -1580,6 +1580,39 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_AppliesSlideColorDirectiveToHeadingText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            backgroundColor: "#123456"
+            color: "#FFFFFF"
+            ---
+
+            # White text on dark blue
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions { SourceDirectory = workspace.RootPath });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.First();
+
+        Assert.Equal("123456", GetBackgroundColor(slidePart));
+        Assert.Equal("FFFFFF", GetFirstShapeRunColor(slidePart, "White text on dark blue"));
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_WritesContentIntoTemplatePlaceholders_WhenNamedLayoutCarriesThem()
     {
         using var workspace = TestWorkspace.Create();
@@ -4528,6 +4561,16 @@ public class PptxRendererTests
 
         return shape.ShapeProperties!.Transform2D!.Offset!.Y!.Value;
     }
+
+    private static string? GetFirstShapeRunColor(SlidePart slidePart, string text)
+        => slidePart.Slide!
+            .Descendants<A.Run>()
+            .First(r => r.Text?.Text == text)
+            .RunProperties?
+            .Descendants<A.RgbColorModelHex>()
+            .FirstOrDefault()?
+            .Val?
+            .Value;
 
     private static string? GetFirstRunColor(A.TableCell cell)
         => cell.Descendants<A.RgbColorModelHex>().FirstOrDefault()?.Val?.Value;

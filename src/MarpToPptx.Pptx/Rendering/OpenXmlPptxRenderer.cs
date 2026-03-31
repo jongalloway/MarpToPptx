@@ -757,6 +757,7 @@ public sealed class OpenXmlPptxRenderer
         var effectiveTheme = useTemplateStyle
             ? ThemeDefinition.Default
             : theme.ApplyClassVariant(classVariant);
+        effectiveTheme = ApplySlideTextColor(effectiveTheme, slideModel.Style.Color, useTemplateStyle);
         var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, useTemplateStyle, language, globalDiagramTheme);
 
         AddBackground(slideModel.Style, context);
@@ -880,6 +881,27 @@ public sealed class OpenXmlPptxRenderer
 
     private static TextStyle ResolveHeadingStyle(ThemeDefinition theme, int level)
         => theme.GetHeadingStyle(level);
+
+    private static ThemeDefinition ApplySlideTextColor(ThemeDefinition theme, string? color, bool useTemplateStyle)
+    {
+        if (useTemplateStyle || string.IsNullOrWhiteSpace(color))
+        {
+            return theme;
+        }
+
+        var headings = theme.Headings.ToDictionary(
+            static pair => pair.Key,
+            pair => pair.Value with { Color = color });
+
+        return theme with
+        {
+            TextColor = color,
+            Body = theme.Body with { Color = color },
+            Code = theme.Code with { Color = color },
+            InlineCode = theme.InlineCode with { Color = color },
+            Headings = headings,
+        };
+    }
 
     /// <summary>
     /// Applies a <see cref="P.Transition"/> element to the slide based on the supplied

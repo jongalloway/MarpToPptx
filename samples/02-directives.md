@@ -11,19 +11,8 @@ header: MarpToPptx Directive Sample
 footer: Sample deck footer
 # The 'style' key merges inline CSS with any --theme-css file.
 style: |
-  section.contrast {
-    color: #FFFFFF;
-  }
-  section.contrast h1,
-  section.contrast h2,
-  section.contrast h3,
-  section.contrast h4,
-  section.contrast h5,
-  section.contrast h6 {
-    color: #FFFFFF;
-  }
-  section.contrast code {
-    color: #FFFFFF;
+  section.lead {
+    font-weight: 600;
   }
 ---
 
@@ -53,6 +42,7 @@ This slide has no directives of its own.
 <!-- backgroundColor: #102A43 -->
 <!-- backgroundImage: -->
 <!-- class: contrast -->
+<!-- color: #FFFFFF -->
 # Per-Slide Background Color
 
 These directives are **local** — they apply here and carry forward.
@@ -67,6 +57,7 @@ The following directive keys are supported in HTML comments (local and spot):
 | `backgroundImage` | local | `url(...)` or bare path |
 | `backgroundSize` | local | e.g. `cover`, `contain` |
 | `backgroundColor` | local | Hex or `rgb()` |
+| `color` | local | Default text color for slide text |
 | `header` | local | Text string |
 | `footer` | local | Text string |
 
@@ -78,18 +69,20 @@ Add a `_` prefix to any key to make it a **spot directive** (current slide only)
 
 No directives on this slide.
 
-- `class: contrast` and `backgroundColor: #102A43` from the previous slide carry forward.
+- `class: contrast`, `backgroundColor: #102A43`, and `color: #FFFFFF` from the previous slide carry forward.
 - `backgroundImage:` from the previous slide clears the global background image so the dark background remains visible.
 - Front-matter `header` and `footer` are still present.
 
 ---
 
 <!-- class: -->
+<!-- color: -->
+<!-- backgroundColor: #F7F3E8 -->
 <!-- backgroundImage: url(assets/accent-wave.svg) -->
 <!-- backgroundSize: cover -->
 # Background Image Directive
 
-`backgroundImage` is a local directive, `backgroundSize: cover` locally overrides the global `contain` behavior, and `class:` clears the inherited `contrast` class.
+`backgroundImage` is a local directive, `backgroundSize: cover` locally overrides the global `contain` behavior, and `class:`, `color:`, plus `backgroundColor: #F7F3E8` return the slide to the deck's lighter styling.
 
 ---
 
@@ -97,7 +90,8 @@ No directives on this slide.
 
 No directives on this slide.
 
-- `backgroundImage`, `backgroundSize: cover`, and the cleared `class` from the previous slide carry forward.
+- `backgroundImage`, `backgroundSize: cover`, and the cleared `class` and `color` from the previous slide carry forward.
+- `backgroundColor: #F7F3E8` from the previous slide also carries forward, restoring a light backdrop for the rest of the deck.
 - This verifies local override behavior on top of normalized front-matter defaults.
 
 ---
@@ -105,12 +99,14 @@ No directives on this slide.
 <!-- _paginate: false -->
 <!-- _header: Spot Override Header -->
 <!-- _footer: Spot Override Footer -->
+<!-- _color: #8B0000 -->
 ## Spot-Directive Override
 
-This slide uses **spot directives** (`_paginate`, `_header`, `_footer`).
+This slide uses **spot directives** (`_paginate`, `_header`, `_footer`, `_color`).
 
 - Pagination is **off** on this slide only.
 - Header and footer text are overridden on this slide only.
+- Text color is overridden on this slide only.
 - Spot directives use a `_` prefix and do not carry forward.
 
 ---
@@ -120,7 +116,7 @@ This slide uses **spot directives** (`_paginate`, `_header`, `_footer`).
 No directives on this slide.
 
 - `_paginate: false` does **not** carry forward — pagination is back on.
-- `_header` and `_footer` do **not** carry forward — original front-matter header/footer appear.
+- `_header`, `_footer`, and `_color` do **not** carry forward — original inherited values appear again.
 - The cleared `class` and `backgroundImage: url(...)` from slide 5 still carry forward (they were local, not spot).
 
 ---
@@ -141,5 +137,5 @@ This slide uses spot directives for `_class` and `_backgroundColor`.
 No directives.
 
 - `class` remains cleared (last **local** directive, from slide 5).
-- `backgroundColor` reverts to `#102A43` (last **local** directive, from slide 3).
+- `backgroundColor` remains `#F7F3E8` (last **local** directive, from slide 5).
 - `paginate`, `header`, `footer` reflect their last inherited values.

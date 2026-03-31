@@ -101,6 +101,7 @@ public static partial class MarpDirectiveParser
             "backgroundsize" => Clone(style, backgroundSize: value),
             "backgroundposition" => Clone(style, backgroundPosition: value),
             "backgroundcolor" => Clone(style, backgroundColor: value),
+            "color" => Clone(style, color: value),
             "header" => Clone(style, header: value),
             "footer" => Clone(style, footer: value),
             "transition" => Clone(style, transition: ParseTransition(value)),
@@ -152,6 +153,7 @@ public static partial class MarpDirectiveParser
         string? backgroundSize = null,
         string? backgroundPosition = null,
         string? backgroundColor = null,
+        string? color = null,
         string? header = null,
         string? footer = null,
         SlideTransition? transition = null)
@@ -167,6 +169,7 @@ public static partial class MarpDirectiveParser
             BackgroundSize = backgroundSize ?? source.BackgroundSize,
             BackgroundPosition = backgroundPosition ?? source.BackgroundPosition,
             BackgroundColor = backgroundColor ?? source.BackgroundColor,
+            Color = color ?? source.Color,
             Header = header ?? source.Header,
             Footer = footer ?? source.Footer,
             Transition = transition ?? source.Transition,

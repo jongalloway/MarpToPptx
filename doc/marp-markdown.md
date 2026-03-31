@@ -45,8 +45,8 @@ CLI options, theme CSS loading, template usage, and PPTX rendering behavior. The
 | Marpit | Slide separator `---` | Splits slides on horizontal rules | Supported subset | `SlideTokenizer` splits on a line that is exactly `---`, except inside fenced code blocks. |
 | Marpit | Alternate separators `***`, `___`, `- - -` | Alternate CommonMark rulers that can separate slides | Not supported | Only literal `---` is recognized as a slide boundary. |
 | Marpit | YAML front matter | Deck-level metadata | Supported subset | Parsed as simple `key: value` pairs only. |
-| Marpit | Directives in HTML comments | Slide and deck directives | Supported subset | Supports `theme`, `paginate`, `class`, `backgroundImage`, `backgroundSize`, `backgroundColor`, `header`, and `footer`. |
-| Marpit | Spot directives with `_` prefix | Apply a local directive to one slide only | Supported | All recognised directive keys work with a `_` prefix (e.g. `_class`, `_paginate`, `_backgroundColor`). Spot directives apply to the current slide only and do not carry forward to subsequent slides. |
+| Marpit | Directives in HTML comments | Slide and deck directives | Supported subset | Supports `theme`, `paginate`, `class`, `backgroundImage`, `backgroundSize`, `backgroundColor`, `color`, `header`, and `footer`. |
+| Marpit | Spot directives with `_` prefix | Apply a local directive to one slide only | Supported | All recognised directive keys work with a `_` prefix (e.g. `_class`, `_paginate`, `_backgroundColor`, `_color`). Spot directives apply to the current slide only and do not carry forward to subsequent slides. |
 | Marpit | `headingDivider` | Split slides before headings automatically | Supported subset | Parsed from front matter as an integer 1–6; slides are split before headings at or above that level. |
 | Marpit | Header / footer directives | Per-slide repeated content | Supported | `header` and `footer` string values are stored in `SlideStyle` and emitted into PPTX text shapes on each slide. |
 | Marpit | Extended image syntax | Width, height, filters, `bg`, split backgrounds | Partially supported | Normal Markdown images are parsed; `![bg](url)` is promoted to a slide background. Other Marpit image keywords (width, height, percentage, split) are treated as alt text with no effect on sizing or layout. |
@@ -83,6 +83,7 @@ Front matter key-value pairs set deck-level defaults that apply to all slides un
 | `backgroundSize` | string | Background sizing hint (`cover`, `contain`, etc.) |
 | `backgroundPosition` | string | Background image position (`center`, `top`, `bottom`, `left`, `right`, or two-keyword combinations) |
 | `backgroundColor` | string | Background fill color for all slides |
+| `color` | string | Default text color for slide text shapes |
 | `header` | string | Repeated header text on every slide |
 | `footer` | string | Repeated footer text on every slide |
 | `headingDivider` | integer (1–6) | Split slides before headings at or above that level |

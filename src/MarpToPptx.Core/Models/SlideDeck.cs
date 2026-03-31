@@ -63,6 +63,8 @@ public sealed class SlideStyle
 
     public string? BackgroundColor { get; init; }
 
+    public string? Color { get; init; }
+
     public string? Header { get; init; }
 
     public string? Footer { get; init; }
