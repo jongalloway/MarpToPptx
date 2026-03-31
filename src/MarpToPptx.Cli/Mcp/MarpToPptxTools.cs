@@ -13,9 +13,9 @@ public sealed class MarpToPptxTools
     private static readonly JsonSerializerOptions IndentedJson = new() { WriteIndented = true };
 
     /// <summary>
-    /// Compile Marp-flavored Markdown into an editable PowerPoint (.pptx) file.
-    /// This is the primary conversion tool. Provide the markdown content or a path to a .md file.
-    /// Returns the absolute path to the generated .pptx file on success.
+    /// Compile a Marp-flavored Markdown file into an editable PowerPoint (.pptx) file.
+    /// This is the primary conversion tool. Provide the absolute path to a .md file on disk.
+    /// Returns a human-readable status message that includes the absolute path to the generated .pptx file on success.
     /// </summary>
     /// <param name="inputMarkdownPath">Absolute path to the input Marp Markdown file.</param>
     /// <param name="outputPptxPath">Optional output path for the .pptx file. Defaults to the input file name with a .pptx extension.</param>
@@ -32,53 +32,46 @@ public sealed class MarpToPptxTools
         bool allowRemoteAssets = false,
         bool writeSlideIds = false)
     {
-        try
+        inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
+        if (!string.IsNullOrWhiteSpace(themeCssPath))
+            themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
+        if (!string.IsNullOrWhiteSpace(templatePath))
+            templatePath = ValidateFileExists(templatePath, "Template PPTX");
+
+        outputPptxPath ??= Path.ChangeExtension(inputMarkdownPath, ".pptx");
+        outputPptxPath = Path.GetFullPath(outputPptxPath);
+
+        var markdown = File.ReadAllText(inputMarkdownPath);
+        var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
+
+        var slideIdsAdded = 0;
+        if (writeSlideIds)
         {
-            inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
-            if (!string.IsNullOrWhiteSpace(themeCssPath))
-                themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
-            if (!string.IsNullOrWhiteSpace(templatePath))
-                templatePath = ValidateFileExists(templatePath, "Template PPTX");
-
-            outputPptxPath ??= Path.ChangeExtension(inputMarkdownPath, ".pptx");
-            outputPptxPath = Path.GetFullPath(outputPptxPath);
-
-            var markdown = File.ReadAllText(inputMarkdownPath);
-            var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
-
-            var compiler = new MarpCompiler();
-            var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
-
-            var slideIdsAdded = 0;
-            if (writeSlideIds)
+            var rewriteResult = SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
+            if (rewriteResult.AddedCount > 0)
             {
-                var rewriteResult = SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
-                if (rewriteResult.AddedCount > 0)
-                {
-                    File.WriteAllText(inputMarkdownPath, rewriteResult.UpdatedMarkdown);
-                    markdown = rewriteResult.UpdatedMarkdown;
-                    deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
-                    slideIdsAdded = rewriteResult.AddedCount;
-                }
+                File.WriteAllText(inputMarkdownPath, rewriteResult.UpdatedMarkdown);
+                markdown = rewriteResult.UpdatedMarkdown;
+                deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
+                slideIdsAdded = rewriteResult.AddedCount;
             }
-
-            var renderer = new OpenXmlPptxRenderer();
-            renderer.Render(deck, outputPptxPath, new PptxRenderOptions
-            {
-                TemplatePath = templatePath,
-                SourceDirectory = Path.GetDirectoryName(inputMarkdownPath),
-                AllowRemoteAssets = allowRemoteAssets,
-            });
-
-            var message = $"Generated '{outputPptxPath}' with {deck.Slides.Count} slide(s).";
-            if (slideIdsAdded > 0)
-                message += $" Added {slideIdsAdded} slideId directive(s) to '{inputMarkdownPath}'.";
-            return Task.FromResult(message);
         }
-        catch (Exception ex)
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPptxPath, new PptxRenderOptions
         {
-            return Task.FromResult($"Error: {ex.Message}");
-        }
+            TemplatePath = templatePath,
+            SourceDirectory = Path.GetDirectoryName(inputMarkdownPath),
+            AllowRemoteAssets = allowRemoteAssets,
+        });
+
+        var message = $"Generated '{outputPptxPath}' with {deck.Slides.Count} slide(s).";
+        if (slideIdsAdded > 0)
+            message += $" Added {slideIdsAdded} slideId directive(s) to '{inputMarkdownPath}'.";
+        return Task.FromResult(message);
     }
 
     /// <summary>
@@ -100,36 +93,29 @@ public sealed class MarpToPptxTools
         string? themeCssPath = null,
         bool allowRemoteAssets = false)
     {
-        try
+        inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
+        existingDeckPath = ValidateFileExists(existingDeckPath, "Existing deck");
+        if (!string.IsNullOrWhiteSpace(themeCssPath))
+            themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
+
+        outputPptxPath ??= existingDeckPath;
+        outputPptxPath = Path.GetFullPath(outputPptxPath);
+
+        var markdown = File.ReadAllText(inputMarkdownPath);
+        var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPptxPath, new PptxRenderOptions
         {
-            inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
-            existingDeckPath = ValidateFileExists(existingDeckPath, "Existing deck");
-            if (!string.IsNullOrWhiteSpace(themeCssPath))
-                themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
+            SourceDirectory = Path.GetDirectoryName(inputMarkdownPath),
+            AllowRemoteAssets = allowRemoteAssets,
+            ExistingDeckPath = existingDeckPath,
+        });
 
-            outputPptxPath ??= existingDeckPath;
-            outputPptxPath = Path.GetFullPath(outputPptxPath);
-
-            var markdown = File.ReadAllText(inputMarkdownPath);
-            var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
-
-            var compiler = new MarpCompiler();
-            var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
-
-            var renderer = new OpenXmlPptxRenderer();
-            renderer.Render(deck, outputPptxPath, new PptxRenderOptions
-            {
-                SourceDirectory = Path.GetDirectoryName(inputMarkdownPath),
-                AllowRemoteAssets = allowRemoteAssets,
-                ExistingDeckPath = existingDeckPath,
-            });
-
-            return Task.FromResult($"Updated '{outputPptxPath}' with {deck.Slides.Count} slide(s).");
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult($"Error: {ex.Message}");
-        }
+        return Task.FromResult($"Updated '{outputPptxPath}' with {deck.Slides.Count} slide(s).");
     }
 
     /// <summary>
@@ -145,44 +131,37 @@ public sealed class MarpToPptxTools
         string inputMarkdownPath,
         string? themeCssPath = null)
     {
-        try
+        inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
+        if (!string.IsNullOrWhiteSpace(themeCssPath))
+            themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
+
+        var markdown = File.ReadAllText(inputMarkdownPath);
+        var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
+        var identities = SlideIdentityGenerator.BuildSlideIdentities(deck);
+
+        var result = new
         {
-            inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
-            if (!string.IsNullOrWhiteSpace(themeCssPath))
-                themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
-
-            var markdown = File.ReadAllText(inputMarkdownPath);
-            var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
-
-            var compiler = new MarpCompiler();
-            var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
-            var identities = SlideIdentityGenerator.BuildSlideIdentities(deck);
-
-            var result = new
+            deckId = SlideIdentityGenerator.ComputeDeckId(deck),
+            title = SlideIdentityGenerator.GetPresentationTitle(deck),
+            theme = deck.Theme,
+            slideCount = deck.Slides.Count,
+            slides = deck.Slides.Select((slide, index) => new
             {
-                deckId = SlideIdentityGenerator.ComputeDeckId(deck),
-                title = SlideIdentityGenerator.GetPresentationTitle(deck),
-                theme = deck.Theme,
-                slideCount = deck.Slides.Count,
-                slides = deck.Slides.Select((slide, index) => new
-                {
-                    index,
-                    title = SlideIdentityGenerator.GetSlideTitle(slide),
-                    slideId = index < identities.Count ? identities[index].SlideId : null,
-                    hasNotes = !string.IsNullOrWhiteSpace(slide.Notes),
-                    elementCount = slide.Elements.Count,
-                    backgroundImage = slide.Style.BackgroundImage,
-                    backgroundColor = slide.Style.BackgroundColor,
-                    className = slide.Style.ClassName,
-                }).ToArray(),
-            };
+                index,
+                title = SlideIdentityGenerator.GetSlideTitle(slide),
+                slideId = index < identities.Count ? identities[index].SlideId : null,
+                hasNotes = !string.IsNullOrWhiteSpace(slide.Notes),
+                elementCount = slide.Elements.Count,
+                backgroundImage = slide.Style.BackgroundImage,
+                backgroundColor = slide.Style.BackgroundColor,
+                className = slide.Style.ClassName,
+            }).ToArray(),
+        };
 
-            return Task.FromResult(JsonSerializer.Serialize(result, IndentedJson));
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult($"Error: {ex.Message}");
-        }
+        return Task.FromResult(JsonSerializer.Serialize(result, IndentedJson));
     }
 
     /// <summary>
@@ -198,75 +177,64 @@ public sealed class MarpToPptxTools
         string inputMarkdownPath,
         string? themeCssPath = null)
     {
-        try
+        inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
+        if (!string.IsNullOrWhiteSpace(themeCssPath))
+            themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
+
+        var markdown = File.ReadAllText(inputMarkdownPath);
+        var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
+
+        var rewriteResult = SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
+        if (rewriteResult.AddedCount > 0)
         {
-            inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
-            if (!string.IsNullOrWhiteSpace(themeCssPath))
-                themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
-
-            var markdown = File.ReadAllText(inputMarkdownPath);
-            var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
-
-            var compiler = new MarpCompiler();
-            var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
-
-            var rewriteResult = SlideIdDirectiveWriter.WriteMissingSlideIds(markdown, deck);
-            if (rewriteResult.AddedCount > 0)
-            {
-                File.WriteAllText(inputMarkdownPath, rewriteResult.UpdatedMarkdown);
-                return Task.FromResult($"Added {rewriteResult.AddedCount} slideId directive(s) to '{inputMarkdownPath}'.");
-            }
-
-            return Task.FromResult("All slides already have slideId directives. No changes made.");
+            File.WriteAllText(inputMarkdownPath, rewriteResult.UpdatedMarkdown);
+            return Task.FromResult($"Added {rewriteResult.AddedCount} slideId directive(s) to '{inputMarkdownPath}'.");
         }
-        catch (Exception ex)
-        {
-            return Task.FromResult($"Error: {ex.Message}");
-        }
+
+        return Task.FromResult("All slides already have slideId directives. No changes made.");
     }
 
     /// <summary>
     /// Compile Marp Markdown provided as a string (rather than a file) into a .pptx file.
     /// Useful when the markdown content is generated or composed programmatically by the LLM.
-    /// Returns the absolute path to the generated .pptx file on success.
+    /// Returns a human-readable status message that includes the absolute path to the generated .pptx file on success.
     /// </summary>
     /// <param name="markdown">The Marp-flavored Markdown content to compile.</param>
     /// <param name="outputPptxPath">Absolute path for the output .pptx file.</param>
     /// <param name="themeCss">Optional CSS theme content (not a file path).</param>
     /// <param name="templatePath">Optional absolute path to an existing .pptx template.</param>
+    /// <param name="sourceDirectory">Optional absolute path to a directory used to resolve relative asset paths (images, etc.) referenced in the markdown.</param>
     [McpServerTool(Title = "Render Markdown String to PPTX")]
     public Task<string> marp_render_string(
         string markdown,
         string outputPptxPath,
         string? themeCss = null,
-        string? templatePath = null)
+        string? templatePath = null,
+        string? sourceDirectory = null)
     {
-        try
+        if (string.IsNullOrWhiteSpace(markdown))
+            throw new ArgumentException("Markdown content is required.", nameof(markdown));
+        if (string.IsNullOrWhiteSpace(outputPptxPath))
+            throw new ArgumentException("Output path is required.", nameof(outputPptxPath));
+
+        outputPptxPath = Path.GetFullPath(outputPptxPath);
+        if (!string.IsNullOrWhiteSpace(templatePath))
+            templatePath = ValidateFileExists(templatePath, "Template PPTX");
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, sourcePath: null, themeCss);
+
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPptxPath, new PptxRenderOptions
         {
-            if (string.IsNullOrWhiteSpace(markdown))
-                return Task.FromResult("Error: Markdown content is required.");
-            if (string.IsNullOrWhiteSpace(outputPptxPath))
-                return Task.FromResult("Error: Output path is required.");
+            TemplatePath = templatePath,
+            SourceDirectory = string.IsNullOrWhiteSpace(sourceDirectory) ? null : Path.GetFullPath(sourceDirectory),
+        });
 
-            outputPptxPath = Path.GetFullPath(outputPptxPath);
-            if (!string.IsNullOrWhiteSpace(templatePath))
-                templatePath = ValidateFileExists(templatePath, "Template PPTX");
-
-            var compiler = new MarpCompiler();
-            var deck = compiler.Compile(markdown, sourcePath: null, themeCss);
-
-            var renderer = new OpenXmlPptxRenderer();
-            renderer.Render(deck, outputPptxPath, new PptxRenderOptions
-            {
-                TemplatePath = templatePath,
-            });
-
-            return Task.FromResult($"Generated '{outputPptxPath}' with {deck.Slides.Count} slide(s).");
-        }
-        catch (Exception ex)
-        {
-            return Task.FromResult($"Error: {ex.Message}");
-        }
+        return Task.FromResult($"Generated '{outputPptxPath}' with {deck.Slides.Count} slide(s).");
     }
 
     private static string ValidateFileExists(string path, string description)
