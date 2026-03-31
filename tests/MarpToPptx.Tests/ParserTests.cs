@@ -1416,12 +1416,12 @@ public class ParserTests
     public void Parser_SpotColor_DoesNotCarryForward()
     {
         const string markdown = """
-        <!-- color: white -->
+        <!-- color: #FFFFFF -->
         # Slide One
 
         ---
 
-        <!-- _color: red -->
+        <!-- _color: #FF0000 -->
         # Slide Two
 
         ---
@@ -1433,9 +1433,9 @@ public class ParserTests
         var deck = compiler.Compile(markdown);
 
         Assert.Equal(3, deck.Slides.Count);
-        Assert.Equal("white", deck.Slides[0].Style.Color);
-        Assert.Equal("red", deck.Slides[1].Style.Color);
-        Assert.Equal("white", deck.Slides[2].Style.Color);
+        Assert.Equal("#FFFFFF", deck.Slides[0].Style.Color);
+        Assert.Equal("#FF0000", deck.Slides[1].Style.Color);
+        Assert.Equal("#FFFFFF", deck.Slides[2].Style.Color);
     }
 
     [Fact]

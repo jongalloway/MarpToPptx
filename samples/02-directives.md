@@ -14,6 +14,9 @@ style: |
   section.lead {
     font-weight: 600;
   }
+  section.contrast {
+    font-weight: 600;
+  }
 ---
 
 <!-- class: lead -->

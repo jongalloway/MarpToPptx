@@ -43,7 +43,7 @@ internal static class DiagramThemeFactory
         return theme;
     }
 
-    private static string NormalizeHexColor(string? value, string fallback)
+    internal static string NormalizeHexColor(string? value, string fallback)
     {
         if (TryParseRgb(value, out var red, out var green, out var blue))
         {

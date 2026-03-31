@@ -3826,6 +3826,12 @@ public sealed class OpenXmlPptxRenderer
         }
 
         var trimmed = value.Trim().Trim('"', '\'');
+
+        if (trimmed.StartsWith("rgb", StringComparison.OrdinalIgnoreCase))
+        {
+            return DiagramThemeFactory.NormalizeHexColor(trimmed, "#000000").TrimStart('#').ToUpperInvariant();
+        }
+
         if (trimmed.StartsWith('#'))
         {
             trimmed = trimmed[1..];
