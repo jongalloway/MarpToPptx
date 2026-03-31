@@ -823,10 +823,10 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_MarpitWidthDirective_RendersImageWithoutError()
+    public void Renderer_MarpitWidthDirective_RendersImageAtSpecifiedWidth()
     {
-        // Marpit upstream: ![w:200px](image.jpg) renders the image at 200 px wide.
-        // Current behavior: image rendered at default aspect-ratio size; width directive is ignored.
+        // w:200px → ExplicitWidth = 150 layout units → 1,905,000 EMU wide.
+        // Height is derived from the image's aspect ratio (1×1 → also 150 lu → 1,905,000 EMU).
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -843,14 +843,20 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
-        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        AssertImageRenderedWithoutError(slidePart);
+
+        var extents = slidePart.Slide!.Descendants<P.Picture>().First()
+            .ShapeProperties!.GetFirstChild<A.Transform2D>()!.Extents!;
+        Assert.Equal(1_905_000L, extents.Cx?.Value);
+        Assert.Equal(1_905_000L, extents.Cy?.Value);
     }
 
     [Fact]
-    public void Renderer_MarpitHeightDirective_RendersImageWithoutError()
+    public void Renderer_MarpitHeightDirective_RendersImageAtSpecifiedHeight()
     {
-        // Marpit upstream: ![h:150px](image.jpg) renders the image at 150 px tall.
-        // Current behavior: image rendered at default aspect-ratio size; height directive is ignored.
+        // h:150px → ExplicitHeight = 112.5 layout units → 1,428,750 EMU tall.
+        // Width is derived from the image's aspect ratio (1×1 → also 112.5 lu → 1,428,750 EMU).
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -867,14 +873,20 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
-        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        AssertImageRenderedWithoutError(slidePart);
+
+        var extents = slidePart.Slide!.Descendants<P.Picture>().First()
+            .ShapeProperties!.GetFirstChild<A.Transform2D>()!.Extents!;
+        Assert.Equal(1_428_750L, extents.Cx?.Value);
+        Assert.Equal(1_428_750L, extents.Cy?.Value);
     }
 
     [Fact]
-    public void Renderer_MarpitWidthAndHeightDirectives_RendersImageWithoutError()
+    public void Renderer_MarpitWidthAndHeightDirectives_RendersImageAtExplicitDimensions()
     {
-        // Marpit upstream: ![w:200px h:150px](image.jpg) renders at explicit dimensions.
-        // Current behavior: image rendered at default aspect-ratio size; directives are ignored.
+        // w:200px h:150px → ExplicitWidth=150 lu (1,905,000 EMU), ExplicitHeight=112.5 lu (1,428,750 EMU).
+        // Both axes override the image's natural aspect ratio.
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -891,14 +903,20 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
-        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        AssertImageRenderedWithoutError(slidePart);
+
+        var extents = slidePart.Slide!.Descendants<P.Picture>().First()
+            .ShapeProperties!.GetFirstChild<A.Transform2D>()!.Extents!;
+        Assert.Equal(1_905_000L, extents.Cx?.Value);
+        Assert.Equal(1_428_750L, extents.Cy?.Value);
     }
 
     [Fact]
-    public void Renderer_MarpitPercentageSizing_RendersImageWithoutError()
+    public void Renderer_MarpitPercentageSizing_RendersImageAtPercentageOfSlideWidth()
     {
-        // Marpit upstream: ![50%](image.jpg) renders the image at 50% of the slide width.
-        // Current behavior: image rendered at default aspect-ratio size; percentage is ignored.
+        // 50% → width = 50% of slide width (960 lu) = 480 lu → 6,096,000 EMU.
+        // Height derived from 1×1 aspect ratio → also 480 lu → 6,096,000 EMU.
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -915,7 +933,13 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
-        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        AssertImageRenderedWithoutError(slidePart);
+
+        var extents = slidePart.Slide!.Descendants<P.Picture>().First()
+            .ShapeProperties!.GetFirstChild<A.Transform2D>()!.Extents!;
+        Assert.Equal(6_096_000L, extents.Cx?.Value);
+        Assert.Equal(6_096_000L, extents.Cy?.Value);
     }
 
     [Fact]

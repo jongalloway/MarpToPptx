@@ -22,7 +22,7 @@ public sealed class LayoutEngine
                 HeadingElement heading => CreateHeadingFrame(heading, theme, contentX, contentWidth, ref y, isTitleSlide),
                 ParagraphElement paragraph => CreateParagraphFrame(paragraph.Text, theme.Body.FontSize, contentX, contentWidth, ref y),
                 BulletListElement list => CreateParagraphFrame(string.Join("\n", list.Items.Select(item => item.Text)), theme.Body.FontSize, contentX, contentWidth, ref y, 1.2),
-                ImageElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
+                ImageElement image => CreateImageFrame(image, contentX, contentWidth, ref y),
                 VideoElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
                 AudioElement => CreateFixedFrame(contentX, contentWidth, ref y, 80),
                 MermaidDiagramElement => CreateFixedFrame(contentX, contentWidth, ref y, 220),
@@ -53,6 +53,42 @@ public sealed class LayoutEngine
         var frame = new Rect(x, y, width, height);
         y += height + 12;
         return frame;
+    }
+
+    private static Rect CreateImageFrame(ImageElement image, double x, double width, ref double y)
+    {
+        // When an explicit height is given, honour it so subsequent elements are placed below.
+        // When only a width or a percentage is given, we don't know the image's aspect ratio at
+        // layout time. Use a 1:1 (square) estimate for width-only cases — this is intentionally
+        // conservative for typical landscape images; portrait or square images will use the full
+        // estimated space. Percentage sizing scales the square estimate by the percentage.
+        // The renderer uses the actual image aspect ratio, so tall images may still overflow;
+        // this heuristic minimises overlap for the common wide-image case.
+        const double defaultHeight = 220;
+        double height;
+
+        if (image.ExplicitHeight.HasValue)
+        {
+            height = image.ExplicitHeight.Value;
+        }
+        else if (image.ExplicitWidth.HasValue)
+        {
+            // Use a 1:1 estimate. Wide images will have extra space below; tall images may overlap.
+            height = image.ExplicitWidth.Value;
+        }
+        else if (image.SizePercent.HasValue)
+        {
+            // Estimate using the frame width (100%) scaled to the percentage, assuming 1:1.
+            var scaledWidth = width * (image.SizePercent.Value / 100.0);
+            height = scaledWidth;
+        }
+        else
+        {
+            height = defaultHeight;
+        }
+
+        height = Math.Max(20, height);
+        return CreateFixedFrame(x, width, ref y, height);
     }
 
     private static Rect CreateFixedFrame(double x, double width, ref double y, double height)
