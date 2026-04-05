@@ -1838,7 +1838,7 @@ public class PptxRendererTests
         Assert.NotEmpty(bodyRuns);
         foreach (var run in bodyRuns)
         {
-            Assert.Equal(2000, (int?)run.RunProperties?.FontSize);
+            Assert.Equal(2000, run.RunProperties?.FontSize?.Value);
         }
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
@@ -1885,7 +1885,7 @@ public class PptxRendererTests
         Assert.NotEmpty(bodyRuns);
         foreach (var run in bodyRuns)
         {
-            Assert.Equal(1700, (int?)run.RunProperties?.FontSize);
+            Assert.Equal(1700, run.RunProperties?.FontSize?.Value);
         }
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
@@ -1975,7 +1975,7 @@ public class PptxRendererTests
         foreach (var run in bodyRuns)
         {
             // 28pt = 2800 hundredths of a point
-            Assert.Equal(2800, (int?)run.RunProperties?.FontSize);
+            Assert.Equal(2800, run.RunProperties?.FontSize?.Value);
         }
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
@@ -2016,8 +2016,11 @@ public class PptxRendererTests
         foreach (var run in bodyRuns)
         {
             // Default theme body size is 24pt = 2400 hundredths of a point.
-            Assert.Equal(2400, (int?)run.RunProperties?.FontSize);
+            Assert.Equal(2400, run.RunProperties?.FontSize?.Value);
         }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
     }
 
     [Fact]
