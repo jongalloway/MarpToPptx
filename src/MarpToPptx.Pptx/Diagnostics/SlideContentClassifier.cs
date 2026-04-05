@@ -143,7 +143,7 @@ public static class SlideContentClassifier
         }
 
         var hasBoldOrNumericSpan = spans.Any(s =>
-            (s.Bold && s.Text.Trim().Length <= MaxBoldSpanLength) ||
+            (s.Bold && s.Text.Trim().Length <= MaxBoldSpanLength && s.Text.Trim().Any(char.IsDigit)) ||
             IsNumericValue(s.Text.Trim()));
 
         return hasBoldOrNumericSpan && firstPara.Text.Trim().Length <= MaxBigNumberParagraphLength;

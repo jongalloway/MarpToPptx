@@ -427,7 +427,7 @@ static void ApplyLayoutPatches(string deckPath, LayoutRecommendationReport repor
         var rec = report.Recommendations[idx];
 
         // Skip slides that already have an explicit layout directive.
-        if (rec.Reason == "explicit _layout directive")
+        if (rec.IsExplicitLayout)
         {
             continue;
         }
@@ -458,15 +458,18 @@ static List<int> FindSlideBoundaries(List<string> lines)
 {
     // The first slide starts at line 0 (after front-matter if present).
     // Subsequent slides start after "---" separator lines.
+    // Matches SlideTokenizer.SplitSlides: uses line.Trim() == "---" and tracks fenced
+    // code blocks (``` or ~~~) to avoid splitting on separators inside code fences.
     var boundaries = new List<int> { 0 };
+    var inFence = false;
 
-    // Skip front-matter block if present.
+    // Skip front-matter block if present (the very first "---" / "---" pair).
     var start = 0;
-    if (lines.Count > 0 && lines[0].TrimEnd() == "---")
+    if (lines.Count > 0 && lines[0].Trim() == "---")
     {
         for (var i = 1; i < lines.Count; i++)
         {
-            if (lines[i].TrimEnd() == "---")
+            if (lines[i].Trim() == "---")
             {
                 start = i + 1;
                 break;
@@ -476,9 +479,17 @@ static List<int> FindSlideBoundaries(List<string> lines)
         boundaries[0] = start;
     }
 
-    for (var i = start + 1; i < lines.Count; i++)
+    for (var i = start; i < lines.Count; i++)
     {
-        if (lines[i].TrimEnd() == "---")
+        var line = lines[i].TrimEnd();
+
+        // Track fenced code blocks — same logic as SlideTokenizer.
+        if (line.StartsWith("```", StringComparison.Ordinal) || line.StartsWith("~~~", StringComparison.Ordinal))
+        {
+            inFence = !inFence;
+        }
+
+        if (!inFence && i > start && lines[i].Trim() == "---")
         {
             boundaries.Add(i + 1);
         }

@@ -54,7 +54,8 @@ public sealed class LayoutRecommender
                     explicitTitle,
                     SlideContentKind.Content,
                     slide.Style.Layout,
-                    "explicit _layout directive"));
+                    Reason: null,
+                    IsExplicitLayout: true));
                 continue;
             }
 
@@ -119,14 +120,25 @@ public sealed class LayoutRecommender
 
     private static string? FindWideContentLayout(IReadOnlyList<LayoutDiagnostic> layouts)
     {
-        // Prefer a content layout whose name ends with a digit (variant numbering convention)
-        // or explicitly contains keywords suggesting wider/longer content.
-        var wideCandidate = layouts
+        var contentLayouts = layouts
             .Where(l => l.SemanticRole == LayoutSemanticRole.Content && l.HasTitlePlaceholder && l.HasBodyPlaceholder)
-            .OrderByDescending(l => char.IsDigit(l.Name.LastOrDefault()))
-            .FirstOrDefault();
+            .ToList();
 
-        return wideCandidate?.Name ?? FindNamedLayout(layouts, "wide", "full");
+        // 1. Prefer a content layout whose name ends with a digit (variant numbering convention).
+        var digitSuffixedCandidate = contentLayouts
+            .FirstOrDefault(l => char.IsDigit(l.Name.LastOrDefault()));
+        if (digitSuffixedCandidate is not null)
+        {
+            return digitSuffixedCandidate.Name;
+        }
+
+        // 2. Fall back to a content layout explicitly named as wide/full.
+        var keywordCandidate = contentLayouts
+            .FirstOrDefault(l =>
+                l.Name.Contains("wide", StringComparison.OrdinalIgnoreCase) ||
+                l.Name.Contains("full", StringComparison.OrdinalIgnoreCase));
+
+        return keywordCandidate?.Name;
     }
 
     private static string? PickPhotoLayout(IReadOnlyList<string> photoLayouts, ref int photoIndex)
@@ -168,7 +180,7 @@ public sealed class LayoutRecommender
         };
 
         var grouped = recommendations
-            .Where(r => contentKinds.Contains(r.ContentKind))
+            .Where(r => !r.IsExplicitLayout && contentKinds.Contains(r.ContentKind))
             .GroupBy(r => r.RecommendedLayout)
             .OrderByDescending(g => g.Count())
             .FirstOrDefault();

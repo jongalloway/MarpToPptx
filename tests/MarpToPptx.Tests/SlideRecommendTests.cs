@@ -98,6 +98,15 @@ public class SlideRecommendTests
     }
 
     [Fact]
+    public void Classifier_SlideWithBoldNonNumericSpan_DoesNotClassifyAsBigNumber()
+    {
+        // **YES** is bold and short but has no digits — should not trigger BigNumber.
+        var slide = ParseSingleSlide("# Slide\n\n**YES**\n\nIt really works.");
+        var (kind, _) = SlideContentClassifier.Classify(slide, isFirst: false, isLast: false);
+        Assert.NotEqual(SlideContentKind.BigNumber, kind);
+    }
+
+    [Fact]
     public void Classifier_SlideWithBoldShortNumber_ClassifiesAsBigNumber()
     {
         // Bold short number token.
@@ -252,6 +261,44 @@ public class SlideRecommendTests
 
         Assert.Single(report.Recommendations);
         Assert.Equal(layoutName, report.Recommendations[0].RecommendedLayout);
+        Assert.True(report.Recommendations[0].IsExplicitLayout);
+    }
+
+    [Fact]
+    public void LayoutRecommender_ExplicitLayoutSlides_AreExcludedFromFrontMatterSuggestion()
+    {
+        using var workspace = TestWorkspace.Create();
+        var pptxPath = RenderMinimalDeck(workspace);
+
+        // Only one real content slide; the others all have explicit layouts.
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(
+            """
+            <!-- _layout: Exotic Layout A -->
+            # Slide 1
+
+            ---
+
+            <!-- _layout: Exotic Layout B -->
+            # Slide 2
+
+            ---
+
+            ## Normal Content Slide
+
+            Some regular content here.
+            """);
+
+        var diagnoser = new TemplateDiagnoser();
+        using var document = DocumentFormat.OpenXml.Packaging.PresentationDocument.Open(pptxPath, false);
+        var templateReport = diagnoser.Diagnose(document, pptxPath);
+
+        var recommender = new LayoutRecommender();
+        var report = recommender.Recommend(deck, templateReport);
+
+        // The suggested front-matter layout should not be one of the explicit exotic layouts.
+        Assert.NotEqual("Exotic Layout A", report.SuggestedFrontMatterLayout);
+        Assert.NotEqual("Exotic Layout B", report.SuggestedFrontMatterLayout);
     }
 
     [Fact]
