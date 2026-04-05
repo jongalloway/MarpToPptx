@@ -104,12 +104,18 @@ public sealed class OpenXmlPptxRenderer
 
                 var language = deck.Language ?? "en-US";
                 var slideNumber = 1;
+                var imageFocusedOrdinal = 0;
                 foreach (var slideModel in deck.Slides)
                 {
                     var slideKind = SlideTemplateSelector.Classify(slideModel);
-                    var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout);
+                    var selectedLayout = templateSelector.SelectLayout(slideModel, slideKind, deck.DefaultContentLayout, imageFocusedOrdinal);
                     var sp = AddSlide(presentationPart, selectedLayout.LayoutPart, slideModel, slideMetadata[slideNumber - 1], deck.Theme, options.SourceDirectory ?? GetSourceDirectory(deck.SourcePath), remoteAssets, selectedLayout.UseTemplateStyle, slideNumber, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
                     AppendSlideId(presentationPart, sp);
+                    if (slideKind == SlideKind.ImageFocused)
+                    {
+                        imageFocusedOrdinal++;
+                    }
+
                     slideNumber++;
                 }
 
@@ -226,11 +232,13 @@ public sealed class OpenXmlPptxRenderer
 
         var newSlideParts = new List<SlidePart>(leadingUnmanagedSlides);
         var consumedUnmanagedAnchors = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var imageFocusedOrdinal = 0;
 
         for (var i = 0; i < deck.Slides.Count; i++)
         {
             var marpSlide = deck.Slides[i];
             var metadata = slideMetadata[i];
+            var slideKind = SlideTemplateSelector.Classify(marpSlide);
 
             SlidePart nextSlidePart;
             if (managedSlidesById.TryGetValue(metadata.SlideId, out var existingManaged))
@@ -241,19 +249,22 @@ public sealed class OpenXmlPptxRenderer
                 }
                 else
                 {
-                    var slideKind = SlideTemplateSelector.Classify(marpSlide);
-                    var selectedLayout = templateSelector.SelectLayout(marpSlide, slideKind, deck.DefaultContentLayout);
+                    var selectedLayout = templateSelector.SelectLayout(marpSlide, slideKind, deck.DefaultContentLayout, imageFocusedOrdinal);
                     nextSlidePart = AddSlide(presentationPart, selectedLayout.LayoutPart, marpSlide, metadata, deck.Theme, sourceDirectory, remoteAssets, selectedLayout.UseTemplateStyle, i + 1, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
                 }
             }
             else
             {
-                var slideKind = SlideTemplateSelector.Classify(marpSlide);
-                var selectedLayout = templateSelector.SelectLayout(marpSlide, slideKind, deck.DefaultContentLayout);
+                var selectedLayout = templateSelector.SelectLayout(marpSlide, slideKind, deck.DefaultContentLayout, imageFocusedOrdinal);
                 nextSlidePart = AddSlide(presentationPart, selectedLayout.LayoutPart, marpSlide, metadata, deck.Theme, sourceDirectory, remoteAssets, selectedLayout.UseTemplateStyle, i + 1, language, selectedLayout.TemplateSlide, deck.DiagramTheme);
             }
 
             newSlideParts.Add(nextSlidePart);
+
+            if (slideKind == SlideKind.ImageFocused)
+            {
+                imageFocusedOrdinal++;
+            }
 
             if (unmanagedSlidesAfterManaged.TryGetValue(metadata.SlideId, out var attachedSlides))
             {

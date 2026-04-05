@@ -6833,6 +6833,129 @@ public class PptxRendererTests
         Assert.Empty(validationErrors);
     }
 
+    [Fact]
+    public void Renderer_PreservesPhotoLayoutRotation_WhenUpdatingExistingDeckWithMixedChangedSlides()
+    {
+        // Arrange: template with 2 photo layouts. Render an initial deck with 4 image slides
+        // (A→B→A→B). Then update the deck where slides 2 and 4 change title (new SlideId),
+        // while slides 1 and 3 remain unchanged. The layout sequence should remain stable:
+        // unchanged slides keep their assigned layout; re-rendered slides get the correct
+        // layout for their position in the image-slide ordinal sequence.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultiplePhotoLayouts(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        var compiler = new MarpCompiler();
+        var renderer = new OpenXmlPptxRenderer();
+
+        // Initial render: 4 image slides → A, B, A, B.
+        var initialMarkdown = workspace.WriteMarkdown("initial.md",
+            """
+            # Image Slide 1
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 2
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 3
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 4
+
+            ![Photo](photo.png)
+            """);
+
+        var initialOutputPath = workspace.GetPath("initial.pptx");
+        var initialDeck = compiler.Compile(File.ReadAllText(initialMarkdown), initialMarkdown);
+        renderer.Render(initialDeck, initialOutputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        // Verify initial layout sequence.
+        using (var doc = PresentationDocument.Open(initialOutputPath, false))
+        {
+            var initialSlideIds = doc.PresentationPart!.Presentation!.SlideIdList!.Elements<P.SlideId>().ToArray();
+            var parts = initialSlideIds
+                .Select(id => (SlidePart)doc.PresentationPart!.GetPartById(id.RelationshipId!))
+                .ToArray();
+            Assert.Equal("Photo Layout A", parts[0].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+            Assert.Equal("Photo Layout B", parts[1].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+            Assert.Equal("Photo Layout A", parts[2].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+            Assert.Equal("Photo Layout B", parts[3].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        }
+
+        // Update render: slides 1 and 3 are unchanged; slides 2 and 4 get a new heading
+        // (new SlideId → treated as new slides). The rotation for ordinals 0..3 is still
+        // A, B, A, B so the layout sequence must remain stable.
+        var updatedMarkdown = workspace.WriteMarkdown("updated.md",
+            """
+            # Image Slide 1
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 2 Updated
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 3
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 4 Updated
+
+            ![Photo](photo.png)
+            """);
+
+        var updatedOutputPath = workspace.GetPath("updated.pptx");
+        var updatedDeck = compiler.Compile(File.ReadAllText(updatedMarkdown), updatedMarkdown);
+        renderer.Render(updatedDeck, updatedOutputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+            ExistingDeckPath = initialOutputPath,
+        });
+
+        using var updatedDoc = PresentationDocument.Open(updatedOutputPath, false);
+
+        // Use SlideIdList order (presentation order) not SlideParts order (relationship order).
+        var slideIdList = updatedDoc.PresentationPart!.Presentation!.SlideIdList!.Elements<P.SlideId>().ToArray();
+        Assert.Equal(4, slideIdList.Length);
+        var slideParts = slideIdList
+            .Select(id => (SlidePart)updatedDoc.PresentationPart!.GetPartById(id.RelationshipId!))
+            .ToArray();
+
+        // Layout sequence must be stable: A, B, A, B regardless of which slides changed.
+        Assert.Equal("Photo Layout A", slideParts[0].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout B", slideParts[1].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout A", slideParts[2].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout B", slideParts[3].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(updatedDoc);
+        Assert.Empty(validationErrors);
+    }
+
     /// <summary>
     /// Creates a minimal template PPTX with two photo layouts named "Photo Layout A" and
     /// "Photo Layout B". Each layout carries a title placeholder, a body placeholder, and
