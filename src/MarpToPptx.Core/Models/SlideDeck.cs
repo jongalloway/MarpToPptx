@@ -190,6 +190,14 @@ public sealed record TableElement(IReadOnlyList<TableRowModel> Rows, IReadOnlyLi
     public TableElement(IReadOnlyList<TableRowModel> Rows) : this(Rows, []) { }
 }
 
+/// <summary>
+/// Represents a Markdown blockquote (<c>&gt; …</c>) on a slide.
+/// </summary>
+public sealed record BlockquoteElement(IReadOnlyList<InlineSpan> Spans) : ISlideElement
+{
+    public string Text => string.Concat(Spans.Select(s => s.Text));
+}
+
 public sealed record TableRowModel(IReadOnlyList<IReadOnlyList<InlineSpan>> Cells, bool IsHeader = false);
 
 public enum TableColumnAlignment { Left, Center, Right }
