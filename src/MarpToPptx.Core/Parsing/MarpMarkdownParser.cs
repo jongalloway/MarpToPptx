@@ -59,6 +59,8 @@ public sealed class MarpMarkdownParser
                 case "header":
                 case "footer":
                 case "transition":
+                case "fontsize":
+                case "font-size":
                     defaultStyle = MarpDirectiveParser.ApplyDirective(defaultStyle, pair.Key, pair.Value);
                     break;
             }

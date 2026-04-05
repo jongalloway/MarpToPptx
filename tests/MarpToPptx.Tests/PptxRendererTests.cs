@@ -1791,6 +1791,236 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_FontSizeDirective_TemplatePath_EmitsSzOnBodyRuns_NotTitleRuns()
+    {
+        // Arrange: body text runs should carry sz (font size) when _fontSize is set;
+        // title runs must remain unaffected.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            <!-- _fontSize: 20pt -->
+            # Slide Heading
+
+            Body paragraph text
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Title placeholder: font size must NOT be set.
+        var titleShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Title);
+        var titleRun = titleShape.Descendants<A.Run>().First();
+        Assert.Null(titleRun.RunProperties?.FontSize);
+
+        // Body placeholder: all runs must carry sz = 2000 (20pt in hundredths).
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var bodyRuns = bodyShape.Descendants<A.Run>().ToArray();
+        Assert.NotEmpty(bodyRuns);
+        foreach (var run in bodyRuns)
+        {
+            Assert.Equal(2000, (int?)run.RunProperties?.FontSize);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FontSizeDirective_TemplatePath_BulletList_EmitsSzOnAllRuns()
+    {
+        // Bullet list items inside the body placeholder must also carry sz when fontSize is set.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            <!-- _fontSize: 17pt -->
+            # Slide Heading
+
+            - Bullet one
+            - Bullet two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var bodyRuns = bodyShape.Descendants<A.Run>().ToArray();
+        Assert.NotEmpty(bodyRuns);
+        foreach (var run in bodyRuns)
+        {
+            Assert.Equal(1700, (int?)run.RunProperties?.FontSize);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FontSizeDirective_TemplatePath_NoFontSize_RunsOmitSz()
+    {
+        // Without a fontSize directive the body runs must not carry any sz attribute so
+        // the template's layout/master styles cascade normally.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            # Slide Heading
+
+            Body paragraph text
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var bodyRuns = bodyShape.Descendants<A.Run>().ToArray();
+        Assert.NotEmpty(bodyRuns);
+        foreach (var run in bodyRuns)
+        {
+            Assert.Null(run.RunProperties?.FontSize);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FontSizeDirective_StandalonePath_OverridesBodyTextSize()
+    {
+        // In the standalone (non-template) rendering path the body TextStyle FontSize
+        // must be replaced by the directive value.
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _fontSize: 28pt -->
+            # Heading
+
+            Body paragraph text
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // The standalone text shape for the body paragraph.
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().First(s =>
+            s.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Text");
+
+        var bodyRuns = bodyShape.Descendants<A.Run>().ToArray();
+        Assert.NotEmpty(bodyRuns);
+        foreach (var run in bodyRuns)
+        {
+            // 28pt = 2800 hundredths of a point
+            Assert.Equal(2800, (int?)run.RunProperties?.FontSize);
+        }
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_FontSizeDirective_FallsBackToNormalSize_WhenNotSet()
+    {
+        // Without a directive the standalone body text shape uses the theme default (24pt).
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Heading
+
+            Body paragraph text
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().First(s =>
+            s.NonVisualShapeProperties?.NonVisualDrawingProperties?.Name?.Value == "Text");
+
+        var bodyRuns = bodyShape.Descendants<A.Run>().ToArray();
+        Assert.NotEmpty(bodyRuns);
+        foreach (var run in bodyRuns)
+        {
+            // Default theme body size is 24pt = 2400 hundredths of a point.
+            Assert.Equal(2400, (int?)run.RunProperties?.FontSize);
+        }
+    }
+
+    [Fact]
     public void Renderer_FallsBackToStandaloneShapes_WhenNamedLayoutLacksPlaceholders()
     {
         using var workspace = TestWorkspace.Create();

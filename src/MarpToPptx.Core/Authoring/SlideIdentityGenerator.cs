@@ -138,6 +138,10 @@ public static class SlideIdentityGenerator
             // (type, direction, durationMs) within the transition value.
             sb.Append("\x01transition\x01").Append(t.Type).Append('\x01').Append(t.Direction ?? string.Empty).Append('\x01').Append(t.DurationMs?.ToString() ?? string.Empty);
         }
+        if (slideModel.Style.FontSize is { } fs)
+        {
+            sb.Append("\x01fontSize\x01").Append(fs);
+        }
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();

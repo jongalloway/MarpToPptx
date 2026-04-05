@@ -818,6 +818,10 @@ public sealed class OpenXmlPptxRenderer
         var firstElement = slideModel.Elements.FirstOrDefault();
         var plan = _layoutEngine.LayoutSlide(slideModel, effectiveTheme);
         var bodyStyle = effectiveTheme.Body;
+        if (slideModel.Style.FontSize is { } bodyFontSizeHundredths)
+        {
+            bodyStyle = bodyStyle with { FontSize = bodyFontSizeHundredths / 100.0 };
+        }
         foreach (var placed in plan.Elements)
         {
             // Resolve the frame: prefer template placeholder rect when available.
@@ -1130,6 +1134,7 @@ public sealed class OpenXmlPptxRenderer
         // the standalone residual path regardless of whether body text is present here.
         if (bodyPlaceholder is not null && bodyTextElements.Count > 0)
         {
+            var bodyFontSizeOverride = slideModel.Style.FontSize;
             var bodyParagraphs = new List<A.Paragraph>();
             foreach (var element in bodyTextElements)
             {
@@ -1138,20 +1143,20 @@ public sealed class OpenXmlPptxRenderer
                     case HeadingElement heading:
                         foreach (var group in SplitSpansIntoParagraphs(heading.Spans))
                         {
-                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: true, context.Language));
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: true, context.Language, fontSizeOverride: bodyFontSizeOverride));
                         }
                         break;
                     case ParagraphElement paragraph:
                         foreach (var group in SplitSpansIntoParagraphs(paragraph.Spans))
                         {
-                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language));
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language, fontSizeOverride: bodyFontSizeOverride));
                         }
                         break;
                     case BulletListElement list:
                         var orderNumber = 1;
                         foreach (var item in list.Items)
                         {
-                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(item.Spans, context.SlidePart, level: item.Depth, list.Ordered, forceBold: false, context.Language, orderNumber));
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(item.Spans, context.SlidePart, level: item.Depth, list.Ordered, forceBold: false, context.Language, orderNumber, fontSizeOverride: bodyFontSizeOverride));
                             orderNumber++;
                         }
                         break;
@@ -1227,6 +1232,10 @@ public sealed class OpenXmlPptxRenderer
             var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
             var contentRect = GetContentRect(residualTheme, layoutOptions);
             var bodyStyle = residualTheme.Body;
+            if (slideModel.Style.FontSize is { } residualFontSizeHundredths)
+            {
+                bodyStyle = bodyStyle with { FontSize = residualFontSizeHundredths / 100.0 };
+            }
             foreach (var placed in plan.Elements)
             {
                 var frame = bodyRect is null
@@ -1513,6 +1522,8 @@ public sealed class OpenXmlPptxRenderer
     /// and font family so the layout/master text styles cascade. Plain (non-list)
     /// paragraphs emit <c>&lt;a:buNone/&gt;</c> so they do not pick up the body
     /// placeholder's default bullet.
+    /// When <paramref name="fontSizeOverride"/> is set, emits an explicit <c>sz</c> attribute
+    /// on each run so the author-specified size takes precedence over the placeholder default.
     /// </summary>
     private static A.Paragraph CreateTemplateParagraphFromSpans(
         IReadOnlyList<InlineSpan> spans,
@@ -1521,7 +1532,8 @@ public sealed class OpenXmlPptxRenderer
         bool ordered,
         bool forceBold,
         string language,
-        int orderNumber = 1)
+        int orderNumber = 1,
+        int? fontSizeOverride = null)
     {
         var paragraph = new A.Paragraph();
         var paragraphProperties = new A.ParagraphProperties();
@@ -1548,6 +1560,10 @@ public sealed class OpenXmlPptxRenderer
             }
 
             var runProperties = new A.RunProperties { Language = language };
+            if (fontSizeOverride is { } sz)
+            {
+                runProperties.FontSize = sz;
+            }
             if (span.Bold || forceBold)
             {
                 runProperties.Bold = true;
@@ -1570,7 +1586,12 @@ public sealed class OpenXmlPptxRenderer
             paragraph.Append(new A.Run(runProperties, new A.Text(span.Text)));
         }
 
-        paragraph.Append(new A.EndParagraphRunProperties { Language = language });
+        var endRunProps = new A.EndParagraphRunProperties { Language = language };
+        if (fontSizeOverride is { } endSz)
+        {
+            endRunProps.FontSize = endSz;
+        }
+        paragraph.Append(endRunProps);
         return paragraph;
     }
 
