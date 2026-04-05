@@ -8,6 +8,11 @@ namespace MarpToPptx.Pptx.Diagnostics;
 /// </summary>
 public static class SlideContentClassifier
 {
+    private const int MaxTaglineLength = 60;
+    private const int MaxBoldSpanLength = 10;
+    private const int MaxBigNumberParagraphLength = 20;
+    private const int MaxNumericValueLength = 10;
+    private const int DenseContentThreshold = 6;
     /// <summary>
     /// Classifies the content of <paramref name="slide"/> and returns the most appropriate
     /// <see cref="SlideContentKind"/> along with an optional short explanation.
@@ -95,8 +100,8 @@ public static class SlideContentClassifier
             return (SlideContentKind.Agenda, null);
         }
 
-        // ── Dense content: more than 6 body elements ─────────────────────────────────
-        if (CountBodyUnits(bodyElements) > 6)
+        // ── Dense content: more than DenseContentThreshold body elements ─────────────────
+        if (CountBodyUnits(bodyElements) > DenseContentThreshold)
         {
             return (SlideContentKind.WideContent, "dense text");
         }
@@ -115,7 +120,7 @@ public static class SlideContentClassifier
     // ── Private helpers ──────────────────────────────────────────────────────────────
 
     private static bool IsShortTagline(ParagraphElement para)
-        => para.Text.Length <= 60 && !para.Text.Contains('\n');
+        => para.Text.Length <= MaxTaglineLength && !para.Text.Contains('\n');
 
     private static bool IsBigNumber(IReadOnlyList<ParagraphElement> paragraphs, IReadOnlyList<BulletListElement> bulletLists)
     {
@@ -138,10 +143,10 @@ public static class SlideContentClassifier
         }
 
         var hasBoldOrNumericSpan = spans.Any(s =>
-            (s.Bold && s.Text.Trim().Length <= 10) ||
+            (s.Bold && s.Text.Trim().Length <= MaxBoldSpanLength) ||
             IsNumericValue(s.Text.Trim()));
 
-        return hasBoldOrNumericSpan && firstPara.Text.Trim().Length <= 20;
+        return hasBoldOrNumericSpan && firstPara.Text.Trim().Length <= MaxBigNumberParagraphLength;
     }
 
     private static bool IsNumericValue(string text)
@@ -152,7 +157,7 @@ public static class SlideContentClassifier
         }
 
         // Accept values like "98%", "$1.2M", "42", "3x", "100K", "#1"
-        return text.Length <= 10 &&
+        return text.Length <= MaxNumericValueLength &&
                text.Any(char.IsDigit) &&
                text.All(c => char.IsDigit(c) || c is '%' or '$' or '.' or ',' or 'x' or 'X' or 'K' or 'M' or 'B' or '#' or '+' or '-');
     }

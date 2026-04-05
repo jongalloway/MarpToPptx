@@ -330,8 +330,9 @@ static void PrintRecommendReport(LayoutRecommendationReport report, bool verbose
         return;
     }
 
+    const int MaxTitleDisplayWidth = 40;
     var slideNumWidth = report.Recommendations.Count.ToString().Length;
-    var titleWidth = Math.Min(40, report.Recommendations.Max(r => r.SlideTitle?.Length ?? 0));
+    var titleWidth = Math.Min(MaxTitleDisplayWidth, report.Recommendations.Max(r => r.SlideTitle?.Length ?? 0));
     var layoutWidth = report.Recommendations.Max(r => r.RecommendedLayout.Length);
 
     foreach (var rec in report.Recommendations)
@@ -418,6 +419,7 @@ static void ApplyLayoutPatches(string deckPath, LayoutRecommendationReport repor
 {
     var lines = File.ReadAllLines(deckPath).ToList();
     var slideBoundaries = FindSlideBoundaries(lines);
+    var patchedCount = 0;
 
     // Walk in reverse so line insertions don't shift earlier indices.
     for (var idx = report.Recommendations.Count - 1; idx >= 0; idx--)
@@ -436,18 +438,20 @@ static void ApplyLayoutPatches(string deckPath, LayoutRecommendationReport repor
         }
 
         var insertAt = slideBoundaries[idx];
+        var slideEnd = idx + 1 < slideBoundaries.Count ? slideBoundaries[idx + 1] : lines.Count;
 
         // Check if the slide already has a <!-- _layout: ... --> comment.
-        if (SlideHasLayoutDirective(lines, insertAt, idx + 1 < slideBoundaries.Count ? slideBoundaries[idx + 1] : lines.Count))
+        if (SlideHasLayoutDirective(lines, insertAt, slideEnd))
         {
             continue;
         }
 
         lines.Insert(insertAt, $"<!-- _layout: {rec.RecommendedLayout} -->");
+        patchedCount++;
     }
 
     File.WriteAllLines(deckPath, lines);
-    Console.WriteLine($"Patched {report.Recommendations.Count} slides in {deckPath}");
+    Console.WriteLine($"Patched {patchedCount} slide(s) in {deckPath}");
 }
 
 static List<int> FindSlideBoundaries(List<string> lines)
@@ -485,7 +489,8 @@ static List<int> FindSlideBoundaries(List<string> lines)
 
 static bool SlideHasLayoutDirective(List<string> lines, int slideStart, int slideEnd)
 {
-    for (var i = slideStart; i < Math.Min(slideEnd, lines.Count); i++)
+    // slideEnd is already bounded to lines.Count by the caller.
+    for (var i = slideStart; i < slideEnd; i++)
     {
         var trimmed = lines[i].Trim();
         if (trimmed.StartsWith("<!--") && trimmed.Contains("_layout:", StringComparison.OrdinalIgnoreCase))
