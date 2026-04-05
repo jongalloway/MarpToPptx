@@ -135,7 +135,9 @@ internal sealed class SlideTemplateSelector
             var photoLayouts = _photoLayouts ??= BuildPhotoLayouts();
             if (photoLayouts.Length > 0)
             {
-                return photoLayouts[_photoLayoutIndex++ % photoLayouts.Length];
+                var index = _photoLayoutIndex;
+                _photoLayoutIndex = (_photoLayoutIndex + 1) % photoLayouts.Length;
+                return photoLayouts[index];
             }
         }
 

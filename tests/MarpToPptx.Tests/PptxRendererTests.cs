@@ -6915,7 +6915,7 @@ public class PptxRendererTests
 
         var layoutPartB = slideMasterPart.AddNewPart<SlideLayoutPart>("rId2");
         layoutPartB.SlideLayout = new P.SlideLayout(
-            new P.CommonSlideData(MakePhotoLayoutShapeTree(1U)),
+            new P.CommonSlideData(MakePhotoLayoutShapeTree(2U)),
             new P.ColorMapOverride(new A.MasterColorMapping()))
         {
             Type = P.SlideLayoutValues.PictureText,
