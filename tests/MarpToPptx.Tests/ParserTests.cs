@@ -2694,6 +2694,117 @@ public class ParserTests
         Assert.Null(slide.Style.FontSize);
     }
 
+    // ── shrinkToFit directive tests ────────────────────────────────────────
+
+    [Theory]
+    [InlineData("true", "true")]
+    [InlineData("false", "false")]
+    [InlineData("14pt", "14pt")]
+    [InlineData("18pt", "18pt")]
+    public void Parser_SpotShrinkToFitDirective_SetsValue(string input, string expected)
+    {
+        var markdown = $"<!-- _shrinkToFit: {input} -->\n# Slide\n\nBody text";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal(expected, slide.Style.ShrinkToFit);
+    }
+
+    [Fact]
+    public void Parser_SpotShrinkToFitDirective_AppliesToCurrentSlideOnly()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- _shrinkToFit: false -->
+        # Slide Two
+
+        Body text
+
+        ---
+
+        # Slide Three
+
+        More body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.ShrinkToFit);
+        Assert.Equal("false", deck.Slides[1].Style.ShrinkToFit);
+        // Spot directive does not carry forward to slide 3.
+        Assert.Null(deck.Slides[2].Style.ShrinkToFit);
+    }
+
+    [Fact]
+    public void Parser_LocalShrinkToFitDirective_CarriesForwardToSubsequentSlides()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- shrinkToFit: false -->
+        # Slide Two
+
+        Body text
+
+        ---
+
+        # Slide Three
+
+        More body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.ShrinkToFit);
+        Assert.Equal("false", deck.Slides[1].Style.ShrinkToFit);
+        // Local directive carries forward to slide 3.
+        Assert.Equal("false", deck.Slides[2].Style.ShrinkToFit);
+    }
+
+    [Fact]
+    public void Parser_ShrinkToFitDirective_HyphenatedAlias_IsSupported()
+    {
+        const string markdown = """
+        <!-- _shrink-to-fit: false -->
+        # Slide
+
+        Body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("false", slide.Style.ShrinkToFit);
+    }
+
+    [Fact]
+    public void Parser_ShrinkToFitDirective_Unset_IsNull()
+    {
+        const string markdown = """
+        # Slide
+
+        Body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Null(slide.Style.ShrinkToFit);
+    }
+
     // ── diagram-theme directive tests ─────────────────────────────────────
 
     [Fact]

@@ -1181,7 +1181,9 @@ public sealed class OpenXmlPptxRenderer
                 "Content Placeholder",
                 bodyPlaceholder,
                 bodyParagraphs,
-                normAutofit: true));
+                normAutofit: true,
+                shrinkToFit: slideModel.Style.ShrinkToFit,
+                fontSizeHundredths: slideModel.Style.FontSize));
         }
         else if (bodyPlaceholder is null && bodyTextElements.Count > 0)
         {
@@ -1528,7 +1530,7 @@ public sealed class OpenXmlPptxRenderer
     /// from the matching layout/master placeholder. The shape carries an empty
     /// <c>&lt;p:spPr/&gt;</c> (no transform) and a text body with the supplied paragraphs.
     /// </summary>
-    private static P.Shape CreateSlidePlaceholderShape(uint shapeId, string name, TemplatePlaceholder placeholder, IEnumerable<A.Paragraph> paragraphs, bool normAutofit = false)
+    private static P.Shape CreateSlidePlaceholderShape(uint shapeId, string name, TemplatePlaceholder placeholder, IEnumerable<A.Paragraph> paragraphs, bool normAutofit = false, string? shrinkToFit = null, int? fontSizeHundredths = null)
     {
         // Echo the layout placeholder's identity exactly. For typeless content
         // placeholders (<p:ph idx="..."/> on obj layouts such as "Title and Content"),
@@ -1544,12 +1546,44 @@ public sealed class OpenXmlPptxRenderer
             ph.Index = idx;
         }
 
-        // When normAutofit is requested, add <a:normAutofit/> inside <a:bodyPr> so
-        // that PowerPoint shrinks text proportionally when content overflows the
-        // placeholder bounds. The element has no effect when text already fits.
-        A.BodyProperties bodyProperties = normAutofit
-            ? new A.BodyProperties(new A.NormalAutoFit())
-            : new A.BodyProperties();
+        // Determine the effective normAutofit behavior.
+        // When normAutofit is not requested (e.g. title placeholder), never emit it.
+        // When normAutofit is requested (body placeholder), honour the shrinkToFit directive:
+        //   null or "true"  → <a:normAutofit/> (default PowerPoint shrink behavior)
+        //   "false"         → omit <a:normAutofit/> entirely (disable auto-shrink)
+        //   size (e.g. "14pt") → <a:normAutofit fontScale="…"/> with a minimum size floor
+        A.BodyProperties bodyProperties;
+        if (!normAutofit || string.Equals(shrinkToFit, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            bodyProperties = new A.BodyProperties();
+        }
+        else if (shrinkToFit is not null && !string.Equals(shrinkToFit, "true", StringComparison.OrdinalIgnoreCase))
+        {
+            // Size floor: parse and compute fontScale relative to the effective body font size.
+            // fontScale is expressed in 1/1000ths of a percent; 100000 = 100%.
+            // Spec range: 1000–100000.
+            var minSizeHundredths = MarpToPptx.Core.Parsing.MarpDirectiveParser.ParseFontSizeDirective(shrinkToFit);
+            if (minSizeHundredths is { } minSize)
+            {
+                // Reference size: slide FontSize override if set, otherwise 18pt (1800 hundredths).
+                const int defaultBodyFontSizeHundredths = 1800;
+                var reference = fontSizeHundredths ?? defaultBodyFontSizeHundredths;
+                var fontScale = (int)Math.Round((double)minSize / reference * 100000);
+                fontScale = Math.Clamp(fontScale, 1000, 100000);
+                bodyProperties = new A.BodyProperties(new A.NormalAutoFit { FontScale = fontScale });
+            }
+            else
+            {
+                // Unrecognised size value: fall back to unrestricted normAutofit.
+                bodyProperties = new A.BodyProperties(new A.NormalAutoFit());
+            }
+        }
+        else
+        {
+            // null or "true": emit <a:normAutofit/> so PowerPoint shrinks text proportionally
+            // when content overflows the placeholder bounds.
+            bodyProperties = new A.BodyProperties(new A.NormalAutoFit());
+        }
 
         var textBody = new P.TextBody(bodyProperties, new A.ListStyle());
         foreach (var paragraph in paragraphs)

@@ -106,6 +106,7 @@ public static partial class MarpDirectiveParser
             "footer" => Clone(style, footer: value),
             "transition" => Clone(style, transition: ParseTransition(value)),
             "fontsize" or "font-size" => Clone(style, fontSize: ParseFontSizeDirective(value)),
+            "shrinktofit" or "shrink-to-fit" => Clone(style, shrinkToFit: value),
             _ => style,
         };
     }
@@ -115,7 +116,7 @@ public static partial class MarpDirectiveParser
     /// Accepts <c>20pt</c>, <c>20</c> (assumed pt), or <c>2000</c> (already in hundredths of a point).
     /// Returns <see langword="null"/> if the value cannot be parsed.
     /// </summary>
-    internal static int? ParseFontSizeDirective(string value)
+    public static int? ParseFontSizeDirective(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {
@@ -198,7 +199,8 @@ public static partial class MarpDirectiveParser
         string? header = null,
         string? footer = null,
         SlideTransition? transition = null,
-        int? fontSize = null)
+        int? fontSize = null,
+        string? shrinkToFit = null)
     {
         var clone = new SlideStyle
         {
@@ -216,6 +218,7 @@ public static partial class MarpDirectiveParser
             Footer = footer ?? source.Footer,
             Transition = transition ?? source.Transition,
             FontSize = fontSize ?? source.FontSize,
+            ShrinkToFit = shrinkToFit ?? source.ShrinkToFit,
         };
 
         foreach (var pair in source.Directives)

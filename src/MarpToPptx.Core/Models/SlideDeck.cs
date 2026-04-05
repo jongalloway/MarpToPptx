@@ -78,6 +78,18 @@ public sealed class SlideStyle
     /// </summary>
     public int? FontSize { get; init; }
 
+    /// <summary>
+    /// Controls the auto-shrink behavior on body text placeholders.
+    /// <list type="bullet">
+    ///   <item><c>null</c> — unset; renderer defaults to emitting <c>&lt;a:normAutofit/&gt;</c>.</item>
+    ///   <item><c>"true"</c> — explicitly enable auto-shrink (same as default).</item>
+    ///   <item><c>"false"</c> — disable auto-shrink entirely; no <c>&lt;a:normAutofit/&gt;</c> is emitted.</item>
+    ///   <item>size string (e.g. <c>"14pt"</c>) — allow shrinking but enforce a minimum font-size floor;
+    ///   emits <c>&lt;a:normAutofit fontScale="…"/&gt;</c> computed relative to the slide's effective body font size.</item>
+    /// </list>
+    /// </summary>
+    public string? ShrinkToFit { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
