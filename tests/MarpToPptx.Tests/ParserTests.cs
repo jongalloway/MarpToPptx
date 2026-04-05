@@ -2534,6 +2534,166 @@ public class ParserTests
         Assert.Equal("fade", deck.Slides[2].Style.Transition?.Type);
     }
 
+    // ── fontSize directive tests ──────────────────────────────────────────
+
+    [Fact]
+    public void Parser_FrontMatterFontSize_SetsDeckLevelDefault()
+    {
+        const string markdown = """
+        ---
+        fontSize: 20pt
+        ---
+
+        # Slide One
+
+        Body text
+
+        ---
+
+        # Slide Two
+
+        More body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal(2000, deck.Slides[0].Style.FontSize);
+        Assert.Equal(2000, deck.Slides[1].Style.FontSize);
+    }
+
+    [Fact]
+    public void Parser_LocalFontSizeDirective_CarriesForwardToSubsequentSlides()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- fontSize: 17pt -->
+        # Slide Two
+
+        Body text
+
+        ---
+
+        # Slide Three
+
+        More body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.FontSize);
+        Assert.Equal(1700, deck.Slides[1].Style.FontSize);
+        // Local directive carries forward to slide 3.
+        Assert.Equal(1700, deck.Slides[2].Style.FontSize);
+    }
+
+    [Fact]
+    public void Parser_SpotFontSizeDirective_AppliesToCurrentSlideOnly()
+    {
+        const string markdown = """
+        # Slide One
+
+        ---
+
+        <!-- _fontSize: 20pt -->
+        # Slide Two
+
+        Body text
+
+        ---
+
+        # Slide Three
+
+        More body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(3, deck.Slides.Count);
+        Assert.Null(deck.Slides[0].Style.FontSize);
+        Assert.Equal(2000, deck.Slides[1].Style.FontSize);
+        // Spot directive does not carry forward to slide 3.
+        Assert.Null(deck.Slides[2].Style.FontSize);
+    }
+
+    [Theory]
+    [InlineData("20pt", 2000)]
+    [InlineData("20PT", 2000)]
+    [InlineData("20", 2000)]
+    [InlineData("2000", 2000)]
+    [InlineData("17.5pt", 1750)]
+    [InlineData("60pt", 6000)]
+    public void Parser_FontSizeDirective_AcceptsAllSupportedFormats(string input, int expected)
+    {
+        var markdown = $"<!-- _fontSize: {input} -->\n# Slide\n\nBody text";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal(expected, slide.Style.FontSize);
+    }
+
+    [Fact]
+    public void Parser_FontSizeDirective_HyphenatedAlias_IsSupported()
+    {
+        const string markdown = """
+        <!-- _font-size: 24pt -->
+        # Slide
+
+        Body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal(2400, slide.Style.FontSize);
+    }
+
+    [Fact]
+    public void Parser_FontSizeDirective_InvalidValue_IsIgnored()
+    {
+        const string markdown = """
+        <!-- _fontSize: notanumber -->
+        # Slide
+
+        Body text
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Null(slide.Style.FontSize);
+    }
+
+    [Theory]
+    [InlineData("0pt")]
+    [InlineData("-10pt")]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("NaN")]
+    public void Parser_FontSizeDirective_NonPositiveOrNonFiniteValue_IsIgnored(string input)
+    {
+        var markdown = $"<!-- _fontSize: {input} -->\n# Slide\n\nBody text";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Null(slide.Style.FontSize);
+    }
+
     // ── diagram-theme directive tests ─────────────────────────────────────
 
     [Fact]

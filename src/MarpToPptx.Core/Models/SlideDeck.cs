@@ -71,6 +71,13 @@ public sealed class SlideStyle
 
     public SlideTransition? Transition { get; init; }
 
+    /// <summary>
+    /// Override body text font size in hundredths of a point (e.g. 2000 = 20pt).
+    /// When set, overrides the theme body font size for body text on this slide.
+    /// Title placeholder text is not affected.
+    /// </summary>
+    public int? FontSize { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 

@@ -105,8 +105,49 @@ public static partial class MarpDirectiveParser
             "header" => Clone(style, header: value),
             "footer" => Clone(style, footer: value),
             "transition" => Clone(style, transition: ParseTransition(value)),
+            "fontsize" or "font-size" => Clone(style, fontSize: ParseFontSizeDirective(value)),
             _ => style,
         };
+    }
+
+    /// <summary>
+    /// Parses a font-size directive value into hundredths of a point.
+    /// Accepts <c>20pt</c>, <c>20</c> (assumed pt), or <c>2000</c> (already in hundredths of a point).
+    /// Returns <see langword="null"/> if the value cannot be parsed.
+    /// </summary>
+    internal static int? ParseFontSizeDirective(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        var trimmed = value.Trim();
+
+        // Explicit "pt" suffix: "20pt" → 2000
+        if (trimmed.EndsWith("pt", StringComparison.OrdinalIgnoreCase))
+        {
+            var numPart = trimmed[..^2].Trim();
+            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var pts)
+                && double.IsFinite(pts) && pts > 0)
+            {
+                return (int)Math.Round(pts * 100);
+            }
+            return null;
+        }
+
+        // Bare number: treat as pt when <= 999, otherwise as hundredths of a point already.
+        if (double.TryParse(trimmed, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bare)
+            && double.IsFinite(bare) && bare > 0)
+        {
+            // Heuristic: values <= 999 are treated as point values (e.g. "20" → 2000).
+            // Values >= 1000 are treated as already in hundredths of a point (e.g. "2000" → 2000).
+            return bare <= 999
+                ? (int)Math.Round(bare * 100)
+                : (int)Math.Round(bare);
+        }
+
+        return null;
     }
 
     private static SlideTransition? ParseTransition(string value)
@@ -156,7 +197,8 @@ public static partial class MarpDirectiveParser
         string? color = null,
         string? header = null,
         string? footer = null,
-        SlideTransition? transition = null)
+        SlideTransition? transition = null,
+        int? fontSize = null)
     {
         var clone = new SlideStyle
         {
@@ -173,6 +215,7 @@ public static partial class MarpDirectiveParser
             Header = header ?? source.Header,
             Footer = footer ?? source.Footer,
             Transition = transition ?? source.Transition,
+            FontSize = fontSize ?? source.FontSize,
         };
 
         foreach (var pair in source.Directives)
