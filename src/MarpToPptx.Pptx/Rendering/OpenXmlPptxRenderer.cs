@@ -1211,7 +1211,7 @@ public sealed class OpenXmlPptxRenderer
             // Marp-theme accent so the header row matches the template's visual identity.
             // The list pattern `[TableElement singleTable]` matches a collection that
             // contains exactly one element AND that element must be of type TableElement
-            // (C# 12 collection expression pattern).
+            // (pattern matching list pattern syntax, not a C# 12 collection expression).
             if (bodyRect is not null && nonTextElements is [TableElement singleTable])
             {
                 var templateAccent = GetTemplateAccent1Color(slideLayoutPart);
@@ -2498,7 +2498,9 @@ public sealed class OpenXmlPptxRenderer
         var hasHeader = table.Rows.Any(row => row.IsHeader);
         var colWidth = ToEmu(frame.Width) / columnCount;
         var tableStyle = CreateTableTextStyle(style);
-        var headerFillColor = templateAccentColor ?? NormalizeColor(context.Theme.AccentColor);
+        var headerFillColor = templateAccentColor is null
+            ? NormalizeColor(context.Theme.AccentColor)
+            : NormalizeColor(templateAccentColor);
         var headerTextColor = GetContrastingTextColor(headerFillColor);
         const string bodyFillColor = "FFFFFF";
         const string bandFillColor = "F8FAFC";
