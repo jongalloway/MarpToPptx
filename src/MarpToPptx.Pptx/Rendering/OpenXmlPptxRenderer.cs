@@ -1204,73 +1204,107 @@ public sealed class OpenXmlPptxRenderer
             var residualSlide = new MarpToPptx.Core.Models.Slide { Style = slideModel.Style };
             residualSlide.Elements.AddRange(nonTextElements);
 
-            LayoutOptions? titleOnlyOptions = null;
-            if (bodyRect is null && titleHeading is not null)
+            // Fast path: when the sole residual element is a table and a body placeholder
+            // rect is available, render it directly into the body area — skipping the
+            // layout engine intermediary. This gives exact body-area sizing and lets the
+            // table fill the placeholder rect. The template's accent1 color overrides the
+            // Marp-theme accent so the header row matches the template's visual identity.
+            // The list pattern `[TableElement singleTable]` matches a collection that
+            // contains exactly one element AND that element must be of type TableElement
+            // (pattern matching list pattern syntax, not a C# 12 collection expression).
+            if (bodyRect is not null && nonTextElements is [TableElement singleTable])
             {
-                var titleRect = SlideTemplateSelector.GetTitlePlaceholderRect(slideLayoutPart);
-                if (titleRect is not null)
-                {
-                    const double titleBodySpacer = 20.0;
-                    titleOnlyOptions = LayoutOptions.Default with
-                    {
-                        ContentTopY = titleRect.Y + titleRect.Height + titleBodySpacer,
-                    };
-                }
+                var templateAccent = GetTemplateAccent1Color(slideLayoutPart);
+                AddTable(context, bodyRect, singleTable, effectiveTheme.Body, templateAccent);
             }
-
-            var residualTheme = bodyRect is null
-                ? effectiveTheme
-                : ScaleThemeForTemplateBody(effectiveTheme, residualSlide, bodyRect);
-            var layoutOptions = bodyRect is not null
-                ? CreateBodyRectLayoutOptions(residualTheme, bodyRect)
-                : titleOnlyOptions;
-            var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
-            var contentRect = GetContentRect(residualTheme, layoutOptions);
-            var bodyStyle = residualTheme.Body;
-            foreach (var placed in plan.Elements)
+            else
             {
-                var frame = bodyRect is null
-                    ? placed.Frame
-                    : TranslateRect(placed.Frame, bodyRect.X - contentRect.X, bodyRect.Y - contentRect.Y);
-
-                switch (placed.Element)
+                LayoutOptions? titleOnlyOptions = null;
+                if (bodyRect is null && titleHeading is not null)
                 {
-                    case HeadingElement heading:
-                        AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(residualTheme, heading.Level), residualTheme.InlineCode);
-                        break;
-                    case ParagraphElement paragraph:
-                        AddTextShape(context, frame, paragraph.Spans, bodyStyle, residualTheme.InlineCode);
-                        break;
-                    case BulletListElement list:
-                        AddBulletList(context, frame, list, bodyStyle);
-                        break;
-                    case ImageElement image:
-                        AddImage(context, frame, image.Source, image.AltText, image.Caption,
-                            explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
-                        break;
-                    case VideoElement video:
-                        AddVideo(context, frame, video.Source, video.AltText);
-                        break;
-                    case AudioElement audio:
-                        AddAudio(context, frame, audio.Source, audio.AltText);
-                        break;
-                    case CodeBlockElement code:
-                        AddCodeBlock(context, frame, code, residualTheme.Code);
-                        break;
-                    case MermaidDiagramElement mermaid:
-                        AddDiagram(context, frame, mermaid.Source, "mermaid", residualTheme, residualTheme.Code);
-                        break;
-                    case DiagramElement diagram:
-                        AddDiagram(context, frame, diagram.Source, "diagram", residualTheme, residualTheme.Code);
-                        break;
-                    case TableElement table:
-                        AddTable(context, frame, table, bodyStyle);
-                        break;
+                    var titleRect = SlideTemplateSelector.GetTitlePlaceholderRect(slideLayoutPart);
+                    if (titleRect is not null)
+                    {
+                        const double titleBodySpacer = 20.0;
+                        titleOnlyOptions = LayoutOptions.Default with
+                        {
+                            ContentTopY = titleRect.Y + titleRect.Height + titleBodySpacer,
+                        };
+                    }
+                }
+
+                var residualTheme = bodyRect is null
+                    ? effectiveTheme
+                    : ScaleThemeForTemplateBody(effectiveTheme, residualSlide, bodyRect);
+                var layoutOptions = bodyRect is not null
+                    ? CreateBodyRectLayoutOptions(residualTheme, bodyRect)
+                    : titleOnlyOptions;
+                var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
+                var contentRect = GetContentRect(residualTheme, layoutOptions);
+                var bodyStyle = residualTheme.Body;
+                foreach (var placed in plan.Elements)
+                {
+                    var frame = bodyRect is null
+                        ? placed.Frame
+                        : TranslateRect(placed.Frame, bodyRect.X - contentRect.X, bodyRect.Y - contentRect.Y);
+
+                    switch (placed.Element)
+                    {
+                        case HeadingElement heading:
+                            AddTextShape(context, frame, heading.Spans, ResolveHeadingStyle(residualTheme, heading.Level), residualTheme.InlineCode);
+                            break;
+                        case ParagraphElement paragraph:
+                            AddTextShape(context, frame, paragraph.Spans, bodyStyle, residualTheme.InlineCode);
+                            break;
+                        case BulletListElement list:
+                            AddBulletList(context, frame, list, bodyStyle);
+                            break;
+                        case ImageElement image:
+                            AddImage(context, frame, image.Source, image.AltText, image.Caption,
+                                explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
+                            break;
+                        case VideoElement video:
+                            AddVideo(context, frame, video.Source, video.AltText);
+                            break;
+                        case AudioElement audio:
+                            AddAudio(context, frame, audio.Source, audio.AltText);
+                            break;
+                        case CodeBlockElement code:
+                            AddCodeBlock(context, frame, code, residualTheme.Code);
+                            break;
+                        case MermaidDiagramElement mermaid:
+                            AddDiagram(context, frame, mermaid.Source, "mermaid", residualTheme, residualTheme.Code);
+                            break;
+                        case DiagramElement diagram:
+                            AddDiagram(context, frame, diagram.Source, "diagram", residualTheme, residualTheme.Code);
+                            break;
+                        case TableElement table:
+                            AddTable(context, frame, table, bodyStyle);
+                            break;
+                    }
                 }
             }
         }
 
         return true;
+    }
+
+    /// <summary>
+    /// Returns the hex accent1 color string from the slide master's theme, or
+    /// <c>null</c> if none is accessible. Used to apply the template's visual identity
+    /// to table header rows when rendering in template mode.
+    /// </summary>
+    private static string? GetTemplateAccent1Color(SlideLayoutPart slideLayoutPart)
+    {
+        var colorScheme = slideLayoutPart.SlideMasterPart?.ThemePart?.Theme
+            ?.ThemeElements?.ColorScheme;
+        if (colorScheme?.Accent1Color is not { } accent1)
+        {
+            return null;
+        }
+
+        return accent1.RgbColorModelHex?.Val?.Value
+            ?? accent1.SystemColor?.LastColor?.Value;
     }
 
     private static Rect GetContentRect(ThemeDefinition theme, LayoutOptions? options = null)
@@ -2448,7 +2482,7 @@ public sealed class OpenXmlPptxRenderer
         return paragraph;
     }
 
-    private static void AddTable(SlideRenderContext context, Rect frame, TableElement table, TextStyle style)
+    private static void AddTable(SlideRenderContext context, Rect frame, TableElement table, TextStyle style, string? templateAccentColor = null)
     {
         if (table.Rows.Count == 0)
         {
@@ -2464,7 +2498,9 @@ public sealed class OpenXmlPptxRenderer
         var hasHeader = table.Rows.Any(row => row.IsHeader);
         var colWidth = ToEmu(frame.Width) / columnCount;
         var tableStyle = CreateTableTextStyle(style);
-        var headerFillColor = NormalizeColor(context.Theme.AccentColor);
+        var headerFillColor = templateAccentColor is null
+            ? NormalizeColor(context.Theme.AccentColor)
+            : NormalizeColor(templateAccentColor);
         var headerTextColor = GetContrastingTextColor(headerFillColor);
         const string bodyFillColor = "FFFFFF";
         const string bandFillColor = "F8FAFC";
