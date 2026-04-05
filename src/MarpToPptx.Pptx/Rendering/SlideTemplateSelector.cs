@@ -58,6 +58,7 @@ internal sealed class SlideTemplateSelector
 
     private readonly IReadOnlyList<SlideLayoutPart> _layouts;
     private readonly IReadOnlyList<TemplateSlideReference> _templateSlides;
+    private SlideLayoutPart[]? _photoLayouts;
 
     public SlideTemplateSelector(IReadOnlyList<SlideLayoutPart> layouts, IReadOnlyList<SlidePart>? templateSlides = null)
     {
@@ -105,7 +106,14 @@ internal sealed class SlideTemplateSelector
     /// Returns the most appropriate <see cref="SlideLayoutPart"/> for the given slide.
     /// A matching named layout enables template-first visual styling for that slide.
     /// </summary>
-    public SelectedSlideLayout SelectLayout(Slide slide, SlideKind kind, string? defaultContentLayout)
+    /// <param name="imageFocusedOrdinal">
+    /// The zero-based ordinal of this slide among all <see cref="SlideKind.ImageFocused"/> slides
+    /// in the deck. Used to rotate through photo layouts deterministically. The caller must
+    /// advance this counter for every <see cref="SlideKind.ImageFocused"/> slide — including
+    /// unchanged slides in update mode — so that the rotation remains stable across incremental
+    /// updates.
+    /// </param>
+    public SelectedSlideLayout SelectLayout(Slide slide, SlideKind kind, string? defaultContentLayout, int imageFocusedOrdinal = 0)
     {
         var requestedLayout = ResolveRequestedLayout(slide, kind, defaultContentLayout);
         if (!string.IsNullOrWhiteSpace(requestedLayout))
@@ -123,11 +131,21 @@ internal sealed class SlideTemplateSelector
             }
         }
 
-        return new SelectedSlideLayout(SelectAutoLayout(kind), UseTemplateStyle: false);
+        return new SelectedSlideLayout(SelectAutoLayout(kind, imageFocusedOrdinal), UseTemplateStyle: false);
     }
 
-    private SlideLayoutPart SelectAutoLayout(SlideKind kind)
-        => kind switch
+    private SlideLayoutPart SelectAutoLayout(SlideKind kind, int imageFocusedOrdinal)
+    {
+        if (kind == SlideKind.ImageFocused)
+        {
+            var photoLayouts = _photoLayouts ??= BuildPhotoLayouts();
+            if (photoLayouts.Length > 0)
+            {
+                return photoLayouts[imageFocusedOrdinal % photoLayouts.Length];
+            }
+        }
+
+        return kind switch
         {
             SlideKind.Title =>
                 FindLayout(P.SlideLayoutValues.Title) ??
@@ -142,6 +160,19 @@ internal sealed class SlideTemplateSelector
                 FindLayout(P.SlideLayoutValues.Text) ??
                 _layouts[0],
         };
+    }
+
+    /// <summary>
+    /// Collects all layouts that have a picture placeholder, a title placeholder, and a
+    /// body placeholder. These are the photo-variant layouts suitable for rotation.
+    /// </summary>
+    private SlideLayoutPart[] BuildPhotoLayouts()
+        => _layouts
+            .Where(lp =>
+                GetPicturePlaceholder(lp) is not null &&
+                GetTitlePlaceholder(lp) is not null &&
+                GetBodyPlaceholder(lp) is not null)
+            .ToArray();
 
     /// <summary>
     /// Returns the bounding rectangle (in layout units) of the title placeholder in the

@@ -7078,4 +7078,407 @@ public class PptxRendererTests
             TemplatePath = templatePath,
         });
     }
+
+    [Fact]
+    public void Renderer_RotatesPhotoLayouts_ForConsecutiveImageSlidesWithNoExplicitLayout()
+    {
+        // Arrange: template with 2 photo layouts (title + body + picture each).
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultiplePhotoLayouts(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        // 3 image slides: the selector should rotate through photo layouts A → B → A.
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            # Image Slide 1
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 2
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 3
+
+            ![Photo](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slideParts = document.PresentationPart!.SlideParts.ToArray();
+        Assert.Equal(3, slideParts.Length);
+
+        // Rotation: slide 1 → Photo Layout A, slide 2 → Photo Layout B, slide 3 → Photo Layout A (wrap).
+        Assert.Equal("Photo Layout A", slideParts[0].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout B", slideParts[1].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout A", slideParts[2].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_ExplicitLayoutDirective_OverridesPhotoLayoutRotation()
+    {
+        // Arrange: template with 2 photo layouts. The slide's explicit _layout: directive
+        // must override the rotation and select the named layout directly.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultiplePhotoLayouts(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        // Explicitly request Photo Layout B (not the first rotation slot A).
+        var markdownPath = workspace.WriteMarkdown("deck.md",
+            """
+            <!-- _layout: Photo Layout B -->
+            # Image Slide
+
+            ![Photo](photo.png)
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // The explicit directive should select Photo Layout B, not the first rotation slot (A).
+        Assert.Equal("Photo Layout B", slidePart.SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_PreservesPhotoLayoutRotation_WhenUpdatingExistingDeckWithMixedChangedSlides()
+    {
+        // Arrange: template with 2 photo layouts. Render an initial deck with 4 image slides
+        // (A→B→A→B). Then update the deck where slides 2 and 4 change title (new SlideId),
+        // while slides 1 and 3 remain unchanged. The layout sequence should remain stable:
+        // unchanged slides keep their assigned layout; re-rendered slides get the correct
+        // layout for their position in the image-slide ordinal sequence.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithMultiplePhotoLayouts(templatePath);
+
+        var pixelPng = Convert.FromBase64String(
+            "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9WnV9a4AAAAASUVORK5CYII=");
+        workspace.WriteFile("photo.png", pixelPng);
+
+        var compiler = new MarpCompiler();
+        var renderer = new OpenXmlPptxRenderer();
+
+        // Initial render: 4 image slides → A, B, A, B.
+        var initialMarkdown = workspace.WriteMarkdown("initial.md",
+            """
+            # Image Slide 1
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 2
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 3
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 4
+
+            ![Photo](photo.png)
+            """);
+
+        var initialOutputPath = workspace.GetPath("initial.pptx");
+        var initialDeck = compiler.Compile(File.ReadAllText(initialMarkdown), initialMarkdown);
+        renderer.Render(initialDeck, initialOutputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        // Verify initial layout sequence.
+        using (var doc = PresentationDocument.Open(initialOutputPath, false))
+        {
+            var initialSlideIds = doc.PresentationPart!.Presentation!.SlideIdList!.Elements<P.SlideId>().ToArray();
+            var parts = initialSlideIds
+                .Select(id => (SlidePart)doc.PresentationPart!.GetPartById(id.RelationshipId!))
+                .ToArray();
+            Assert.Equal("Photo Layout A", parts[0].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+            Assert.Equal("Photo Layout B", parts[1].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+            Assert.Equal("Photo Layout A", parts[2].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+            Assert.Equal("Photo Layout B", parts[3].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        }
+
+        // Update render: slides 1 and 3 are unchanged; slides 2 and 4 get a new heading
+        // (new SlideId → treated as new slides). The rotation for ordinals 0..3 is still
+        // A, B, A, B so the layout sequence must remain stable.
+        var updatedMarkdown = workspace.WriteMarkdown("updated.md",
+            """
+            # Image Slide 1
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 2 Updated
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 3
+
+            ![Photo](photo.png)
+
+            ---
+
+            # Image Slide 4 Updated
+
+            ![Photo](photo.png)
+            """);
+
+        var updatedOutputPath = workspace.GetPath("updated.pptx");
+        var updatedDeck = compiler.Compile(File.ReadAllText(updatedMarkdown), updatedMarkdown);
+        renderer.Render(updatedDeck, updatedOutputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+            ExistingDeckPath = initialOutputPath,
+        });
+
+        using var updatedDoc = PresentationDocument.Open(updatedOutputPath, false);
+
+        // Use SlideIdList order (presentation order) not SlideParts order (relationship order).
+        var slideIdList = updatedDoc.PresentationPart!.Presentation!.SlideIdList!.Elements<P.SlideId>().ToArray();
+        Assert.Equal(4, slideIdList.Length);
+        var slideParts = slideIdList
+            .Select(id => (SlidePart)updatedDoc.PresentationPart!.GetPartById(id.RelationshipId!))
+            .ToArray();
+
+        // Layout sequence must be stable: A, B, A, B regardless of which slides changed.
+        Assert.Equal("Photo Layout A", slideParts[0].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout B", slideParts[1].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout A", slideParts[2].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+        Assert.Equal("Photo Layout B", slideParts[3].SlideLayoutPart?.SlideLayout?.MatchingName?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(updatedDoc);
+        Assert.Empty(validationErrors);
+    }
+
+    /// <summary>
+    /// Creates a minimal template PPTX with two photo layouts named "Photo Layout A" and
+    /// "Photo Layout B". Each layout carries a title placeholder, a body placeholder, and
+    /// a picture placeholder, making both eligible for photo-layout rotation.
+    /// </summary>
+    private static void CreateTemplateWithMultiplePhotoLayouts(string path)
+    {
+        using var doc = PresentationDocument.Create(path, DocumentFormat.OpenXml.PresentationDocumentType.Presentation);
+        var presentationPart = doc.AddPresentationPart();
+        var slideMasterPart = presentationPart.AddNewPart<SlideMasterPart>("rId1");
+
+        static P.Shape MakeTitlePh(uint id)
+            => new(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = "Title Placeholder" },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = P.PlaceholderValues.Title })),
+                new P.ShapeProperties(
+                    new A.Transform2D(
+                        new A.Offset { X = 457200L, Y = 274638L },
+                        new A.Extents { Cx = 8229600L, Cy = 1143000L }),
+                    new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }),
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+
+        static P.Shape MakeBodyPh(uint id)
+            => new(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = "Body Placeholder" },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(new P.PlaceholderShape { Type = P.PlaceholderValues.Body, Index = 1U })),
+                new P.ShapeProperties(
+                    new A.Transform2D(
+                        new A.Offset { X = 457200L, Y = 5080200L },
+                        new A.Extents { Cx = 8229600L, Cy = 1400000L }),
+                    new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }),
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+
+        static P.Shape MakePicturePh(uint id, uint idx)
+        {
+            var ph = new P.PlaceholderShape { Type = P.PlaceholderValues.Picture, Index = idx };
+            return new P.Shape(
+                new P.NonVisualShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = id, Name = "Picture Placeholder" },
+                    new P.NonVisualShapeDrawingProperties(new A.ShapeLocks { NoGrouping = true }),
+                    new P.ApplicationNonVisualDrawingProperties(ph)),
+                new P.ShapeProperties(
+                    new A.Transform2D(
+                        new A.Offset { X = 457200L, Y = 1417800L },
+                        new A.Extents { Cx = 8229600L, Cy = 3581400L }),
+                    new A.PresetGeometry(new A.AdjustValueList()) { Preset = A.ShapeTypeValues.Rectangle }),
+                new P.TextBody(new A.BodyProperties(), new A.ListStyle(), new A.Paragraph(new A.EndParagraphRunProperties())));
+        }
+
+        static P.ShapeTree MakePhotoLayoutShapeTree(uint picIdx)
+            => new(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })),
+                MakeTitlePh(2U),
+                MakePicturePh(3U, picIdx),
+                MakeBodyPh(4U));
+
+        var layoutPartA = slideMasterPart.AddNewPart<SlideLayoutPart>("rId1");
+        layoutPartA.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(MakePhotoLayoutShapeTree(1U)),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.PictureText,
+            MatchingName = "Photo Layout A",
+        };
+        layoutPartA.SlideLayout.CommonSlideData!.Name = "Photo Layout A";
+        layoutPartA.AddPart(slideMasterPart, "rId1");
+        layoutPartA.SlideLayout.Save();
+
+        var layoutPartB = slideMasterPart.AddNewPart<SlideLayoutPart>("rId2");
+        layoutPartB.SlideLayout = new P.SlideLayout(
+            new P.CommonSlideData(MakePhotoLayoutShapeTree(2U)),
+            new P.ColorMapOverride(new A.MasterColorMapping()))
+        {
+            Type = P.SlideLayoutValues.PictureText,
+            MatchingName = "Photo Layout B",
+        };
+        layoutPartB.SlideLayout.CommonSlideData!.Name = "Photo Layout B";
+        layoutPartB.AddPart(slideMasterPart, "rId1");
+        layoutPartB.SlideLayout.Save();
+
+        var themePart = slideMasterPart.AddNewPart<ThemePart>("rId3");
+        themePart.Theme = new A.Theme
+        {
+            Name = "Test",
+            ThemeElements = new A.ThemeElements(
+                new A.ColorScheme(
+                    new A.Dark1Color(new A.SystemColor { Val = A.SystemColorValues.WindowText, LastColor = "000000" }),
+                    new A.Light1Color(new A.SystemColor { Val = A.SystemColorValues.Window, LastColor = "FFFFFF" }),
+                    new A.Dark2Color(new A.RgbColorModelHex { Val = "1F2937" }),
+                    new A.Light2Color(new A.RgbColorModelHex { Val = "F8FAFC" }),
+                    new A.Accent1Color(new A.RgbColorModelHex { Val = "0F766E" }),
+                    new A.Accent2Color(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.Accent3Color(new A.RgbColorModelHex { Val = "F59E0B" }),
+                    new A.Accent4Color(new A.RgbColorModelHex { Val = "DC2626" }),
+                    new A.Accent5Color(new A.RgbColorModelHex { Val = "7C3AED" }),
+                    new A.Accent6Color(new A.RgbColorModelHex { Val = "0891B2" }),
+                    new A.Hyperlink(new A.RgbColorModelHex { Val = "2563EB" }),
+                    new A.FollowedHyperlinkColor(new A.RgbColorModelHex { Val = "7C3AED" }))
+                { Name = "Test" },
+                new A.FontScheme(
+                    new A.MajorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }),
+                    new A.MinorFont(new A.LatinFont { Typeface = "Calibri" }, new A.EastAsianFont { Typeface = string.Empty }, new A.ComplexScriptFont { Typeface = string.Empty }))
+                { Name = "Test" },
+                new A.FormatScheme(
+                    new A.FillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })),
+                    new A.LineStyleList(
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 6350 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 12700 },
+                        new A.Outline(new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })) { Width = 19050 }),
+                    new A.EffectStyleList(
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList()),
+                        new A.EffectStyle(new A.EffectList())),
+                    new A.BackgroundFillStyleList(
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor }),
+                        new A.SolidFill(new A.SchemeColor { Val = A.SchemeColorValues.PhColor })))
+                { Name = "Test" }),
+            ObjectDefaults = new A.ObjectDefaults(),
+            ExtraColorSchemeList = new A.ExtraColorSchemeList(),
+        };
+        themePart.Theme.Save();
+
+        slideMasterPart.SlideMaster = new P.SlideMaster(
+            new P.CommonSlideData(new P.ShapeTree(
+                new P.NonVisualGroupShapeProperties(
+                    new P.NonVisualDrawingProperties { Id = 1U, Name = string.Empty },
+                    new P.NonVisualGroupShapeDrawingProperties(),
+                    new P.ApplicationNonVisualDrawingProperties()),
+                new P.GroupShapeProperties(new A.TransformGroup(
+                    new A.Offset { X = 0L, Y = 0L },
+                    new A.Extents { Cx = 0L, Cy = 0L },
+                    new A.ChildOffset { X = 0L, Y = 0L },
+                    new A.ChildExtents { Cx = 0L, Cy = 0L })))),
+            new P.ColorMap
+            {
+                Background1 = A.ColorSchemeIndexValues.Light1,
+                Text1 = A.ColorSchemeIndexValues.Dark1,
+                Background2 = A.ColorSchemeIndexValues.Light2,
+                Text2 = A.ColorSchemeIndexValues.Dark2,
+                Accent1 = A.ColorSchemeIndexValues.Accent1,
+                Accent2 = A.ColorSchemeIndexValues.Accent2,
+                Accent3 = A.ColorSchemeIndexValues.Accent3,
+                Accent4 = A.ColorSchemeIndexValues.Accent4,
+                Accent5 = A.ColorSchemeIndexValues.Accent5,
+                Accent6 = A.ColorSchemeIndexValues.Accent6,
+                Hyperlink = A.ColorSchemeIndexValues.Hyperlink,
+                FollowedHyperlink = A.ColorSchemeIndexValues.FollowedHyperlink,
+            },
+            new P.SlideLayoutIdList(
+                new P.SlideLayoutId { Id = 2147483649U, RelationshipId = slideMasterPart.GetIdOfPart(layoutPartA) },
+                new P.SlideLayoutId { Id = 2147483650U, RelationshipId = slideMasterPart.GetIdOfPart(layoutPartB) }),
+            new P.TextStyles(new P.TitleStyle(), new P.BodyStyle(), new P.OtherStyle()));
+        slideMasterPart.SlideMaster.Save();
+
+        presentationPart.Presentation = new P.Presentation(
+            new P.SlideMasterIdList(new P.SlideMasterId { Id = 2147483648U, RelationshipId = presentationPart.GetIdOfPart(slideMasterPart) }),
+            new P.SlideIdList(),
+            new P.SlideSize { Cx = 12192000, Cy = 6858000, Type = P.SlideSizeValues.Screen16x9 },
+            new P.NotesSize { Cx = 6858000, Cy = 9144000 },
+            new P.DefaultTextStyle());
+        presentationPart.Presentation.Save();
+
+        doc.Save();
+    }
 }
