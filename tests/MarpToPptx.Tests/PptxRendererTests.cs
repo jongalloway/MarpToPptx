@@ -1593,8 +1593,9 @@ public class PptxRendererTests
             .Descendants<A.RgbColorModelHex>().Single().Val?.Value;
         Assert.Equal("0F766E", headerFill);
 
-        // Font size should be 18pt (1800 in hundredths of a point) — the cap applied
-        // by CreateTableTextStyle regardless of the theme body size (24pt default).
+        // Font size should be 18pt (1800 in hundredths of a point) — CreateTableTextStyle
+        // caps the font size at 18pt. The Marp default body font size is 24pt, so the cap
+        // applies here and the result must be 18pt to match typical template body text.
         var runProps = headerCell.Descendants<A.RunProperties>().First();
         Assert.Equal(1800, runProps.FontSize?.Value);
 

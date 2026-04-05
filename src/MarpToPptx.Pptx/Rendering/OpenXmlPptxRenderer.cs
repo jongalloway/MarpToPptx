@@ -1209,8 +1209,9 @@ public sealed class OpenXmlPptxRenderer
             // layout engine intermediary. This gives exact body-area sizing and lets the
             // table fill the placeholder rect. The template's accent1 color overrides the
             // Marp-theme accent so the header row matches the template's visual identity.
-            // The list pattern `[TableElement singleTable]` matches exactly one element of
-            // the given type (C# 12 collection expression pattern).
+            // The list pattern `[TableElement singleTable]` matches a collection that
+            // contains exactly one element AND that element must be of type TableElement
+            // (C# 12 collection expression pattern).
             if (bodyRect is not null && nonTextElements is [TableElement singleTable])
             {
                 var templateAccent = GetTemplateAccent1Color(slideLayoutPart);
