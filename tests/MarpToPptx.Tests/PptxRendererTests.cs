@@ -1492,6 +1492,117 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_TemplateTable_FillsBodyPlaceholderRect_WhenSoleResidualElement()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template-inherited-body.pptx");
+        CreateTemplateWithInheritedContentPlaceholder(
+            templatePath,
+            titleBounds: new PlaceholderBounds(X: 50, Y: 70, W: 860, H: 90),
+            bodyBounds: new PlaceholderBounds(X: 50, Y: 180, W: 860, H: 220));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            layout: Title and Content
+            ---
+
+            ## AI Tools
+
+            | Tool    | Type   |
+            |---------|--------|
+            | ChatGPT | LLM    |
+            | Copilot | Coding |
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var graphicFrame = slidePart.Slide!.Descendants<P.GraphicFrame>().Single();
+        var offset = graphicFrame.Transform!.Offset!;
+        var extents = graphicFrame.Transform!.Extents!;
+
+        // Table frame should match body placeholder bounds exactly.
+        Assert.Equal(50L * 12700, offset.X?.Value);
+        Assert.Equal(180L * 12700, offset.Y?.Value);
+        Assert.Equal(860L * 12700, extents.Cx?.Value);
+        Assert.Equal(220L * 12700, extents.Cy?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_TemplateTable_UsesTemplateAccentColor_ForHeaderFill()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template-inherited-body.pptx");
+        // CreateTemplateWithInheritedContentPlaceholder sets Accent1Color = "0F766E".
+        CreateTemplateWithInheritedContentPlaceholder(
+            templatePath,
+            titleBounds: new PlaceholderBounds(X: 50, Y: 70, W: 860, H: 90),
+            bodyBounds: new PlaceholderBounds(X: 50, Y: 180, W: 860, H: 220));
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            ---
+            layout: Title and Content
+            ---
+
+            ## Spectrum of AI Assistance
+
+            | Tool    | Category  |
+            |---------|-----------|
+            | ChatGPT | Generative |
+            | Copilot | Completion |
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var table = slidePart.Slide!.Descendants<A.Table>().Single();
+        var headerRow = table.Elements<A.TableRow>().First();
+        var headerCell = headerRow.Elements<A.TableCell>().First();
+
+        // Header fill should use the template's accent1 color, not the Marp default.
+        var headerFill = headerCell.TableCellProperties!
+            .Descendants<A.RgbColorModelHex>().Single().Val?.Value;
+        Assert.Equal("0F766E", headerFill);
+
+        // Font size should be 18pt (1800 in hundredths of a point) — the cap applied
+        // by CreateTableTextStyle regardless of the theme body size (24pt default).
+        var runProps = headerCell.Descendants<A.RunProperties>().First();
+        Assert.Equal(1800, runProps.FontSize?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_SelectsNamedTemplateLayout_FromSlideDirective()
     {
         using var workspace = TestWorkspace.Create();
