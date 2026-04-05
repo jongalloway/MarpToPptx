@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
   <ItemGroup>
+    <ProjectReference Include="..\MarpToPptx.Core\MarpToPptx.Core.csproj" />
     <ProjectReference Include="..\MarpToPptx.Pptx\MarpToPptx.Pptx.csproj" />
   </ItemGroup>
 

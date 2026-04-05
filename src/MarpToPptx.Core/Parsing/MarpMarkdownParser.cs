@@ -178,6 +178,9 @@ public sealed class MarpMarkdownParser
                 case Table table:
                     elements.Add(ParseTable(table));
                     break;
+                case QuoteBlock quoteBlock:
+                    elements.Add(ParseBlockquote(quoteBlock));
+                    break;
                 case HtmlBlock htmlBlock:
                     AppendHtmlBlockElements(htmlBlock, elements);
                     break;
@@ -185,6 +188,27 @@ public sealed class MarpMarkdownParser
         }
 
         return elements;
+    }
+
+    private BlockquoteElement ParseBlockquote(QuoteBlock quoteBlock)
+    {
+        var spans = new List<InlineSpan>();
+        var firstParagraph = true;
+        foreach (var inner in quoteBlock)
+        {
+            if (inner is ParagraphBlock para && para.Inline is not null)
+            {
+                if (!firstParagraph)
+                {
+                    spans.Add(new InlineSpan("\n"));
+                }
+
+                spans.AddRange(ExtractInlineSpans(para.Inline));
+                firstParagraph = false;
+            }
+        }
+
+        return new BlockquoteElement(TrimSpans(spans));
     }
 
     private static string NormalizeDiagramSource(string source)

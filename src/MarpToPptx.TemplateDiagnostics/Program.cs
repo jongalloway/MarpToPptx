@@ -1,3 +1,4 @@
+using MarpToPptx.Core;
 using MarpToPptx.Pptx.Diagnostics;
 
 if (args.Length == 0 || IsHelpFlag(args[0]))
@@ -11,6 +12,11 @@ var subcommand = args[0].ToLowerInvariant();
 if (subcommand == "diagnose")
 {
     return await RunDiagnoseAsync(args[1..]);
+}
+
+if (subcommand == "recommend")
+{
+    return await RunRecommendAsync(args[1..]);
 }
 
 if (subcommand == "doctor")
@@ -57,6 +63,131 @@ static Task<int> RunDiagnoseAsync(string[] subArgs)
     {
         Console.Error.WriteLine($"Template diagnostics failed for '{templatePath}': {exception.Message}");
         return Task.FromResult(1);
+    }
+}
+
+// ── Subcommand: recommend ───────────────────────────────────────────────────
+
+static async Task<int> RunRecommendAsync(string[] subArgs)
+{
+    if (subArgs.Length == 0 || IsHelpFlag(subArgs[0]))
+    {
+        Console.WriteLine("Usage: template-diagnostics recommend <deck.md> --template <template.pptx> [options]");
+        Console.WriteLine();
+        Console.WriteLine("Options:");
+        Console.WriteLine("  --template <path>  Path to the .pptx template to match layouts against (required).");
+        Console.WriteLine("  --json             Emit the report as JSON to stdout.");
+        Console.WriteLine("  --verbose          Include a reason for each recommendation.");
+        Console.WriteLine("  --patch            Write _layout: directives back into the Markdown source.");
+        Console.WriteLine();
+        Console.WriteLine("Analyzes a Marp Markdown deck against a PPTX template and suggests the");
+        Console.WriteLine("best layout for each slide based on its content structure.");
+        return 0;
+    }
+
+    string? deckPath = null;
+    string? templatePath = null;
+    var jsonMode = false;
+    var verbose = false;
+    var patch = false;
+
+    for (var i = 0; i < subArgs.Length; i++)
+    {
+        var arg = subArgs[i];
+
+        switch (arg.ToLowerInvariant())
+        {
+            case "--template":
+                if (i + 1 >= subArgs.Length)
+                {
+                    Console.Error.WriteLine("--template requires a path argument.");
+                    return 1;
+                }
+
+                templatePath = subArgs[++i];
+                break;
+
+            case "--json":
+                jsonMode = true;
+                break;
+
+            case "--verbose":
+                verbose = true;
+                break;
+
+            case "--patch":
+                patch = true;
+                break;
+
+            default:
+                if (arg.StartsWith('-'))
+                {
+                    Console.Error.WriteLine($"Unknown option '{arg}'. Run 'template-diagnostics recommend --help' for usage.");
+                    return 1;
+                }
+
+                deckPath ??= arg;
+                break;
+        }
+    }
+
+    if (deckPath is null)
+    {
+        Console.Error.WriteLine("A deck path is required.");
+        return 1;
+    }
+
+    if (templatePath is null)
+    {
+        Console.Error.WriteLine("A template path is required (--template <path>).");
+        return 1;
+    }
+
+    var resolvedDeckPath = Path.GetFullPath(deckPath);
+    if (!File.Exists(resolvedDeckPath))
+    {
+        Console.Error.WriteLine($"Deck file was not found: {resolvedDeckPath}");
+        return 1;
+    }
+
+    var resolvedTemplatePath = ResolveTemplatePath(templatePath);
+    if (resolvedTemplatePath is null)
+    {
+        return 1;
+    }
+
+    try
+    {
+        var markdown = await File.ReadAllTextAsync(resolvedDeckPath);
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, resolvedDeckPath);
+
+        var diagnoser = new TemplateDiagnoser();
+        var templateReport = diagnoser.Diagnose(resolvedTemplatePath);
+
+        var recommender = new LayoutRecommender();
+        var report = recommender.Recommend(deck, templateReport);
+
+        if (jsonMode)
+        {
+            PrintRecommendReportJson(report);
+        }
+        else
+        {
+            PrintRecommendReport(report, verbose);
+        }
+
+        if (patch)
+        {
+            ApplyLayoutPatches(resolvedDeckPath, report);
+        }
+
+        return 0;
+    }
+    catch (Exception exception)
+    {
+        Console.Error.WriteLine($"Recommend failed: {exception.Message}");
+        return 1;
     }
 }
 
@@ -163,8 +294,9 @@ static void PrintUsage()
     Console.WriteLine("Usage: template-diagnostics <subcommand> [options]");
     Console.WriteLine();
     Console.WriteLine("Subcommands:");
-    Console.WriteLine("  diagnose <template.pptx>    Analyze template layout structure and report recommendations.");
-    Console.WriteLine("  doctor   <template.pptx>    Inspect and optionally repair structural issues.");
+    Console.WriteLine("  diagnose  <template.pptx>                Analyze template layout structure and report recommendations.");
+    Console.WriteLine("  doctor    <template.pptx>                Inspect and optionally repair structural issues.");
+    Console.WriteLine("  recommend <deck.md> --template <t.pptx>  Suggest the best layout for each slide in a deck.");
     Console.WriteLine();
     Console.WriteLine("Run 'template-diagnostics <subcommand> --help' for subcommand-specific options.");
 }
@@ -179,6 +311,190 @@ static string? ResolveTemplatePath(string path)
     }
 
     return fullPath;
+}
+
+// ── Print: recommend (human-readable) ───────────────────────────────────────
+
+static void PrintRecommendReport(LayoutRecommendationReport report, bool verbose)
+{
+    var deckName = Path.GetFileName(report.DeckPath);
+    var templateName = Path.GetFileName(report.TemplatePath);
+    var title = $"Layout Recommendations for {deckName} + {templateName}";
+    Console.WriteLine(title);
+    Console.WriteLine(new string('═', title.Length));
+    Console.WriteLine();
+
+    if (report.Recommendations.Count == 0)
+    {
+        Console.WriteLine("No slides found in the deck.");
+        return;
+    }
+
+    var slideNumWidth = report.Recommendations.Count.ToString().Length;
+    var titleWidth = Math.Min(40, report.Recommendations.Max(r => r.SlideTitle?.Length ?? 0));
+    var layoutWidth = report.Recommendations.Max(r => r.RecommendedLayout.Length);
+
+    foreach (var rec in report.Recommendations)
+    {
+        var slideNum = $"Slide {rec.SlideNumber.ToString().PadLeft(slideNumWidth)}";
+        var slideTitle = (rec.SlideTitle is not null
+            ? $"\"{TruncateTitle(rec.SlideTitle, titleWidth)}\""
+            : "(no title)").PadRight(titleWidth + 2);
+        var layout = rec.RecommendedLayout.PadRight(layoutWidth);
+
+        if (verbose && rec.Reason is not null)
+        {
+            Console.WriteLine($"{slideNum}  {slideTitle}  → {layout}  ({rec.Reason})");
+        }
+        else
+        {
+            Console.WriteLine($"{slideNum}  {slideTitle}  → {layout}");
+        }
+    }
+
+    Console.WriteLine();
+
+    if (report.SuggestedFrontMatterLayout is { } frontMatterLayout)
+    {
+        Console.WriteLine($"Suggested front-matter:  layout: {frontMatterLayout}");
+    }
+
+    if (report.PhotoLayoutRotation.Count > 1)
+    {
+        var photoNames = string.Join(", ", report.PhotoLayoutRotation.Select(n => $"\"{n}\""));
+        Console.WriteLine($"Photo layouts will rotate: {photoNames}");
+    }
+}
+
+static string TruncateTitle(string title, int maxWidth)
+{
+    if (title.Length <= maxWidth)
+    {
+        return title;
+    }
+
+    return title[..(maxWidth - 1)] + "…";
+}
+
+// ── Print: recommend (JSON) ──────────────────────────────────────────────────
+
+static void PrintRecommendReportJson(LayoutRecommendationReport report)
+{
+    Console.WriteLine("{");
+    Console.WriteLine($"  \"deckPath\": {JsonString(report.DeckPath)},");
+    Console.WriteLine($"  \"templatePath\": {JsonString(report.TemplatePath)},");
+    Console.WriteLine($"  \"suggestedFrontMatterLayout\": {(report.SuggestedFrontMatterLayout is not null ? JsonString(report.SuggestedFrontMatterLayout) : "null")},");
+
+    Console.WriteLine($"  \"photoLayoutRotation\": [");
+    for (var i = 0; i < report.PhotoLayoutRotation.Count; i++)
+    {
+        var comma = i < report.PhotoLayoutRotation.Count - 1 ? "," : "";
+        Console.WriteLine($"    {JsonString(report.PhotoLayoutRotation[i])}{comma}");
+    }
+
+    Console.WriteLine("  ],");
+    Console.WriteLine($"  \"recommendations\": [");
+
+    for (var i = 0; i < report.Recommendations.Count; i++)
+    {
+        var rec = report.Recommendations[i];
+        var comma = i < report.Recommendations.Count - 1 ? "," : "";
+        Console.WriteLine("    {");
+        Console.WriteLine($"      \"slideNumber\": {rec.SlideNumber},");
+        Console.WriteLine($"      \"slideTitle\": {(rec.SlideTitle is not null ? JsonString(rec.SlideTitle) : "null")},");
+        Console.WriteLine($"      \"contentKind\": {JsonString(rec.ContentKind.ToString())},");
+        Console.WriteLine($"      \"recommendedLayout\": {JsonString(rec.RecommendedLayout)},");
+        Console.WriteLine($"      \"reason\": {(rec.Reason is not null ? JsonString(rec.Reason) : "null")}");
+        Console.WriteLine($"    }}{comma}");
+    }
+
+    Console.WriteLine("  ]");
+    Console.WriteLine("}");
+}
+
+// ── Patch: write _layout: directives into the Markdown source ───────────────
+
+static void ApplyLayoutPatches(string deckPath, LayoutRecommendationReport report)
+{
+    var lines = File.ReadAllLines(deckPath).ToList();
+    var slideBoundaries = FindSlideBoundaries(lines);
+
+    // Walk in reverse so line insertions don't shift earlier indices.
+    for (var idx = report.Recommendations.Count - 1; idx >= 0; idx--)
+    {
+        var rec = report.Recommendations[idx];
+
+        // Skip slides that already have an explicit layout directive.
+        if (rec.Reason == "explicit _layout directive")
+        {
+            continue;
+        }
+
+        if (idx >= slideBoundaries.Count)
+        {
+            continue;
+        }
+
+        var insertAt = slideBoundaries[idx];
+
+        // Check if the slide already has a <!-- _layout: ... --> comment.
+        if (SlideHasLayoutDirective(lines, insertAt, idx + 1 < slideBoundaries.Count ? slideBoundaries[idx + 1] : lines.Count))
+        {
+            continue;
+        }
+
+        lines.Insert(insertAt, $"<!-- _layout: {rec.RecommendedLayout} -->");
+    }
+
+    File.WriteAllLines(deckPath, lines);
+    Console.WriteLine($"Patched {report.Recommendations.Count} slides in {deckPath}");
+}
+
+static List<int> FindSlideBoundaries(List<string> lines)
+{
+    // The first slide starts at line 0 (after front-matter if present).
+    // Subsequent slides start after "---" separator lines.
+    var boundaries = new List<int> { 0 };
+
+    // Skip front-matter block if present.
+    var start = 0;
+    if (lines.Count > 0 && lines[0].TrimEnd() == "---")
+    {
+        for (var i = 1; i < lines.Count; i++)
+        {
+            if (lines[i].TrimEnd() == "---")
+            {
+                start = i + 1;
+                break;
+            }
+        }
+
+        boundaries[0] = start;
+    }
+
+    for (var i = start + 1; i < lines.Count; i++)
+    {
+        if (lines[i].TrimEnd() == "---")
+        {
+            boundaries.Add(i + 1);
+        }
+    }
+
+    return boundaries;
+}
+
+static bool SlideHasLayoutDirective(List<string> lines, int slideStart, int slideEnd)
+{
+    for (var i = slideStart; i < Math.Min(slideEnd, lines.Count); i++)
+    {
+        var trimmed = lines[i].Trim();
+        if (trimmed.StartsWith("<!--") && trimmed.Contains("_layout:", StringComparison.OrdinalIgnoreCase))
+        {
+            return true;
+        }
+    }
+
+    return false;
 }
 
 // ── Print: diagnose ─────────────────────────────────────────────────────────
