@@ -816,12 +816,14 @@ public sealed class OpenXmlPptxRenderer
             (titleRect is not null || !hasHeading);
 
         var firstElement = slideModel.Elements.FirstOrDefault();
-        var plan = _layoutEngine.LayoutSlide(slideModel, effectiveTheme);
         var bodyStyle = effectiveTheme.Body;
         if (slideModel.Style.FontSize is { } bodyFontSizeHundredths)
         {
             bodyStyle = bodyStyle with { FontSize = bodyFontSizeHundredths / 100.0 };
         }
+
+        var layoutTheme = effectiveTheme with { Body = bodyStyle };
+        var plan = _layoutEngine.LayoutSlide(slideModel, layoutTheme);
         foreach (var placed in plan.Elements)
         {
             // Resolve the frame: prefer template placeholder rect when available.
@@ -1226,16 +1228,19 @@ public sealed class OpenXmlPptxRenderer
             var residualTheme = bodyRect is null
                 ? effectiveTheme
                 : ScaleThemeForTemplateBody(effectiveTheme, residualSlide, bodyRect);
+            if (slideModel.Style.FontSize is { } residualFontSizeHundredths)
+            {
+                residualTheme = residualTheme with
+                {
+                    Body = residualTheme.Body with { FontSize = residualFontSizeHundredths / 100.0 },
+                };
+            }
             var layoutOptions = bodyRect is not null
                 ? CreateBodyRectLayoutOptions(residualTheme, bodyRect)
                 : titleOnlyOptions;
             var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
             var contentRect = GetContentRect(residualTheme, layoutOptions);
             var bodyStyle = residualTheme.Body;
-            if (slideModel.Style.FontSize is { } residualFontSizeHundredths)
-            {
-                bodyStyle = bodyStyle with { FontSize = residualFontSizeHundredths / 100.0 };
-            }
             foreach (var placed in plan.Elements)
             {
                 var frame = bodyRect is null

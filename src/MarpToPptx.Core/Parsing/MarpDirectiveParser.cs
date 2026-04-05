@@ -128,7 +128,8 @@ public static partial class MarpDirectiveParser
         if (trimmed.EndsWith("pt", StringComparison.OrdinalIgnoreCase))
         {
             var numPart = trimmed[..^2].Trim();
-            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var pts))
+            if (double.TryParse(numPart, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var pts)
+                && double.IsFinite(pts) && pts > 0)
             {
                 return (int)Math.Round(pts * 100);
             }
@@ -136,7 +137,8 @@ public static partial class MarpDirectiveParser
         }
 
         // Bare number: treat as pt when <= 999, otherwise as hundredths of a point already.
-        if (double.TryParse(trimmed, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bare))
+        if (double.TryParse(trimmed, System.Globalization.NumberStyles.Any, System.Globalization.CultureInfo.InvariantCulture, out var bare)
+            && double.IsFinite(bare) && bare > 0)
         {
             // Heuristic: values <= 999 are treated as point values (e.g. "20" → 2000).
             // Values >= 1000 are treated as already in hundredths of a point (e.g. "2000" → 2000).

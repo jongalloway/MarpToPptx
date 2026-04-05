@@ -2675,6 +2675,25 @@ public class ParserTests
         Assert.Null(slide.Style.FontSize);
     }
 
+    [Theory]
+    [InlineData("0pt")]
+    [InlineData("-10pt")]
+    [InlineData("0")]
+    [InlineData("-5")]
+    [InlineData("Infinity")]
+    [InlineData("-Infinity")]
+    [InlineData("NaN")]
+    public void Parser_FontSizeDirective_NonPositiveOrNonFiniteValue_IsIgnored(string input)
+    {
+        var markdown = $"<!-- _fontSize: {input} -->\n# Slide\n\nBody text";
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Null(slide.Style.FontSize);
+    }
+
     // ── diagram-theme directive tests ─────────────────────────────────────
 
     [Fact]
