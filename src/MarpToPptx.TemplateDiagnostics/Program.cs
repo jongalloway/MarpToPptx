@@ -460,18 +460,28 @@ static List<int> FindSlideBoundaries(List<string> lines)
     // Subsequent slides start after "---" separator lines.
     // Matches SlideTokenizer.SplitSlides: uses line.Trim() == "---" and tracks fenced
     // code blocks (``` or ~~~) to avoid splitting on separators inside code fences.
+    // Fence detection uses StartsWith on the TrimEnd()-ed line — same as SlideTokenizer.
     var boundaries = new List<int> { 0 };
     var inFence = false;
 
     // Skip front-matter block if present (the very first "---" / "---" pair).
+    // Track fences within front-matter so a code block containing "---" is not
+    // mistaken for the closing delimiter.
     var start = 0;
     if (lines.Count > 0 && lines[0].Trim() == "---")
     {
         for (var i = 1; i < lines.Count; i++)
         {
-            if (lines[i].Trim() == "---")
+            var fmLine = lines[i].TrimEnd();
+            if (fmLine.StartsWith("```", StringComparison.Ordinal) || fmLine.StartsWith("~~~", StringComparison.Ordinal))
+            {
+                inFence = !inFence;
+            }
+
+            if (!inFence && lines[i].Trim() == "---")
             {
                 start = i + 1;
+                inFence = false; // reset; any fence opened inside front-matter is now closed
                 break;
             }
         }
@@ -483,7 +493,7 @@ static List<int> FindSlideBoundaries(List<string> lines)
     {
         var line = lines[i].TrimEnd();
 
-        // Track fenced code blocks — same logic as SlideTokenizer.
+        // Track fenced code blocks — same toggle logic as SlideTokenizer.SplitSlides.
         if (line.StartsWith("```", StringComparison.Ordinal) || line.StartsWith("~~~", StringComparison.Ordinal))
         {
             inFence = !inFence;
