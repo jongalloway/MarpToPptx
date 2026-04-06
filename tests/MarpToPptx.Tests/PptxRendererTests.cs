@@ -7853,7 +7853,7 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_SmartArtHint_OnlyFirstBulletListIsSmartArt_SecondIsPlain()
+    public void Renderer_SmartArtHint_Process_PassesOpenXmlValidation()
     {
         using var workspace = TestWorkspace.Create();
 
