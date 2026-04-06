@@ -78,6 +78,20 @@ public sealed class SlideStyle
     /// </summary>
     public int? FontSize { get; init; }
 
+    /// <summary>
+    /// Controls the auto-shrink behavior on body text placeholders.
+    /// <list type="bullet">
+    ///   <item><c>null</c> — unset; renderer defaults to emitting <c>&lt;a:normAutofit/&gt;</c>.</item>
+    ///   <item><c>"true"</c> — explicitly enable auto-shrink (same as default).</item>
+    ///   <item><c>"false"</c> — disable auto-shrink entirely; emits <c>&lt;a:noAutofit/&gt;</c> to override any inherited autofit from the layout or master.</item>
+    ///   <item>size string (e.g. <c>"14pt"</c>) — allow shrinking but enforce a minimum font-size floor;
+    ///   emits <c>&lt;a:normAutofit fontScale="…"/&gt;</c> computed relative to <see cref="FontSize"/> when set,
+    ///   otherwise relative to the renderer's fallback 18pt body-text reference size. When rendering into template
+    ///   placeholders, inherited body font sizing from the PPTX template is not currently used for this calculation.</item>
+    /// </list>
+    /// </summary>
+    public string? ShrinkToFit { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 

@@ -1903,6 +1903,188 @@ public class PptxRendererTests
     }
 
     [Fact]
+    public void Renderer_ShrinkToFitFalse_EmitsNoAutofit_InBodyPlaceholder()
+    {
+        // _shrinkToFit: false must emit <a:noAutofit/> on the body placeholder to
+        // explicitly disable any inherited autofit from the layout or master.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            <!-- _shrinkToFit: false -->
+            # Slide
+
+            - Bullet one
+            - Bullet two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Body placeholder must have <a:noAutofit/> (not normAutofit) when shrinkToFit: false.
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        Assert.NotNull(bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NoAutoFit>());
+        Assert.Null(bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>());
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_ShrinkToFitTrue_EmitsNormAutofit_InBodyPlaceholder()
+    {
+        // _shrinkToFit: true must behave identically to the default (normAutofit present).
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            <!-- _shrinkToFit: true -->
+            # Slide
+
+            - Bullet one
+            - Bullet two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var normAutoFit = bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>();
+        Assert.NotNull(normAutoFit);
+        // "true" means unrestricted normAutofit — no fontScale attribute.
+        Assert.Null(normAutoFit.FontScale);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_ShrinkToFitSizeFloor_EmitsNormAutofitWithFontScale()
+    {
+        // _shrinkToFit: 14pt must emit <a:normAutofit fontScale="…"/> with a computed floor.
+        // Default reference size is 18pt (1800 hundredths); fontScale = (14/18) * 100000 ≈ 77778.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            <!-- _shrinkToFit: 14pt -->
+            # Slide
+
+            - Bullet one
+            - Bullet two
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var normAutoFit = bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>();
+        Assert.NotNull(normAutoFit);
+        // fontScale = round((1400 / 1800) * 100000) = 77778
+        Assert.Equal(77778, normAutoFit.FontScale?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_ShrinkToFitSizeFloor_WithFontSizeDirective_UsesOverrideAsReference()
+    {
+        // When fontSize is also set, fontScale is computed relative to that size.
+        // e.g. _fontSize: 20pt + _shrinkToFit: 14pt → fontScale = round((1400/2000)*100000) = 70000.
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- layout: Placeholder Content -->
+            <!-- _fontSize: 20pt -->
+            <!-- _shrinkToFit: 14pt -->
+            # Slide
+
+            Body paragraph text
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(File.ReadAllText(markdownPath), markdownPath);
+        var renderer = new OpenXmlPptxRenderer();
+        renderer.Render(deck, outputPath, new PptxRenderOptions
+        {
+            TemplatePath = templatePath,
+            SourceDirectory = workspace.RootPath,
+        });
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
+            s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        var normAutoFit = bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>();
+        Assert.NotNull(normAutoFit);
+        // fontScale = round((1400 / 2000) * 100000) = 70000
+        Assert.Equal(70000, normAutoFit.FontScale?.Value);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
     public void Renderer_FontSizeDirective_TemplatePath_EmitsSzOnBodyRuns_NotTitleRuns()
     {
         // Arrange: body text runs should carry sz (font size) when _fontSize is set;
