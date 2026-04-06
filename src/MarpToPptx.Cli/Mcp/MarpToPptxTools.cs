@@ -2,6 +2,7 @@ using System.Text.Json;
 using MarpToPptx.Core;
 using MarpToPptx.Core.Authoring;
 using MarpToPptx.Core.Models;
+using MarpToPptx.Pptx.Diagnostics;
 using MarpToPptx.Pptx.Rendering;
 using ModelContextProtocol.Server;
 
@@ -235,6 +236,103 @@ public sealed class MarpToPptxTools
         });
 
         return Task.FromResult($"Generated '{outputPptxPath}' with {deck.Slides.Count} slide(s).");
+    }
+
+    /// <summary>
+    /// Inspect a PPTX template's layout catalog and return structured metadata about all available
+    /// slide layouts, their semantic roles, placeholder coverage, and recommended layout names for
+    /// use with MarpToPptx Markdown directives (<c>layout:</c> / <c>_layout:</c>).
+    /// Use this before rendering a deck with a template to discover which layouts are available.
+    /// </summary>
+    /// <param name="templatePath">Absolute path to the .pptx template file to inspect.</param>
+    [McpServerTool(Title = "Diagnose Template", ReadOnly = true, Idempotent = true)]
+    public Task<string> marp_diagnose_template(string templatePath)
+    {
+        templatePath = ValidateFileExists(templatePath, "Template PPTX");
+
+        var diagnoser = new TemplateDiagnoser();
+        var report = diagnoser.Diagnose(templatePath);
+
+        var result = new
+        {
+            templatePath = report.TemplatePath,
+            slideMasterCount = report.SlideMasterCount,
+            layoutCount = report.Layouts.Count,
+            layouts = report.Layouts.Select((l, i) => new
+            {
+                index = i + 1,
+                name = l.Name,
+                type = l.TypeCode,
+                role = l.SemanticRole.ToString(),
+                hasTitle = l.HasTitlePlaceholder,
+                hasBody = l.HasBodyPlaceholder,
+                hasPicture = l.HasPicturePlaceholder,
+                shapeCount = l.NonPlaceholderShapeCount,
+            }).ToArray(),
+            recommendations = new
+            {
+                defaultContentLayout = report.RecommendedDefaultContentLayout,
+                titleLayout = report.RecommendedTitleLayout,
+                sectionHeaderLayout = report.RecommendedSectionLayout,
+                pictureLayout = report.RecommendedPictureCaptionLayout,
+            },
+            warnings = report.Warnings,
+        };
+
+        return Task.FromResult(JsonSerializer.Serialize(result, IndentedJson));
+    }
+
+    /// <summary>
+    /// Analyze a Marp Markdown deck against a PPTX template and return per-slide layout
+    /// recommendations. Each slide is classified by its content pattern (title, section header,
+    /// image-focused, etc.) and matched to the best available layout in the template.
+    /// Use the returned <c>recommendedLayout</c> values to add <c>_layout:</c> directives to
+    /// the Markdown before calling <c>marp_render</c> with the template.
+    /// </summary>
+    /// <param name="inputMarkdownPath">Absolute path to the Marp Markdown file to analyze.</param>
+    /// <param name="templatePath">Absolute path to the .pptx template file.</param>
+    /// <param name="themeCssPath">Optional absolute path to a CSS theme file.</param>
+    [McpServerTool(Title = "Recommend Layouts", ReadOnly = true, Idempotent = true)]
+    public Task<string> marp_recommend_layouts(
+        string inputMarkdownPath,
+        string templatePath,
+        string? themeCssPath = null)
+    {
+        inputMarkdownPath = ValidateFileExists(inputMarkdownPath, "Input Markdown");
+        templatePath = ValidateFileExists(templatePath, "Template PPTX");
+        if (!string.IsNullOrWhiteSpace(themeCssPath))
+            themeCssPath = ValidateFileExists(themeCssPath, "Theme CSS");
+
+        var markdown = File.ReadAllText(inputMarkdownPath);
+        var themeCss = string.IsNullOrWhiteSpace(themeCssPath) ? null : File.ReadAllText(themeCssPath);
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown, inputMarkdownPath, themeCss);
+
+        var diagnoser = new TemplateDiagnoser();
+        var templateReport = diagnoser.Diagnose(templatePath);
+
+        var recommender = new LayoutRecommender();
+        var report = recommender.Recommend(deck, templateReport);
+
+        var result = new
+        {
+            deckTitle = SlideIdentityGenerator.GetPresentationTitle(deck),
+            slideCount = report.Recommendations.Count,
+            defaultLayout = report.SuggestedFrontMatterLayout,
+            slides = report.Recommendations.Select(r => new
+            {
+                index = r.SlideNumber - 1,
+                title = r.SlideTitle,
+                contentKind = r.ContentKind.ToString(),
+                recommendedLayout = r.RecommendedLayout,
+                reason = r.Reason,
+                currentLayout = r.IsExplicitLayout ? r.RecommendedLayout : (string?)null,
+            }).ToArray(),
+            photoLayoutRotation = report.PhotoLayoutRotation,
+        };
+
+        return Task.FromResult(JsonSerializer.Serialize(result, IndentedJson));
     }
 
     private static string ValidateFileExists(string path, string description)
