@@ -7663,4 +7663,245 @@ public class PptxRendererTests
 
         doc.Save();
     }
+
+    // ── smartart directive tests ──────────────────────────────────────────
+
+    [Fact]
+    public void Renderer_SmartArtHint_EmitsGraphicFrameWithDiagramRelIds()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: process -->
+            # My Journey
+
+            - Military
+            - Software
+            - AI
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // A GraphicFrame with a diagram URI should exist (not a plain text box).
+        var graphicFrames = slidePart.Slide!.Descendants<P.GraphicFrame>().ToArray();
+        Assert.Single(graphicFrames);
+
+        var graphicData = graphicFrames[0].Descendants<A.GraphicData>().Single();
+        Assert.Equal("http://schemas.openxmlformats.org/drawingml/2006/diagram", graphicData.Uri);
+
+        // The dgm:relIds element should reference 4 parts.
+        var relIds = graphicData.Descendants<DocumentFormat.OpenXml.Drawing.Diagrams.RelationshipIds>().Single();
+        Assert.NotNull(relIds.DataPart?.Value);
+        Assert.NotNull(relIds.LayoutPart?.Value);
+        Assert.NotNull(relIds.StylePart?.Value);
+        Assert.NotNull(relIds.ColorPart?.Value);
+
+        // The slide part should have the 4 diagram sub-parts.
+        Assert.Single(slidePart.DiagramDataParts);
+        Assert.Single(slidePart.DiagramLayoutDefinitionParts);
+        Assert.Single(slidePart.DiagramStyleParts);
+        Assert.Single(slidePart.DiagramColorsParts);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_DataPartContainsItemText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: list -->
+            # Skills
+
+            - Leadership
+            - Adaptability
+            - Teamwork
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var dataPart = slidePart.DiagramDataParts.Single();
+
+        var allText = dataPart.DataModelRoot!
+            .Descendants<A.Text>()
+            .Select(t => t.Text)
+            .ToArray();
+
+        Assert.Contains("Leadership", allText);
+        Assert.Contains("Adaptability", allText);
+        Assert.Contains("Teamwork", allText);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_Process_ReferencesProcessLayoutUri()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: process -->
+            # Journey
+
+            - Step 1
+            - Step 2
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var layoutPart = slidePart.DiagramLayoutDefinitionParts.Single();
+
+        var xml = System.Xml.Linq.XDocument.Load(layoutPart.GetStream());
+        var uniqueId = xml.Root?.Attribute("uniqueId")?.Value;
+        Assert.Equal("urn:microsoft.com/office/officeart/2005/8/layout/process1", uniqueId);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_List_ReferencesListLayoutUri()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: list -->
+            # Items
+
+            - Item A
+            - Item B
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var layoutPart = slidePart.DiagramLayoutDefinitionParts.Single();
+
+        var xml = System.Xml.Linq.XDocument.Load(layoutPart.GetStream());
+        var uniqueId = xml.Root?.Attribute("uniqueId")?.Value;
+        Assert.Equal("urn:microsoft.com/office/officeart/2005/8/layout/vList5", uniqueId);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_Chevron_ReferencesChevronLayoutUri()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: chevron -->
+            # Process
+
+            - Plan
+            - Do
+            - Check
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var layoutPart = slidePart.DiagramLayoutDefinitionParts.Single();
+
+        var xml = System.Xml.Linq.XDocument.Load(layoutPart.GetStream());
+        var uniqueId = xml.Root?.Attribute("uniqueId")?.Value;
+        Assert.Equal("urn:microsoft.com/office/officeart/2005/8/layout/chevron1", uniqueId);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_UnknownValue_DefaultsToProcess()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: unknown-type -->
+            # Slide
+
+            - A
+            - B
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+        var layoutPart = slidePart.DiagramLayoutDefinitionParts.Single();
+
+        var xml = System.Xml.Linq.XDocument.Load(layoutPart.GetStream());
+        var uniqueId = xml.Root?.Attribute("uniqueId")?.Value;
+        // Unknown layout hint defaults to the "process" layout.
+        Assert.Equal("urn:microsoft.com/office/officeart/2005/8/layout/process1", uniqueId);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_Process_PassesOpenXmlValidation()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            <!-- _smartart: process -->
+            # Slide
+
+            - First list item
+            - Second list item
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // Exactly one diagram (from the SmartArt).
+        Assert.Single(slidePart.DiagramDataParts);
+
+        var validationErrors = new OpenXmlPackageValidator().Validate(document);
+        Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_SmartArtHint_NotSet_RendersBulletListAsPlainText()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var markdownPath = workspace.WriteMarkdown(
+            "deck.md",
+            """
+            # Slide
+
+            - Item 1
+            - Item 2
+            """);
+
+        var outputPath = workspace.GetPath("deck.pptx");
+        RenderDeck(markdownPath, outputPath, workspace.RootPath);
+
+        using var document = PresentationDocument.Open(outputPath, false);
+        var slidePart = document.PresentationPart!.SlideParts.Single();
+
+        // No SmartArt diagram parts — plain text box was emitted instead.
+        Assert.Empty(slidePart.DiagramDataParts);
+        Assert.Empty(slidePart.DiagramLayoutDefinitionParts);
+    }
 }

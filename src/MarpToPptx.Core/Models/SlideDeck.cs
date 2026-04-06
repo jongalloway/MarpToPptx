@@ -92,6 +92,19 @@ public sealed class SlideStyle
     /// </summary>
     public string? ShrinkToFit { get; init; }
 
+    /// <summary>
+    /// SmartArt layout hint for the first bullet list on the slide.
+    /// When set, the first <see cref="BulletListElement"/> on the slide is rendered as a native
+    /// PowerPoint SmartArt diagram instead of a plain bullet list. Supported values:
+    /// <list type="bullet">
+    ///   <item><c>"process"</c> — horizontal process with arrows (Basic Process).</item>
+    ///   <item><c>"list"</c> — vertical block list.</item>
+    ///   <item><c>"chevron"</c> — chevron process arrows.</item>
+    /// </list>
+    /// Set via the <c>smartart</c> or <c>_smartart</c> directive.
+    /// </summary>
+    public string? SmartArtHint { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
