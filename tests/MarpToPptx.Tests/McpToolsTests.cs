@@ -298,7 +298,7 @@ public class McpToolsTests
 
         Assert.Equal(2, root.GetProperty("slideCount").GetInt32());
         Assert.Equal(2, root.GetProperty("slides").GetArrayLength());
-        Assert.True(root.TryGetProperty("defaultLayout", out _));
+        Assert.True(root.TryGetProperty("suggestedFrontMatterLayout", out _));
         Assert.True(root.TryGetProperty("photoLayoutRotation", out _));
 
         var firstSlide = root.GetProperty("slides")[0];
@@ -306,6 +306,8 @@ public class McpToolsTests
         Assert.Equal("Intro Slide", firstSlide.GetProperty("title").GetString());
         Assert.True(firstSlide.TryGetProperty("contentKind", out _));
         Assert.True(firstSlide.TryGetProperty("recommendedLayout", out _));
+        Assert.True(firstSlide.TryGetProperty("isExplicitLayout", out _));
+        Assert.True(firstSlide.TryGetProperty("explicitLayout", out _));
     }
 
     [Fact]

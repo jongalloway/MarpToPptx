@@ -319,7 +319,7 @@ public sealed class MarpToPptxTools
         {
             deckTitle = SlideIdentityGenerator.GetPresentationTitle(deck),
             slideCount = report.Recommendations.Count,
-            defaultLayout = report.SuggestedFrontMatterLayout,
+            suggestedFrontMatterLayout = report.SuggestedFrontMatterLayout,
             slides = report.Recommendations.Select(r => new
             {
                 index = r.SlideNumber - 1,
@@ -327,7 +327,8 @@ public sealed class MarpToPptxTools
                 contentKind = r.ContentKind.ToString(),
                 recommendedLayout = r.RecommendedLayout,
                 reason = r.Reason,
-                currentLayout = r.IsExplicitLayout ? r.RecommendedLayout : (string?)null,
+                isExplicitLayout = r.IsExplicitLayout,
+                explicitLayout = r.IsExplicitLayout ? r.RecommendedLayout : (string?)null,
             }).ToArray(),
             photoLayoutRotation = report.PhotoLayoutRotation,
         };
