@@ -107,6 +107,7 @@ public static partial class MarpDirectiveParser
             "transition" => Clone(style, transition: ParseTransition(value)),
             "fontsize" or "font-size" => Clone(style, fontSize: ParseFontSizeDirective(value)),
             "shrinktofit" or "shrink-to-fit" => Clone(style, shrinkToFit: value),
+            "smartart" => Clone(style, smartArtHint: string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant()),
             _ => style,
         };
     }
@@ -200,7 +201,8 @@ public static partial class MarpDirectiveParser
         string? footer = null,
         SlideTransition? transition = null,
         int? fontSize = null,
-        string? shrinkToFit = null)
+        string? shrinkToFit = null,
+        string? smartArtHint = null)
     {
         var clone = new SlideStyle
         {
@@ -219,6 +221,7 @@ public static partial class MarpDirectiveParser
             Transition = transition ?? source.Transition,
             FontSize = fontSize ?? source.FontSize,
             ShrinkToFit = shrinkToFit ?? source.ShrinkToFit,
+            SmartArtHint = smartArtHint ?? source.SmartArtHint,
         };
 
         foreach (var pair in source.Directives)

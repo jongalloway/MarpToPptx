@@ -3044,4 +3044,104 @@ public class ParserTests
         // No CRLF should be present when the input uses LF only.
         Assert.DoesNotContain("\r\n", result.UpdatedMarkdown);
     }
+
+    // ── smartart directive tests ──────────────────────────────────────────
+
+    [Fact]
+    public void Parser_SmartArtDirective_SpotForm_SetsSmartArtHint()
+    {
+        const string markdown = """
+        <!-- _smartart: process -->
+        # My Journey
+
+        - Military
+        - Software
+        - AI
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("process", slide.Style.SmartArtHint);
+    }
+
+    [Fact]
+    public void Parser_SmartArtDirective_LocalForm_SetsSmartArtHint()
+    {
+        const string markdown = """
+        <!-- smartart: list -->
+        # Slide
+
+        - Alpha
+        - Beta
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("list", slide.Style.SmartArtHint);
+    }
+
+    [Fact]
+    public void Parser_SmartArtDirective_SpotForm_DoesNotCarryForwardToNextSlide()
+    {
+        const string markdown = """
+        <!-- _smartart: chevron -->
+        # Slide 1
+
+        - Step A
+        - Step B
+
+        ---
+
+        # Slide 2
+
+        - Item X
+        - Item Y
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        Assert.Equal(2, deck.Slides.Count);
+        Assert.Equal("chevron", deck.Slides[0].Style.SmartArtHint);
+        Assert.Null(deck.Slides[1].Style.SmartArtHint);
+    }
+
+    [Fact]
+    public void Parser_SmartArtDirective_NormalizesValueToLowerCase()
+    {
+        const string markdown = """
+        <!-- _smartart: Process -->
+        # Slide
+
+        - A
+        - B
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Equal("process", slide.Style.SmartArtHint);
+    }
+
+    [Fact]
+    public void Parser_SmartArtDirective_NotPresent_IsNull()
+    {
+        const string markdown = """
+        # Slide
+
+        - A
+        - B
+        """;
+
+        var compiler = new MarpCompiler();
+        var deck = compiler.Compile(markdown);
+
+        var slide = Assert.Single(deck.Slides);
+        Assert.Null(slide.Style.SmartArtHint);
+    }
 }

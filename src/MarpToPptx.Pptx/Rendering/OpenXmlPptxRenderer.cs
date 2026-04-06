@@ -14,6 +14,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Xml.Linq;
 using A = DocumentFormat.OpenXml.Drawing;
+using Dgm = DocumentFormat.OpenXml.Drawing.Diagrams;
 using IOPath = System.IO.Path;
 using P = DocumentFormat.OpenXml.Presentation;
 
@@ -835,6 +836,8 @@ public sealed class OpenXmlPptxRenderer
 
         var layoutTheme = effectiveTheme with { Body = bodyStyle };
         var plan = _layoutEngine.LayoutSlide(slideModel, layoutTheme);
+        var smartArtHint = slideModel.Style.SmartArtHint;
+        var smartArtRendered = false;
         foreach (var placed in plan.Elements)
         {
             // Resolve the frame: prefer template placeholder rect when available.
@@ -855,7 +858,15 @@ public sealed class OpenXmlPptxRenderer
                     AddTextShape(context, frame, paragraph.Spans, bodyStyle, effectiveTheme.InlineCode);
                     break;
                 case BulletListElement list:
-                    AddBulletList(context, frame, list, bodyStyle);
+                    if (!string.IsNullOrEmpty(smartArtHint) && !smartArtRendered)
+                    {
+                        smartArtRendered = true;
+                        AddSmartArt(context, frame, list, smartArtHint);
+                    }
+                    else
+                    {
+                        AddBulletList(context, frame, list, bodyStyle);
+                    }
                     break;
                 case ImageElement image:
                     AddImage(context, frame, image.Source, image.AltText, image.Caption,
@@ -1108,6 +1119,8 @@ public sealed class OpenXmlPptxRenderer
         HeadingElement? titleHeading = null;
         var bodyTextElements = new List<ISlideElement>();
         var nonTextElements = new List<ISlideElement>();
+        var smartArtHint = slideModel.Style.SmartArtHint;
+        var firstBulletRouted = false;
         foreach (var element in slideModel.Elements)
         {
             if (titleHeading is null && titlePlaceholder is not null &&
@@ -1120,6 +1133,10 @@ public sealed class OpenXmlPptxRenderer
 
             switch (element)
             {
+                case BulletListElement when !string.IsNullOrEmpty(smartArtHint) && !firstBulletRouted:
+                    firstBulletRouted = true;
+                    nonTextElements.Add(element);
+                    break;
                 case HeadingElement or ParagraphElement or BulletListElement:
                     bodyTextElements.Add(element);
                     break;
@@ -1269,6 +1286,8 @@ public sealed class OpenXmlPptxRenderer
                 var plan = _layoutEngine.LayoutSlide(residualSlide, residualTheme, layoutOptions);
                 var contentRect = GetContentRect(residualTheme, layoutOptions);
                 var bodyStyle = residualTheme.Body;
+                var residualSmartArtHint = slideModel.Style.SmartArtHint;
+                var residualSmartArtRendered = false;
                 foreach (var placed in plan.Elements)
                 {
                     var frame = bodyRect is null
@@ -1284,7 +1303,15 @@ public sealed class OpenXmlPptxRenderer
                             AddTextShape(context, frame, paragraph.Spans, bodyStyle, residualTheme.InlineCode);
                             break;
                         case BulletListElement list:
-                            AddBulletList(context, frame, list, bodyStyle);
+                            if (!string.IsNullOrEmpty(residualSmartArtHint) && !residualSmartArtRendered)
+                            {
+                                residualSmartArtRendered = true;
+                                AddSmartArt(context, frame, list, residualSmartArtHint);
+                            }
+                            else
+                            {
+                                AddBulletList(context, frame, list, bodyStyle);
+                            }
                             break;
                         case ImageElement image:
                             AddImage(context, frame, image.Source, image.AltText, image.Caption,
@@ -1425,6 +1452,8 @@ public sealed class OpenXmlPptxRenderer
         HeadingElement? titleHeading = null;
         var bodyTextElements = new List<ISlideElement>();
         var nonTextElements = new List<ISlideElement>();
+        var tsSmartArtHint = slideModel.Style.SmartArtHint;
+        var tsFirstBulletRouted = false;
         foreach (var element in slideModel.Elements)
         {
             if (titleHeading is null && titleShape is not null &&
@@ -1437,6 +1466,10 @@ public sealed class OpenXmlPptxRenderer
 
             switch (element)
             {
+                case BulletListElement when !string.IsNullOrEmpty(tsSmartArtHint) && !tsFirstBulletRouted:
+                    tsFirstBulletRouted = true;
+                    nonTextElements.Add(element);
+                    break;
                 case HeadingElement or ParagraphElement or BulletListElement:
                     bodyTextElements.Add(element);
                     break;
@@ -1483,6 +1516,7 @@ public sealed class OpenXmlPptxRenderer
             residualSlide.Elements.AddRange(nonTextElements);
             var plan = _layoutEngine.LayoutSlide(residualSlide, effectiveTheme);
             var bodyStyle = effectiveTheme.Body;
+            var tsResidualSmartArtRendered = false;
             foreach (var placed in plan.Elements)
             {
                 switch (placed.Element)
@@ -1494,7 +1528,15 @@ public sealed class OpenXmlPptxRenderer
                         AddTextShape(context, placed.Frame, paragraph.Spans, bodyStyle, effectiveTheme.InlineCode);
                         break;
                     case BulletListElement list:
-                        AddBulletList(context, placed.Frame, list, bodyStyle);
+                        if (!string.IsNullOrEmpty(tsSmartArtHint) && !tsResidualSmartArtRendered)
+                        {
+                            tsResidualSmartArtRendered = true;
+                            AddSmartArt(context, placed.Frame, list, tsSmartArtHint);
+                        }
+                        else
+                        {
+                            AddBulletList(context, placed.Frame, list, bodyStyle);
+                        }
                         break;
                     case ImageElement image:
                         AddImage(context, placed.Frame, image.Source, image.AltText, image.Caption,
@@ -2308,6 +2350,132 @@ public sealed class OpenXmlPptxRenderer
             noFill: true,
             fillColor: null,
             lineColor: null));
+    }
+
+    /// <summary>
+    /// Renders a <see cref="BulletListElement"/> as a native PowerPoint SmartArt diagram.
+    /// Creates 4 diagram parts (data, layout, colors, style) in the package and emits a
+    /// <c>p:graphicFrame</c> with <c>dgm:relIds</c> linking to those parts.
+    /// </summary>
+    private static void AddSmartArt(SlideRenderContext context, Rect frame, BulletListElement list, string layoutHint)
+    {
+        // Map layout hint to the built-in layout URI and a display name.
+        var (layoutUri, layoutDisplayName) = layoutHint switch
+        {
+            "list" => ("urn:microsoft.com/office/officeart/2005/8/layout/vList5", "Vertical Block List"),
+            "chevron" => ("urn:microsoft.com/office/officeart/2005/8/layout/chevron1", "Chevron Process"),
+            _ => ("urn:microsoft.com/office/officeart/2005/8/layout/process1", "Basic Process"),
+        };
+
+        // Add the 4 required diagram parts to the slide part.
+        var dataPart = context.SlidePart.AddNewPart<DiagramDataPart>(GetNextRelationshipId(context.SlidePart));
+        var layoutPart = context.SlidePart.AddNewPart<DiagramLayoutDefinitionPart>(GetNextRelationshipId(context.SlidePart));
+        var stylePart = context.SlidePart.AddNewPart<DiagramStylePart>(GetNextRelationshipId(context.SlidePart));
+        var colorsPart = context.SlidePart.AddNewPart<DiagramColorsPart>(GetNextRelationshipId(context.SlidePart));
+
+        var dataRelId = context.SlidePart.GetIdOfPart(dataPart);
+        var layoutRelId = context.SlidePart.GetIdOfPart(layoutPart);
+        var styleRelId = context.SlidePart.GetIdOfPart(stylePart);
+        var colorsRelId = context.SlidePart.GetIdOfPart(colorsPart);
+
+        // Populate data.xml with the bullet list items.
+        PopulateSmartArtData(dataPart, list);
+
+        // Write minimal layout/style/colors XML referencing built-in URIs.
+        // A layoutNode child is required by the schema for layoutDef, and a styleLbl child
+        // is required for styleDef. Both are minimal empty elements — PowerPoint uses the
+        // uniqueId to load the full built-in definition from its own resources.
+        WriteSmartArtPart(layoutPart,
+            $"""<?xml version="1.0" encoding="UTF-8" standalone="yes"?><dgm:layoutDef xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" uniqueId="{layoutUri}" minVer="12.0"><dgm:title lang="" val="{layoutDisplayName}"/><dgm:desc lang="" val=""/><dgm:layoutNode name="root"><dgm:varLst/></dgm:layoutNode></dgm:layoutDef>""");
+
+        WriteSmartArtPart(stylePart,
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><dgm:styleDef xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" uniqueId="urn:microsoft.com/office/officeart/2005/8/quickstyle/ps1" minVer="12.0"><dgm:styleLbl name="lev1"/></dgm:styleDef>""");
+
+        WriteSmartArtPart(colorsPart,
+            """<?xml version="1.0" encoding="UTF-8" standalone="yes"?><dgm:colorsDef xmlns:dgm="http://schemas.openxmlformats.org/drawingml/2006/diagram" uniqueId="urn:microsoft.com/office/officeart/2005/8/colors/accent1_2" minVer="12.0"><dgm:styleLbl name="lev1"/></dgm:colorsDef>""");
+
+        // Build the graphic frame with dgm:relIds referencing the 4 diagram parts.
+        const string DiagramUri = "http://schemas.openxmlformats.org/drawingml/2006/diagram";
+        var relIds = new Dgm.RelationshipIds
+        {
+            DataPart = dataRelId,
+            LayoutPart = layoutRelId,
+            StylePart = styleRelId,
+            ColorPart = colorsRelId,
+        };
+
+        var graphicFrame = new P.GraphicFrame(
+            new P.NonVisualGraphicFrameProperties(
+                new P.NonVisualDrawingProperties { Id = context.NextShapeId(), Name = "SmartArt" },
+                new P.NonVisualGraphicFrameDrawingProperties(new A.GraphicFrameLocks { NoGrouping = true }),
+                new P.ApplicationNonVisualDrawingProperties()),
+            new P.Transform(
+                new A.Offset { X = ToEmu(frame.X), Y = ToEmu(frame.Y) },
+                new A.Extents { Cx = ToEmu(frame.Width), Cy = ToEmu(frame.Height) }),
+            new A.Graphic(
+                new A.GraphicData(relIds) { Uri = DiagramUri }));
+
+        context.ShapeTree.Append(graphicFrame);
+    }
+
+    private static void PopulateSmartArtData(DiagramDataPart dataPart, BulletListElement list)
+    {
+        var ptList = new Dgm.PointList();
+
+        // Document root node (type="doc").
+        var docPt = new Dgm.Point { ModelId = "0", Type = Dgm.PointValues.Document };
+        docPt.Append(new Dgm.PropertySet());
+        docPt.Append(new Dgm.ShapeProperties());
+        docPt.Append(new Dgm.TextBody(new A.BodyProperties(), new A.Paragraph(new A.EndParagraphRunProperties())));
+        ptList.Append(docPt);
+
+        var cxnList = new Dgm.ConnectionList();
+
+        for (var i = 0; i < list.Items.Count; i++)
+        {
+            var itemModelId = (i + 1).ToString(CultureInfo.InvariantCulture);
+            var cxnModelId = (1000 + i).ToString(CultureInfo.InvariantCulture);
+            var sibTransId = (2000 + i).ToString(CultureInfo.InvariantCulture);
+
+            var itemPt = new Dgm.Point { ModelId = itemModelId };
+            itemPt.Append(new Dgm.PropertySet());
+            itemPt.Append(new Dgm.ShapeProperties());
+
+            var run = new A.Run();
+            run.Append(new A.RunProperties { Language = "en-US", Dirty = false });
+            run.Append(new A.Text(list.Items[i].Text));
+
+            var para = new A.Paragraph();
+            para.Append(run);
+
+            itemPt.Append(new Dgm.TextBody(new A.BodyProperties(), para));
+            ptList.Append(itemPt);
+
+            var cxn = new Dgm.Connection
+            {
+                ModelId = cxnModelId,
+                SourceId = "0",
+                DestinationId = itemModelId,
+                Type = Dgm.ConnectionValues.ParentOf,
+                SourcePosition = new UInt32Value((uint)i),
+                DestinationPosition = new UInt32Value(0U),
+                SiblingTransitionId = sibTransId,
+                ParentTransitionId = (3000 + i).ToString(CultureInfo.InvariantCulture),
+            };
+            cxnList.Append(cxn);
+        }
+
+        var dataModel = new Dgm.DataModelRoot();
+        dataModel.Append(ptList);
+        dataModel.Append(cxnList);
+        dataPart.DataModelRoot = dataModel;
+    }
+
+    private static void WriteSmartArtPart(OpenXmlPart part, string xmlContent)
+    {
+        var bytes = Encoding.UTF8.GetBytes(xmlContent);
+        using var stream = new MemoryStream(bytes, writable: false);
+        part.FeedData(stream);
     }
 
     private static void AddCodeBlock(SlideRenderContext context, Rect frame, CodeBlockElement code, TextStyle style)
