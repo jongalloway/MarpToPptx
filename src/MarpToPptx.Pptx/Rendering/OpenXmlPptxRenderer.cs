@@ -1547,15 +1547,20 @@ public sealed class OpenXmlPptxRenderer
         }
 
         // Determine the effective normAutofit behavior.
-        // When normAutofit is not requested (e.g. title placeholder), never emit it.
+        // When normAutofit is not requested (e.g. title placeholder), preserve the empty
+        // <a:bodyPr/> and do not emit any autofit child.
         // When normAutofit is requested (body placeholder), honour the shrinkToFit directive:
-        //   null or "true"  → <a:normAutofit/> (default PowerPoint shrink behavior)
-        //   "false"         → omit <a:normAutofit/> entirely (disable auto-shrink)
+        //   null or "true"   → <a:normAutofit/> (default PowerPoint shrink behavior)
+        //   "false"          → <a:noAutofit/> (explicitly disable inherited auto-shrink)
         //   size (e.g. "14pt") → <a:normAutofit fontScale="…"/> with a minimum size floor
         A.BodyProperties bodyProperties;
-        if (!normAutofit || string.Equals(shrinkToFit, "false", StringComparison.OrdinalIgnoreCase))
+        if (!normAutofit)
         {
             bodyProperties = new A.BodyProperties();
+        }
+        else if (string.Equals(shrinkToFit, "false", StringComparison.OrdinalIgnoreCase))
+        {
+            bodyProperties = new A.BodyProperties(new A.NoAutoFit());
         }
         else if (shrinkToFit is not null && !string.Equals(shrinkToFit, "true", StringComparison.OrdinalIgnoreCase))
         {
@@ -1565,9 +1570,14 @@ public sealed class OpenXmlPptxRenderer
             var minSizeHundredths = MarpToPptx.Core.Parsing.MarpDirectiveParser.ParseFontSizeDirective(shrinkToFit);
             if (minSizeHundredths is { } minSize)
             {
-                // Reference size: slide FontSize override if set, otherwise 18pt (1800 hundredths).
+                // Reference size: slide FontSize override if set and positive, otherwise 18pt (1800 hundredths).
+                // Guard against zero/negative values to avoid divide-by-zero or negative scaling.
                 const int defaultBodyFontSizeHundredths = 1800;
                 var reference = fontSizeHundredths ?? defaultBodyFontSizeHundredths;
+                if (reference <= 0)
+                {
+                    reference = defaultBodyFontSizeHundredths;
+                }
                 var fontScale = (int)Math.Round((double)minSize / reference * 100000);
                 fontScale = Math.Clamp(fontScale, 1000, 100000);
                 bodyProperties = new A.BodyProperties(new A.NormalAutoFit { FontScale = fontScale });

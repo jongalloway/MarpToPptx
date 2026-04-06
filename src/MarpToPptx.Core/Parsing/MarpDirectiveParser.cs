@@ -116,7 +116,7 @@ public static partial class MarpDirectiveParser
     /// Accepts <c>20pt</c>, <c>20</c> (assumed pt), or <c>2000</c> (already in hundredths of a point).
     /// Returns <see langword="null"/> if the value cannot be parsed.
     /// </summary>
-    public static int? ParseFontSizeDirective(string value)
+    internal static int? ParseFontSizeDirective(string value)
     {
         if (string.IsNullOrWhiteSpace(value))
         {

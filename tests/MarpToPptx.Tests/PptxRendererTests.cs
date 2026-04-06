@@ -1903,9 +1903,10 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_ShrinkToFitFalse_OmitsNormAutofit_InBodyPlaceholder()
+    public void Renderer_ShrinkToFitFalse_EmitsNoAutofit_InBodyPlaceholder()
     {
-        // _shrinkToFit: false must disable <a:normAutofit/> on the body placeholder.
+        // _shrinkToFit: false must emit <a:noAutofit/> on the body placeholder to
+        // explicitly disable any inherited autofit from the layout or master.
         using var workspace = TestWorkspace.Create();
 
         var templatePath = workspace.GetPath("template.pptx");
@@ -1935,10 +1936,11 @@ public class PptxRendererTests
         using var document = PresentationDocument.Open(outputPath, false);
         var slidePart = document.PresentationPart!.SlideParts.Single();
 
-        // Body placeholder must NOT have <a:normAutofit/> when shrinkToFit: false.
+        // Body placeholder must have <a:noAutofit/> (not normAutofit) when shrinkToFit: false.
         var bodyShape = slidePart.Slide!.Descendants<P.Shape>().Single(s =>
             s.NonVisualShapeProperties?.ApplicationNonVisualDrawingProperties?
                 .GetFirstChild<P.PlaceholderShape>()?.Type?.Value == P.PlaceholderValues.Body);
+        Assert.NotNull(bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NoAutoFit>());
         Assert.Null(bodyShape.TextBody?.BodyProperties?.GetFirstChild<A.NormalAutoFit>());
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
