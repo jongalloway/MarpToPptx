@@ -265,6 +265,8 @@ public class McpToolsTests
         Assert.True(recommendations.TryGetProperty("titleLayout", out _));
         Assert.True(recommendations.TryGetProperty("sectionHeaderLayout", out _));
         Assert.True(recommendations.TryGetProperty("pictureLayout", out _));
+        // The built-in template always yields at least one content layout recommendation.
+        Assert.False(string.IsNullOrEmpty(recommendations.GetProperty("defaultContentLayout").GetString()));
     }
 
     [Fact]
@@ -311,11 +313,13 @@ public class McpToolsTests
     {
         using var workspace = TestWorkspace.Create();
         var missingPath = workspace.GetPath("nonexistent.md");
-        var markdownPath = workspace.WriteMarkdown("deck.md", TwoSlideDeck);
+        // Create and render a real deck so the template file exists; the missing-path check
+        // should fail on the markdown argument, not the template argument.
+        var deckPath = workspace.WriteMarkdown("deck.md", TwoSlideDeck);
         var templatePath = workspace.GetPath("template.pptx");
 
         var tools = new MarpToPptxTools();
-        await tools.marp_render(markdownPath, templatePath);
+        await tools.marp_render(deckPath, templatePath);
 
         await Assert.ThrowsAsync<FileNotFoundException>(() =>
             tools.marp_recommend_layouts(missingPath, templatePath));
