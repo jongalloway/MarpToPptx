@@ -230,6 +230,115 @@ public class McpToolsTests
         Assert.True(File.Exists(outputPath));
     }
 
+    // ── marp_diagnose_template ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task McpTools_DiagnoseTemplate_ReturnsJsonWithLayoutCatalog()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md", TwoSlideDeck);
+        var templatePath = workspace.GetPath("template.pptx");
+
+        var tools = new MarpToPptxTools();
+        await tools.marp_render(markdownPath, templatePath);
+
+        var json = await tools.marp_diagnose_template(templatePath);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal(templatePath, root.GetProperty("templatePath").GetString());
+        Assert.True(root.GetProperty("slideMasterCount").GetInt32() >= 1);
+        Assert.True(root.GetProperty("layoutCount").GetInt32() >= 1);
+        Assert.True(root.GetProperty("layouts").GetArrayLength() >= 1);
+
+        var firstLayout = root.GetProperty("layouts")[0];
+        Assert.True(firstLayout.TryGetProperty("index", out _));
+        Assert.True(firstLayout.TryGetProperty("name", out _));
+        Assert.True(firstLayout.TryGetProperty("role", out _));
+        Assert.True(firstLayout.TryGetProperty("hasTitle", out _));
+        Assert.True(firstLayout.TryGetProperty("hasBody", out _));
+        Assert.True(firstLayout.TryGetProperty("hasPicture", out _));
+
+        var recommendations = root.GetProperty("recommendations");
+        Assert.True(recommendations.TryGetProperty("defaultContentLayout", out _));
+        Assert.True(recommendations.TryGetProperty("titleLayout", out _));
+        Assert.True(recommendations.TryGetProperty("sectionHeaderLayout", out _));
+        Assert.True(recommendations.TryGetProperty("pictureLayout", out _));
+        // The built-in template always yields at least one content layout recommendation.
+        Assert.False(string.IsNullOrEmpty(recommendations.GetProperty("defaultContentLayout").GetString()));
+    }
+
+    [Fact]
+    public async Task McpTools_DiagnoseTemplate_ThrowsFileNotFound_ForMissingTemplate()
+    {
+        using var workspace = TestWorkspace.Create();
+        var missingPath = workspace.GetPath("nonexistent.pptx");
+
+        var tools = new MarpToPptxTools();
+        await Assert.ThrowsAsync<FileNotFoundException>(() => tools.marp_diagnose_template(missingPath));
+    }
+
+    // ── marp_recommend_layouts ────────────────────────────────────────────────
+
+    [Fact]
+    public async Task McpTools_RecommendLayouts_ReturnsJsonWithPerSlideRecommendations()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md", TwoSlideDeck);
+        var templatePath = workspace.GetPath("template.pptx");
+
+        var tools = new MarpToPptxTools();
+        await tools.marp_render(markdownPath, templatePath);
+
+        var json = await tools.marp_recommend_layouts(markdownPath, templatePath);
+
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
+
+        Assert.Equal(2, root.GetProperty("slideCount").GetInt32());
+        Assert.Equal(2, root.GetProperty("slides").GetArrayLength());
+        Assert.True(root.TryGetProperty("suggestedFrontMatterLayout", out _));
+        Assert.True(root.TryGetProperty("photoLayoutRotation", out _));
+
+        var firstSlide = root.GetProperty("slides")[0];
+        Assert.Equal(0, firstSlide.GetProperty("index").GetInt32());
+        Assert.Equal("Intro Slide", firstSlide.GetProperty("title").GetString());
+        Assert.True(firstSlide.TryGetProperty("contentKind", out _));
+        Assert.True(firstSlide.TryGetProperty("recommendedLayout", out _));
+        Assert.True(firstSlide.TryGetProperty("isExplicitLayout", out _));
+        Assert.True(firstSlide.TryGetProperty("explicitLayout", out _));
+    }
+
+    [Fact]
+    public async Task McpTools_RecommendLayouts_ThrowsFileNotFound_ForMissingMarkdown()
+    {
+        using var workspace = TestWorkspace.Create();
+        var missingPath = workspace.GetPath("nonexistent.md");
+        // Create and render a real deck so the template file exists; the missing-path check
+        // should fail on the markdown argument, not the template argument.
+        var deckPath = workspace.WriteMarkdown("deck.md", TwoSlideDeck);
+        var templatePath = workspace.GetPath("template.pptx");
+
+        var tools = new MarpToPptxTools();
+        await tools.marp_render(deckPath, templatePath);
+
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            tools.marp_recommend_layouts(missingPath, templatePath));
+    }
+
+    [Fact]
+    public async Task McpTools_RecommendLayouts_ThrowsFileNotFound_ForMissingTemplate()
+    {
+        using var workspace = TestWorkspace.Create();
+        var markdownPath = workspace.WriteMarkdown("deck.md", TwoSlideDeck);
+        var missingTemplatePath = workspace.GetPath("nonexistent.pptx");
+
+        var tools = new MarpToPptxTools();
+        await Assert.ThrowsAsync<FileNotFoundException>(() =>
+            tools.marp_recommend_layouts(markdownPath, missingTemplatePath));
+    }
+
     // ── Helpers ────────────────────────────────────────────────────────────────
 
     private sealed class TestWorkspace : IDisposable
