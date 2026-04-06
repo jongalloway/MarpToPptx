@@ -2379,7 +2379,7 @@ public sealed class OpenXmlPptxRenderer
         var colorsRelId = context.SlidePart.GetIdOfPart(colorsPart);
 
         // Populate data.xml with the bullet list items.
-        PopulateSmartArtData(dataPart, list);
+        PopulateSmartArtData(dataPart, list, context.Language);
 
         // Write minimal layout/style/colors XML referencing built-in URIs.
         // A layoutNode child is required by the schema for layoutDef, and a styleLbl child
@@ -2418,7 +2418,7 @@ public sealed class OpenXmlPptxRenderer
         context.ShapeTree.Append(graphicFrame);
     }
 
-    private static void PopulateSmartArtData(DiagramDataPart dataPart, BulletListElement list)
+    private static void PopulateSmartArtData(DiagramDataPart dataPart, BulletListElement list, string language)
     {
         var ptList = new Dgm.PointList();
 
@@ -2442,7 +2442,7 @@ public sealed class OpenXmlPptxRenderer
             itemPt.Append(new Dgm.ShapeProperties());
 
             var run = new A.Run();
-            run.Append(new A.RunProperties { Language = "en-US", Dirty = false });
+            run.Append(new A.RunProperties { Language = language, Dirty = false });
             run.Append(new A.Text(list.Items[i].Text));
 
             var para = new A.Paragraph();

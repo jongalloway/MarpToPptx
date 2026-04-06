@@ -142,6 +142,10 @@ public static class SlideIdentityGenerator
         {
             sb.Append("\x01fontSize\x01").Append(fs);
         }
+        if (slideModel.Style.SmartArtHint is { } smartArt)
+        {
+            sb.Append("\x01smartArt\x01").Append(smartArt);
+        }
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
