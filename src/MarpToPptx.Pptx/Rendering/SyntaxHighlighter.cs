@@ -37,6 +37,12 @@ public static class SyntaxHighlighter
     // Lazy so the registry is only initialised when syntax highlighting is first needed.
     private static readonly Lazy<HighlightState?> _state = new(CreateState);
 
+    // TextMateSharp's Registry/SyncRegistry is not thread-safe: concurrent
+    // LoadGrammar calls for the same scope can race on Dictionary.Add and
+    // throw "An item with the same key has already been added". Serialize
+    // grammar loading through this lock.
+    private static readonly object _grammarLock = new();
+
     /// <summary>Returns <c>true</c> when <paramref name="language"/> has grammar support.</summary>
     public static bool IsSupported(string? language)
     {
@@ -69,7 +75,11 @@ public static class SyntaxHighlighter
             var scopeName = state.Options.GetScopeByLanguageId(canonicalId);
             if (scopeName is not null)
             {
-                var grammar = state.Registry.LoadGrammar(scopeName);
+                IGrammar? grammar;
+                lock (_grammarLock)
+                {
+                    grammar = state.Registry.LoadGrammar(scopeName);
+                }
                 if (grammar is not null)
                 {
                     return TokenizeWithGrammar(code, grammar, state.Theme);
