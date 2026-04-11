@@ -202,7 +202,9 @@ public static partial class MarpDirectiveParser
         SlideTransition? transition = null,
         int? fontSize = null,
         string? shrinkToFit = null,
-        string? smartArtHint = null)
+        string? smartArtHint = null,
+        string? splitBackgroundLeft = null,
+        string? splitBackgroundRight = null)
     {
         var clone = new SlideStyle
         {
@@ -222,6 +224,8 @@ public static partial class MarpDirectiveParser
             FontSize = fontSize ?? source.FontSize,
             ShrinkToFit = shrinkToFit ?? source.ShrinkToFit,
             SmartArtHint = smartArtHint ?? source.SmartArtHint,
+            SplitBackgroundLeft = splitBackgroundLeft ?? source.SplitBackgroundLeft,
+            SplitBackgroundRight = splitBackgroundRight ?? source.SplitBackgroundRight,
         };
 
         foreach (var pair in source.Directives)

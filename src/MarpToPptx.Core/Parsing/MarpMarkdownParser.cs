@@ -116,18 +116,35 @@ public sealed class MarpMarkdownParser
 
             var allElements = ParseElements(cleaned);
 
-            // Promote any ![bg](url) images to slide background image.
-            // Only exact "bg" alt text (case-insensitive) is recognized in this slice.
-            // A directive-specified backgroundImage always takes precedence: if a directive
-            // (including an empty-value clear) has set BackgroundImage, bg syntax is ignored.
+            // Promote any ![bg](url) images to slide background.
+            // Supported forms:
+            //   ![bg](url)       — full-slide background (sets BackgroundImage)
+            //   ![bg left](url)  — left-half split background (sets SplitBackgroundLeft)
+            //   ![bg right](url) — right-half split background (sets SplitBackgroundRight)
+            // A directive-specified backgroundImage always takes precedence for the plain bg form:
+            // if a directive (including an empty-value clear) has set BackgroundImage, plain bg
+            // syntax is ignored. Split-background images are always promoted regardless.
             var bgImages = allElements
                 .OfType<ImageElement>()
                 .Where(img => IsBgAltText(img.AltText))
                 .ToList();
 
-            if (bgImages.Count > 0 && effectiveStyle.BackgroundImage is null)
+            foreach (var bgImg in bgImages)
             {
-                effectiveStyle = MarpDirectiveParser.ApplyDirective(effectiveStyle, "backgroundimage", bgImages[0].Source);
+                var trimmedAlt = bgImg.AltText.Trim();
+                if (IsBgLeftAltText(trimmedAlt))
+                {
+                    effectiveStyle = CloneStyleWithSplitBackground(effectiveStyle, left: bgImg.Source, right: null);
+                }
+                else if (IsBgRightAltText(trimmedAlt))
+                {
+                    effectiveStyle = CloneStyleWithSplitBackground(effectiveStyle, left: null, right: bgImg.Source);
+                }
+                else if (effectiveStyle.BackgroundImage is null)
+                {
+                    // Plain ![bg](url) — only the first image is promoted; directive takes precedence.
+                    effectiveStyle = MarpDirectiveParser.ApplyDirective(effectiveStyle, "backgroundimage", bgImg.Source);
+                }
             }
 
             var slide = new Slide { Style = effectiveStyle, Notes = notes, NoteSpans = ParseNoteSpans(notes) };
@@ -543,8 +560,8 @@ public sealed class MarpMarkdownParser
 
                         if (!isBgAlt)
                         {
-                            var (explicitWidth, explicitHeight, sizePercent, cleanAltText) = MarpitImageSizingParser.Parse(altText);
-                            yield return new ImageElement(url, cleanAltText, caption, explicitWidth, explicitHeight, sizePercent);
+                            var (explicitWidth, explicitHeight, sizePercent, alignment, cleanAltText) = MarpitImageSizingParser.Parse(altText);
+                            yield return new ImageElement(url, cleanAltText, caption, explicitWidth, explicitHeight, sizePercent, alignment);
                         }
                         else
                         {
@@ -704,9 +721,60 @@ public sealed class MarpMarkdownParser
     }
 
     /// <summary>
-    /// Returns <see langword="true"/> when <paramref name="altText"/> is exactly <c>bg</c>
-    /// (case-insensitive), indicating a Marpit background image marker.
+    /// Returns <see langword="true"/> when <paramref name="altText"/> is exactly <c>bg</c>,
+    /// <c>bg left</c>, or <c>bg right</c> (case-insensitive), indicating a Marpit background
+    /// image marker (full-slide, left-half, or right-half respectively).
     /// </summary>
-    private static bool IsBgAltText(string altText) =>
-        string.Equals(altText.Trim(), "bg", StringComparison.OrdinalIgnoreCase);
+    private static bool IsBgAltText(string altText)
+    {
+        var trimmed = altText.Trim();
+        return string.Equals(trimmed, "bg", StringComparison.OrdinalIgnoreCase)
+            || IsBgLeftAltText(trimmed)
+            || IsBgRightAltText(trimmed);
+    }
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="trimmedAlt"/> is <c>bg left</c>
+    /// (case-insensitive), indicating a Marpit left-half split background image.
+    /// </summary>
+    private static bool IsBgLeftAltText(string trimmedAlt) =>
+        string.Equals(trimmedAlt, "bg left", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Returns <see langword="true"/> when <paramref name="trimmedAlt"/> is <c>bg right</c>
+    /// (case-insensitive), indicating a Marpit right-half split background image.
+    /// </summary>
+    private static bool IsBgRightAltText(string trimmedAlt) =>
+        string.Equals(trimmedAlt, "bg right", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// Clones <paramref name="style"/>, setting or updating the split background properties
+    /// without overwriting an already-set value on the same side.
+    /// </summary>
+    private static SlideStyle CloneStyleWithSplitBackground(SlideStyle style, string? left, string? right)
+    {
+        var newLeft = left ?? style.SplitBackgroundLeft;
+        var newRight = right ?? style.SplitBackgroundRight;
+        return new SlideStyle
+        {
+            SlideId = style.SlideId,
+            ThemeName = style.ThemeName,
+            Paginate = style.Paginate,
+            Layout = style.Layout,
+            ClassName = style.ClassName,
+            BackgroundImage = style.BackgroundImage,
+            BackgroundSize = style.BackgroundSize,
+            BackgroundPosition = style.BackgroundPosition,
+            BackgroundColor = style.BackgroundColor,
+            Color = style.Color,
+            Header = style.Header,
+            Footer = style.Footer,
+            Transition = style.Transition,
+            FontSize = style.FontSize,
+            ShrinkToFit = style.ShrinkToFit,
+            SmartArtHint = style.SmartArtHint,
+            SplitBackgroundLeft = newLeft,
+            SplitBackgroundRight = newRight,
+        };
+    }
 }
