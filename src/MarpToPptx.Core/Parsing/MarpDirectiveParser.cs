@@ -12,6 +12,14 @@ public static partial class MarpDirectiveParser
     }
 
     /// <summary>
+    /// Returns a clone of <paramref name="style"/> with the split background image properties
+    /// set to the provided values. A <see langword="null"/> argument for either side preserves
+    /// the existing value from <paramref name="style"/>.
+    /// </summary>
+    internal static SlideStyle CloneWithSplitBackground(SlideStyle style, string? splitBackgroundLeft = null, string? splitBackgroundRight = null)
+        => Clone(style, splitBackgroundLeft: splitBackgroundLeft, splitBackgroundRight: splitBackgroundRight);
+
+    /// <summary>
     /// Parses HTML-comment directives from a single slide chunk.
     /// Returns the effective style (local + spot directives applied),
     /// the carry-forward style (local directives only, for propagation to subsequent slides),

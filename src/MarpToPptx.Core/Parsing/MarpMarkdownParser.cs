@@ -134,11 +134,11 @@ public sealed class MarpMarkdownParser
                 var trimmedAlt = bgImg.AltText.Trim();
                 if (IsBgLeftAltText(trimmedAlt))
                 {
-                    effectiveStyle = CloneStyleWithSplitBackground(effectiveStyle, left: bgImg.Source, right: null);
+                    effectiveStyle = MarpDirectiveParser.CloneWithSplitBackground(effectiveStyle, splitBackgroundLeft: bgImg.Source);
                 }
                 else if (IsBgRightAltText(trimmedAlt))
                 {
-                    effectiveStyle = CloneStyleWithSplitBackground(effectiveStyle, left: null, right: bgImg.Source);
+                    effectiveStyle = MarpDirectiveParser.CloneWithSplitBackground(effectiveStyle, splitBackgroundRight: bgImg.Source);
                 }
                 else if (effectiveStyle.BackgroundImage is null)
                 {
@@ -746,35 +746,4 @@ public sealed class MarpMarkdownParser
     /// </summary>
     private static bool IsBgRightAltText(string trimmedAlt) =>
         string.Equals(trimmedAlt, "bg right", StringComparison.OrdinalIgnoreCase);
-
-    /// <summary>
-    /// Clones <paramref name="style"/>, setting or updating the split background properties
-    /// without overwriting an already-set value on the same side.
-    /// </summary>
-    private static SlideStyle CloneStyleWithSplitBackground(SlideStyle style, string? left, string? right)
-    {
-        var newLeft = left ?? style.SplitBackgroundLeft;
-        var newRight = right ?? style.SplitBackgroundRight;
-        return new SlideStyle
-        {
-            SlideId = style.SlideId,
-            ThemeName = style.ThemeName,
-            Paginate = style.Paginate,
-            Layout = style.Layout,
-            ClassName = style.ClassName,
-            BackgroundImage = style.BackgroundImage,
-            BackgroundSize = style.BackgroundSize,
-            BackgroundPosition = style.BackgroundPosition,
-            BackgroundColor = style.BackgroundColor,
-            Color = style.Color,
-            Header = style.Header,
-            Footer = style.Footer,
-            Transition = style.Transition,
-            FontSize = style.FontSize,
-            ShrinkToFit = style.ShrinkToFit,
-            SmartArtHint = style.SmartArtHint,
-            SplitBackgroundLeft = newLeft,
-            SplitBackgroundRight = newRight,
-        };
-    }
 }
