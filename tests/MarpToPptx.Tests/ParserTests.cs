@@ -605,10 +605,10 @@ public class ParserTests
     }
 
     [Fact]
-    public void Parser_MarpitLeftAlignmentKeyword_YieldsImageElementWithKeywordsAsAltText()
+    public void Parser_MarpitLeftAlignmentKeyword_YieldsImageElementWithLeftAlignment()
     {
-        // Marpit upstream: ![left](image.jpg) floats the image to the left of the content area.
-        // Current behavior: treated as a normal image; alt text is "left".
+        // Marpit: ![left](image.jpg) floats the image to the left of the content area.
+        // The "left" keyword is stripped from alt text and stored as Alignment = "left".
         const string markdown = """
         # Slide
 
@@ -620,14 +620,15 @@ public class ParserTests
 
         var slide = Assert.Single(deck.Slides);
         var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("left", image.AltText);
+        Assert.Equal(string.Empty, image.AltText);
+        Assert.Equal("left", image.Alignment);
     }
 
     [Fact]
-    public void Parser_MarpitRightAlignmentKeyword_YieldsImageElementWithKeywordsAsAltText()
+    public void Parser_MarpitRightAlignmentKeyword_YieldsImageElementWithRightAlignment()
     {
-        // Marpit upstream: ![right](image.jpg) floats the image to the right of the content area.
-        // Current behavior: treated as a normal image; alt text is "right".
+        // Marpit: ![right](image.jpg) floats the image to the right of the content area.
+        // The "right" keyword is stripped from alt text and stored as Alignment = "right".
         const string markdown = """
         # Slide
 
@@ -639,14 +640,16 @@ public class ParserTests
 
         var slide = Assert.Single(deck.Slides);
         var image = Assert.Single(slide.Elements.OfType<ImageElement>());
-        Assert.Equal("right", image.AltText);
+        Assert.Equal(string.Empty, image.AltText);
+        Assert.Equal("right", image.Alignment);
     }
 
     [Fact]
-    public void Parser_MarpitMultipleImagesWithBgKeywords_YieldsMultipleImageElements()
+    public void Parser_MarpitMultipleImagesWithBgKeywords_PromotedToSplitBackground()
     {
-        // Marpit upstream: two bg images on one slide produce a split-background layout.
-        // Current behavior: each image becomes an independent ImageElement; no split layout.
+        // Marpit: two bg images with left/right keywords produce a split-background layout.
+        // Both images are promoted to SplitBackgroundLeft / SplitBackgroundRight on the style;
+        // neither remains as an inline ImageElement.
         const string markdown = """
         # Slide
 
@@ -658,10 +661,9 @@ public class ParserTests
         var deck = compiler.Compile(markdown);
 
         var slide = Assert.Single(deck.Slides);
-        var images = slide.Elements.OfType<ImageElement>().ToArray();
-        Assert.Equal(2, images.Length);
-        Assert.Equal("bg left", images[0].AltText);
-        Assert.Equal("bg right", images[1].AltText);
+        Assert.DoesNotContain(slide.Elements, e => e is ImageElement);
+        Assert.Equal("left.png", slide.Style.SplitBackgroundLeft);
+        Assert.Equal("right.png", slide.Style.SplitBackgroundRight);
     }
 
     [Fact]

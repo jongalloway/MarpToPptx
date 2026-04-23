@@ -869,8 +869,14 @@ public sealed class OpenXmlPptxRenderer
                     }
                     break;
                 case ImageElement image:
+                    var imageXAlign = image.Alignment switch
+                    {
+                        "left" => 0.0,
+                        "right" => 1.0,
+                        _ => 0.5,
+                    };
                     AddImage(context, frame, image.Source, image.AltText, image.Caption,
-                        explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
+                        xAlign: imageXAlign, explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
                     break;
                 case VideoElement video:
                     AddVideo(context, frame, video.Source, video.AltText);
@@ -2299,6 +2305,22 @@ public sealed class OpenXmlPptxRenderer
             var useFullBleed = !string.Equals(backgroundSize, "contain", StringComparison.OrdinalIgnoreCase);
             var (xAlign, yAlign) = ParseBackgroundPosition(backgroundPosition);
             AddImage(context, new Rect(0, 0, SlideWidthEmu / LayoutScale, SlideHeightEmu / LayoutScale), backgroundImage, string.Empty, useFullBleed: useFullBleed, xAlign: xAlign, yAlign: yAlign);
+        }
+
+        // Render split background images (from ![bg left] / ![bg right] syntax).
+        // Each image is placed in the corresponding half of the slide as a full-bleed background.
+        var slideWidth = SlideWidthEmu / LayoutScale;
+        var slideHeight = SlideHeightEmu / LayoutScale;
+        var halfWidth = slideWidth / 2.0;
+
+        if (!string.IsNullOrWhiteSpace(style.SplitBackgroundLeft))
+        {
+            AddImage(context, new Rect(0, 0, halfWidth, slideHeight), style.SplitBackgroundLeft, string.Empty, useFullBleed: true);
+        }
+
+        if (!string.IsNullOrWhiteSpace(style.SplitBackgroundRight))
+        {
+            AddImage(context, new Rect(halfWidth, 0, halfWidth, slideHeight), style.SplitBackgroundRight, string.Empty, useFullBleed: true);
         }
     }
 
