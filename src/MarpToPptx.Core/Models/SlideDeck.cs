@@ -105,6 +105,18 @@ public sealed class SlideStyle
     /// </summary>
     public string? SmartArtHint { get; init; }
 
+    /// <summary>
+    /// Source path for the left-half split background image, promoted from a <c>![bg left](url)</c> syntax image.
+    /// When set, the image is rendered in the left half of the slide as a full-bleed background.
+    /// </summary>
+    public string? SplitBackgroundLeft { get; init; }
+
+    /// <summary>
+    /// Source path for the right-half split background image, promoted from a <c>![bg right](url)</c> syntax image.
+    /// When set, the image is rendered in the right half of the slide as a full-bleed background.
+    /// </summary>
+    public string? SplitBackgroundRight { get; init; }
+
     public Dictionary<string, string> Directives { get; } = new(StringComparer.OrdinalIgnoreCase);
 }
 
@@ -179,19 +191,26 @@ public sealed record BulletListItem(IReadOnlyList<InlineSpan> Spans, int Depth =
 /// image width to this percentage of the full slide width; height is preserved from aspect ratio.
 /// Ignored when <see cref="ExplicitWidth"/> or <see cref="ExplicitHeight"/> is set.
 /// </param>
+/// <param name="Alignment">
+/// Horizontal alignment hint parsed from a Marpit alignment keyword in the alt text
+/// (e.g. <c>![left](img.png)</c> or <c>![right](img.png)</c>).
+/// Accepted values are <c>"left"</c>, <c>"right"</c>, or <c>null</c> for the default centered placement.
+/// The keyword is stripped from the alt text when recognised.
+/// </param>
 public sealed record ImageElement(
     string Source,
     string AltText,
     string? Caption = null,
     double? ExplicitWidth = null,
     double? ExplicitHeight = null,
-    double? SizePercent = null) : ISlideElement
+    double? SizePercent = null,
+    string? Alignment = null) : ISlideElement
 {
     /// <summary>
     /// Backward-compatible constructor matching the original 3-parameter signature.
     /// </summary>
     public ImageElement(string Source, string AltText, string? Caption = null)
-        : this(Source, AltText, Caption, null, null, null)
+        : this(Source, AltText, Caption, null, null, null, null)
     {
     }
 }

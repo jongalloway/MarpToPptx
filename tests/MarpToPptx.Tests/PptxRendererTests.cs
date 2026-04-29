@@ -943,10 +943,15 @@ public class PptxRendererTests
     }
 
     [Fact]
-    public void Renderer_MarpitLeftAlignmentKeyword_RendersImageWithoutError()
+    public void Renderer_MarpitLeftAlignmentKeyword_RendersImageAtLeftEdgeOfFrame()
     {
-        // Marpit upstream: ![left](image.jpg) floats the image to the left of the content area.
-        // Current behavior: image rendered inline with no alignment applied.
+        // Marpit: ![left](image.jpg) floats the image to the left of the content area.
+        // The "left" keyword is stripped from alt text; the image is placed at the left
+        // edge of its allocated content frame (xAlign = 0.0).
+        //
+        // With default theme padding (Left=60 lu) and a 1×1 image in a 840×220 lu frame,
+        // CalculateImagePlacement gives X = 60 lu, width = height = 220 lu.
+        // In EMU (×12700): X = 762000, Cx = Cy = 2794000.
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -963,14 +968,31 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
-        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        AssertImageRenderedWithoutError(slidePart);
+
+        // Alt text should be empty — "left" keyword was stripped.
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var description = picture.NonVisualPictureProperties?.NonVisualDrawingProperties?.Description?.Value;
+        Assert.Equal(string.Empty, description);
+
+        // Left alignment: image X should be at the content frame's left edge (frame.X = 60 lu = 762000 EMU).
+        var transform = picture.ShapeProperties!.GetFirstChild<A.Transform2D>()!;
+        Assert.Equal(762000L, transform.Offset!.X!.Value);
+        Assert.Equal(2794000L, transform.Extents!.Cx!.Value);
+        Assert.Equal(2794000L, transform.Extents!.Cy!.Value);
     }
 
     [Fact]
-    public void Renderer_MarpitRightAlignmentKeyword_RendersImageWithoutError()
+    public void Renderer_MarpitRightAlignmentKeyword_RendersImageAtRightEdgeOfFrame()
     {
-        // Marpit upstream: ![right](image.jpg) floats the image to the right of the content area.
-        // Current behavior: image rendered inline with no alignment applied.
+        // Marpit: ![right](image.jpg) floats the image to the right of the content area.
+        // The "right" keyword is stripped from alt text; the image is placed at the right
+        // edge of its allocated content frame (xAlign = 1.0).
+        //
+        // With default theme padding (Left=60 lu) and a 1×1 image in an 840×220 lu frame,
+        // gapX = 840 - 220 = 620 lu, so X = 60 + 620 = 680 lu → 8636000 EMU.
+        // Width = height = 220 lu → 2794000 EMU.
         using var workspace = TestWorkspace.Create();
 
         workspace.WriteFile("photo.png", Convert.FromBase64String(OnePxPngBase64));
@@ -987,14 +1009,27 @@ public class PptxRendererTests
         RenderDeck(markdownPath, outputPath, workspace.RootPath);
 
         using var document = PresentationDocument.Open(outputPath, false);
-        AssertImageRenderedWithoutError(document.PresentationPart!.SlideParts.First());
+        var slidePart = document.PresentationPart!.SlideParts.First();
+        AssertImageRenderedWithoutError(slidePart);
+
+        // Alt text should be empty — "right" keyword was stripped.
+        var picture = Assert.Single(slidePart.Slide!.Descendants<P.Picture>());
+        var description = picture.NonVisualPictureProperties?.NonVisualDrawingProperties?.Description?.Value;
+        Assert.Equal(string.Empty, description);
+
+        // Right alignment: gapX = frameWidth - fittedWidth = 840 - 220 = 620 lu,
+        // so X = frame.X + gapX = 60 + 620 = 680 lu → 8636000 EMU.
+        var transform = picture.ShapeProperties!.GetFirstChild<A.Transform2D>()!;
+        Assert.Equal(8636000L, transform.Offset!.X!.Value);
+        Assert.Equal(2794000L, transform.Extents!.Cx!.Value);
+        Assert.Equal(2794000L, transform.Extents!.Cy!.Value);
     }
 
     [Fact]
-    public void Renderer_MarpitMultipleImagesWithBgKeywords_BothRenderedAsPictureShapes()
+    public void Renderer_MarpitMultipleImagesWithBgKeywords_RenderedAsSplitBackgroundPictures()
     {
-        // Marpit upstream: two bg images on one slide produce a split-background layout.
-        // Current behavior: each image is rendered as an independent inline Picture shape.
+        // Marpit: two bg images with left/right keywords produce a split-background layout.
+        // Each image is rendered as a background picture in its respective slide half.
         using var workspace = TestWorkspace.Create();
 
         var pngBytes = Convert.FromBase64String(OnePxPngBase64);

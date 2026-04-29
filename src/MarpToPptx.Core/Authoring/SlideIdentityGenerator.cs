@@ -146,6 +146,14 @@ public static class SlideIdentityGenerator
         {
             sb.Append("\x01smartArt\x01").Append(smartArt);
         }
+        if (slideModel.Style.SplitBackgroundLeft is { } splitLeft)
+        {
+            sb.Append("\x01splitBgLeft\x01").Append(splitLeft);
+        }
+        if (slideModel.Style.SplitBackgroundRight is { } splitRight)
+        {
+            sb.Append("\x01splitBgRight\x01").Append(splitRight);
+        }
 
         var hash = SHA256.HashData(Encoding.UTF8.GetBytes(sb.ToString()));
         return "sha256:" + Convert.ToHexString(hash).ToLowerInvariant();
