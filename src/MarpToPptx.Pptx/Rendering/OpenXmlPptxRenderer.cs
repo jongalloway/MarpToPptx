@@ -1320,8 +1320,14 @@ public sealed class OpenXmlPptxRenderer
                             }
                             break;
                         case ImageElement image:
+                            var residualXAlign = image.Alignment switch
+                            {
+                                "left" => 0.0,
+                                "right" => 1.0,
+                                _ => 0.5,
+                            };
                             AddImage(context, frame, image.Source, image.AltText, image.Caption,
-                                explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
+                                xAlign: residualXAlign, explicitWidth: image.ExplicitWidth, explicitHeight: image.ExplicitHeight, sizePercent: image.SizePercent);
                             break;
                         case VideoElement video:
                             AddVideo(context, frame, video.Source, video.AltText);
