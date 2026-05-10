@@ -133,7 +133,7 @@ inputs with different jobs:
 | Mode | Command shape | Source of slide ordering and identity |
 |---|---|---|
 | Fresh render | `marp2pptx deck.md --template conference-template.pptx -o deck.pptx` | Current Markdown only |
-| Update render | `marp2pptx deck.md --update-existing previous-deck.pptx --template conference-template.pptx -o updated-deck.pptx` | Existing managed deck metadata + current Markdown |
+| Update render | `marp2pptx deck.md --update-existing deck.pptx --template conference-template.pptx -o deck-updated.pptx` | Existing managed deck metadata + current Markdown |
 
 In update mode, managed slides are matched by identity metadata stored in each
 slide's `p:extLst`, not by raw ordinal position.
@@ -154,7 +154,8 @@ against.
 marp2pptx deck.md --write-slide-ids -o deck.pptx
 ```
 
-It adds only missing `slideId` directives and preserves existing ones.
+It adds only missing `slideId` directives, preserves existing ones, and
+**rewrites the input Markdown file in place** before rendering.
 
 Behavior note: unmanaged slides are preserved during updates, but changed managed
 slides are replaced wholesale (manual edits inside those changed managed slides

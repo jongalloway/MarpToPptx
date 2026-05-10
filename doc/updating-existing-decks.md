@@ -58,8 +58,9 @@ Open `deck.pptx` in PowerPoint and add a slide that does not come from Markdown
 marp2pptx deck.md --write-slide-ids -o deck.pptx
 ```
 
-This adds only missing `<!-- slideId: ... -->` directives and preserves any
-existing explicit directives.
+It adds only missing `<!-- slideId: ... -->` directives, preserves any
+existing explicit directives, and **rewrites `deck.md` in place** as part of
+the run.
 
 ### 5) Update your Markdown content
 
