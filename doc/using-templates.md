@@ -120,6 +120,46 @@ Run it with:
 marp2pptx deck.md --template conference-template.pptx -o deck.pptx
 ```
 
+## Template rendering vs update reconciliation
+
+When you run update mode, `--template` and `--update-existing` are different
+inputs with different jobs:
+
+- `--template <template.pptx>` controls rendering (layouts, masters, and `Template[n]`)
+- `--update-existing <previous.pptx>` is the reconciliation source (existing managed deck)
+
+### Fresh render vs update render
+
+| Mode | Command shape | Source of slide ordering and identity |
+|---|---|---|
+| Fresh render | `marp2pptx deck.md --template conference-template.pptx -o deck.pptx` | Current Markdown only |
+| Update render | `marp2pptx deck.md --update-existing previous-deck.pptx --template conference-template.pptx -o updated-deck.pptx` | Existing managed deck metadata + current Markdown |
+
+In update mode, managed slides are matched by identity metadata stored in each
+slide's `p:extLst`, not by raw ordinal position.
+
+If a slide uses:
+
+```markdown
+<!-- _layout: Template[1] -->
+```
+
+then `Template[1]` resolves against the `--template` file you provide for that
+run, while `--update-existing` still provides the prior managed deck to reconcile
+against.
+
+`--write-slide-ids` is the bootstrap step for stable identity directives:
+
+```bash
+marp2pptx deck.md --write-slide-ids -o deck.pptx
+```
+
+It adds only missing `slideId` directives and preserves existing ones.
+
+Behavior note: unmanaged slides are preserved during updates, but changed managed
+slides are replaced wholesale (manual edits inside those changed managed slides
+are not merged shape-by-shape).
+
 ## How content fills the layout
 
 On a template-bound slide:
