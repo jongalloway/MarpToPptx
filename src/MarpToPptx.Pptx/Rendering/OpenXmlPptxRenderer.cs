@@ -767,7 +767,7 @@ public sealed class OpenXmlPptxRenderer
         }
 
         var effectiveTheme = useTemplateStyle
-            ? ThemeDefinition.Default
+            ? BuildTemplateAwareTheme(ThemeDefinition.Default, slideLayoutPart)
             : theme.ApplyClassVariant(classVariant);
         effectiveTheme = ApplySlideTextColor(effectiveTheme, slideModel.Style.Color, useTemplateStyle);
         var context = new SlideRenderContext(slidePart, shapeTree, sourceDirectory, effectiveTheme, remoteAssets, useTemplateStyle, language, globalDiagramTheme);
@@ -935,6 +935,264 @@ public sealed class OpenXmlPptxRenderer
             InlineCode = theme.InlineCode with { Color = color },
             Headings = headings,
         };
+    }
+
+    /// <summary>
+    /// Builds a <see cref="ThemeDefinition"/> whose text colors are derived from the
+    /// template's OOXML color scheme instead of the Marp defaults. This ensures that
+    /// standalone/residual shapes (headings, paragraphs, bullets) rendered outside
+    /// placeholders use colors that contrast with the template's background.
+    ///
+    /// Strategy: read <c>dk1</c> (dark text) and <c>lt1</c> (light text) from the
+    /// slide master's theme. Determine the slide background luminance; if dark, use
+    /// <c>lt1</c> as the text color, otherwise use <c>dk1</c>.
+    /// </summary>
+    private static ThemeDefinition BuildTemplateAwareTheme(ThemeDefinition baseTheme, SlideLayoutPart slideLayoutPart)
+    {
+        var colorScheme = slideLayoutPart.SlideMasterPart?.ThemePart?.Theme
+            ?.ThemeElements?.ColorScheme;
+        if (colorScheme is null)
+        {
+            return baseTheme;
+        }
+
+        // Extract dk1 and lt1 from the template's color scheme.
+        var dk1Hex = GetColorSchemeHex(colorScheme.Dark1Color);
+        var lt1Hex = GetColorSchemeHex(colorScheme.Light1Color);
+        if (dk1Hex is null && lt1Hex is null)
+        {
+            return baseTheme;
+        }
+
+        // Determine background color: check slide layout, then master, then dk2 heuristic.
+        var bgColor = GetLayoutOrMasterBackground(slideLayoutPart)
+            ?? GetColorSchemeHex(colorScheme.Dark2Color)
+            ?? "FFFFFF";
+
+        // Pick appropriate text color based on background luminance.
+        var bgNorm = NormalizeColor(bgColor);
+        var bgLuminance = ComputeLuminance(bgNorm);
+
+        // Dark background → use lt1 (light text); light background → use dk1 (dark text).
+        var textColor = bgLuminance < 128
+            ? (lt1Hex ?? "FFFFFF")
+            : (dk1Hex ?? "1F2937");
+
+        var textColorPrefixed = "#" + textColor;
+
+        var headings = baseTheme.Headings.ToDictionary(
+            static pair => pair.Key,
+            pair => pair.Value with { Color = textColorPrefixed });
+
+        return baseTheme with
+        {
+            TextColor = textColorPrefixed,
+            Body = baseTheme.Body with { Color = textColorPrefixed },
+            InlineCode = baseTheme.InlineCode with { Color = textColorPrefixed },
+            Code = ScaleCodeStyleForTemplate(baseTheme.Code, slideLayoutPart),
+            Headings = headings,
+        };
+    }
+
+    /// <summary>
+    /// Extracts the hex color value from a color scheme element (dk1, lt1, dk2, etc.).
+    /// </summary>
+    private static string? GetColorSchemeHex(DocumentFormat.OpenXml.Drawing.Color2Type? color2)
+    {
+        if (color2 is null) return null;
+        return color2.RgbColorModelHex?.Val?.Value
+            ?? color2.SystemColor?.LastColor?.Value;
+    }
+
+    /// <summary>
+    /// Scales the code text style's font size relative to the template's body text
+    /// default size. Code is typically ~75% of body text size, capped at
+    /// <see cref="MaxCodeFontSize"/>. This ensures code blocks grow proportionally
+    /// when the template uses large body text (e.g. 32pt body → 24pt code).
+    /// </summary>
+    private static TextStyle ScaleCodeStyleForTemplate(TextStyle baseCode, SlideLayoutPart slideLayoutPart)
+    {
+        // Read body lvl1 default size from the slide master's bodyStyle.
+        var bodyStyle = slideLayoutPart.SlideMasterPart?.SlideMaster?.TextStyles?.BodyStyle;
+        var bodyLvl1 = bodyStyle?.Elements<A.Level1ParagraphProperties>().FirstOrDefault();
+        var bodyDefRPr = bodyLvl1?.GetFirstChild<A.DefaultRunProperties>();
+        var bodySzAttr = bodyDefRPr?.FontSize?.Value;
+        if (bodySzAttr is null or <= 0) return baseCode;
+
+        var bodyFontSizePt = bodySzAttr.Value / 100.0; // hundredths to points
+        var scaledCodeSize = Math.Round(bodyFontSizePt * 0.75, 1);
+        var clampedSize = Math.Clamp(scaledCodeSize, baseCode.FontSize, MaxCodeFontSize);
+
+        return clampedSize > baseCode.FontSize
+            ? baseCode with { FontSize = clampedSize }
+            : baseCode;
+    }
+
+    /// <summary>
+    /// Reads the background fill color from the slide layout or its master.
+    /// Returns the hex color (no '#') or null if no solid fill is found.
+    /// </summary>
+    private static string? GetLayoutOrMasterBackground(SlideLayoutPart slideLayoutPart)
+    {
+        // Check layout background.
+        var layoutBgPr = slideLayoutPart.SlideLayout?.CommonSlideData?.Background?.BackgroundProperties;
+        if (layoutBgPr is not null)
+        {
+            var hex = GetSolidFillHex(layoutBgPr, slideLayoutPart);
+            if (hex is not null) return hex;
+        }
+
+        // Check master background.
+        var masterBgPr = slideLayoutPart.SlideMasterPart?.SlideMaster?.CommonSlideData?.Background?.BackgroundProperties;
+        if (masterBgPr is not null)
+        {
+            var hex = GetSolidFillHex(masterBgPr, slideLayoutPart);
+            if (hex is not null) return hex;
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Reads the hex color from a solid fill child element. Handles both direct
+    /// <c>srgbClr</c> hex values and <c>schemeClr</c> references (resolved via the
+    /// template's color scheme).
+    /// </summary>
+    private static string? GetSolidFillHex(DocumentFormat.OpenXml.OpenXmlElement parent, SlideLayoutPart slideLayoutPart)
+    {
+        var fill = parent.GetFirstChild<A.SolidFill>();
+        if (fill is null) return null;
+
+        var directHex = fill.GetFirstChild<A.RgbColorModelHex>()?.Val?.Value;
+        if (directHex is not null) return directHex;
+
+        var schemeClr = fill.GetFirstChild<A.SchemeColor>()?.Val?.Value;
+        if (schemeClr is { } sc) return ResolveSchemeColor(slideLayoutPart, sc);
+
+        return null;
+    }
+
+    /// <summary>
+    /// Returns a six-character hex color override (no '#') when the layout placeholder's
+    /// default text color (<c>lstStyle</c> → <c>defRPr</c> → <c>solidFill</c>) would
+    /// have poor contrast against the slide background. Returns <c>null</c> when the
+    /// inherited color is readable or when no determination can be made.
+    /// </summary>
+    private static string? GetPlaceholderColorOverrideIfNeeded(SlideLayoutPart slideLayoutPart, TemplatePlaceholder? placeholder)
+    {
+        if (placeholder is null) return null;
+
+        // Find the layout shape matching this placeholder.
+        var shapeTree = slideLayoutPart.SlideLayout?.CommonSlideData?.ShapeTree;
+        if (shapeTree is null) return null;
+
+        P.Shape? layoutShape = null;
+        foreach (var shape in shapeTree.Elements<P.Shape>())
+        {
+            var ph = shape.NonVisualShapeProperties?
+                .ApplicationNonVisualDrawingProperties?
+                .GetFirstChild<P.PlaceholderShape>();
+            if (ph is null) continue;
+
+            var matches = placeholder.Type is { } t
+                ? ph.Type?.Value == t
+                : ph.Index?.Value == placeholder.Index;
+            if (matches == true)
+            {
+                layoutShape = shape;
+                break;
+            }
+        }
+
+        if (layoutShape is null) return null;
+
+        // Read the lstStyle default text color.
+        var lvl1pPr = layoutShape.TextBody?.ListStyle
+            ?.Elements<A.Level1ParagraphProperties>().FirstOrDefault();
+        var defRPr = lvl1pPr?.GetFirstChild<A.DefaultRunProperties>();
+        var textHex = defRPr?.GetFirstChild<A.SolidFill>()?.GetFirstChild<A.RgbColorModelHex>()?.Val?.Value;
+
+        // If the lstStyle uses a scheme color reference, resolve it.
+        if (textHex is null)
+        {
+            var schemeClr = defRPr?.GetFirstChild<A.SolidFill>()?.GetFirstChild<A.SchemeColor>()?.Val?.Value;
+            if (schemeClr is { } resolvedSchemeClr)
+            {
+                textHex = ResolveSchemeColor(slideLayoutPart, resolvedSchemeClr);
+            }
+        }
+
+        if (textHex is null) return null;
+
+        // Determine the background color.
+        var bgHex = GetLayoutOrMasterBackground(slideLayoutPart);
+        if (bgHex is null)
+        {
+            // If no explicit background, try dk2 as a dark-theme heuristic.
+            var colorScheme = slideLayoutPart.SlideMasterPart?.ThemePart?.Theme
+                ?.ThemeElements?.ColorScheme;
+            bgHex = GetColorSchemeHex(colorScheme?.Dark2Color) ?? "FFFFFF";
+        }
+
+        // Check if the text color has sufficient contrast with the background.
+        var bgNorm = NormalizeColor(bgHex);
+        var txtNorm = NormalizeColor(textHex);
+        var bgLum = ComputeLuminance(bgNorm);
+        var txtLum = ComputeLuminance(txtNorm);
+        var contrast = Math.Abs(bgLum - txtLum);
+
+        // If contrast is too low (both dark or both light), return a better color.
+        if (contrast >= 80) return null;  // Sufficient contrast, no override needed.
+
+        // Pick lt1 (light text) for dark backgrounds, dk1 (dark text) for light backgrounds.
+        var colorScheme2 = slideLayoutPart.SlideMasterPart?.ThemePart?.Theme
+            ?.ThemeElements?.ColorScheme;
+        return bgLum < 128
+            ? NormalizeColor(GetColorSchemeHex(colorScheme2?.Light1Color) ?? "FFFFFF")
+            : NormalizeColor(GetColorSchemeHex(colorScheme2?.Dark1Color) ?? "1F2937");
+    }
+
+    /// <summary>
+    /// Resolves a scheme color name (e.g. <c>bg1</c>, <c>tx1</c>) to a hex color
+    /// by looking up the template's color scheme.
+    /// </summary>
+    private static string? ResolveSchemeColor(SlideLayoutPart slideLayoutPart, A.SchemeColorValues schemeColor)
+    {
+        var colorScheme = slideLayoutPart.SlideMasterPart?.ThemePart?.Theme
+            ?.ThemeElements?.ColorScheme;
+        if (colorScheme is null) return null;
+
+        DocumentFormat.OpenXml.Drawing.Color2Type? color2 = null;
+        if (schemeColor == A.SchemeColorValues.Dark1 || schemeColor == A.SchemeColorValues.Text1)
+            color2 = colorScheme.Dark1Color;
+        else if (schemeColor == A.SchemeColorValues.Light1 || schemeColor == A.SchemeColorValues.Background1)
+            color2 = colorScheme.Light1Color;
+        else if (schemeColor == A.SchemeColorValues.Dark2 || schemeColor == A.SchemeColorValues.Text2)
+            color2 = colorScheme.Dark2Color;
+        else if (schemeColor == A.SchemeColorValues.Light2 || schemeColor == A.SchemeColorValues.Background2)
+            color2 = colorScheme.Light2Color;
+        else if (schemeColor == A.SchemeColorValues.Accent1)
+            color2 = colorScheme.Accent1Color;
+        else if (schemeColor == A.SchemeColorValues.Accent2)
+            color2 = colorScheme.Accent2Color;
+        else if (schemeColor == A.SchemeColorValues.Accent3)
+            color2 = colorScheme.Accent3Color;
+        else if (schemeColor == A.SchemeColorValues.Accent4)
+            color2 = colorScheme.Accent4Color;
+        else if (schemeColor == A.SchemeColorValues.Accent5)
+            color2 = colorScheme.Accent5Color;
+        else if (schemeColor == A.SchemeColorValues.Accent6)
+            color2 = colorScheme.Accent6Color;
+
+        return GetColorSchemeHex(color2);
+    }
+
+    private static double ComputeLuminance(string sixCharHex)
+    {
+        var r = int.Parse(sixCharHex[..2], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        var g = int.Parse(sixCharHex[2..4], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        var b = int.Parse(sixCharHex[4..6], NumberStyles.HexNumber, CultureInfo.InvariantCulture);
+        return (0.299 * r) + (0.587 * g) + (0.114 * b);
     }
 
     /// <summary>
@@ -1117,6 +1375,13 @@ public sealed class OpenXmlPptxRenderer
             return false;
         }
 
+        // Determine whether placeholder text colors need an explicit override.
+        // Some templates define a dark default text color in their lstStyle (e.g. #0F0F0F)
+        // even though the slide background is dark. When the inherited color would be
+        // unreadable, compute a contrasting color from the template's color scheme.
+        var titleColorOverride = GetPlaceholderColorOverrideIfNeeded(slideLayoutPart, titlePlaceholder);
+        var bodyColorOverride = GetPlaceholderColorOverrideIfNeeded(slideLayoutPart, bodyPlaceholder);
+
         // Split elements into: optional title heading, body text, and non-text remainder.
         // The title placeholder receives the very first element when it is a heading of
         // any level. Level is intentionally ignored because a template-bound "Title and
@@ -1156,7 +1421,7 @@ public sealed class OpenXmlPptxRenderer
         if (titleHeading is not null)
         {
             var titleParagraphs = SplitSpansIntoParagraphs(titleHeading.Spans)
-                .Select(group => CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language))
+                .Select(group => CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language, colorOverride: titleColorOverride))
                 .ToArray();
             context.ShapeTree.Append(CreateSlidePlaceholderShape(
                 context.NextShapeId(),
@@ -1179,20 +1444,20 @@ public sealed class OpenXmlPptxRenderer
                     case HeadingElement heading:
                         foreach (var group in SplitSpansIntoParagraphs(heading.Spans))
                         {
-                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: true, context.Language, fontSizeOverride: bodyFontSizeOverride));
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: true, context.Language, fontSizeOverride: bodyFontSizeOverride, colorOverride: bodyColorOverride));
                         }
                         break;
                     case ParagraphElement paragraph:
                         foreach (var group in SplitSpansIntoParagraphs(paragraph.Spans))
                         {
-                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language, fontSizeOverride: bodyFontSizeOverride));
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(group, context.SlidePart, level: null, ordered: false, forceBold: false, context.Language, fontSizeOverride: bodyFontSizeOverride, colorOverride: bodyColorOverride));
                         }
                         break;
                     case BulletListElement list:
                         var orderNumber = 1;
                         foreach (var item in list.Items)
                         {
-                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(item.Spans, context.SlidePart, level: item.Depth, list.Ordered, forceBold: false, context.Language, orderNumber, fontSizeOverride: bodyFontSizeOverride));
+                            bodyParagraphs.Add(CreateTemplateParagraphFromSpans(item.Spans, context.SlidePart, level: item.Depth, list.Ordered, forceBold: false, context.Language, orderNumber, fontSizeOverride: bodyFontSizeOverride, colorOverride: bodyColorOverride));
                             orderNumber++;
                         }
                         break;
@@ -1672,6 +1937,9 @@ public sealed class OpenXmlPptxRenderer
     /// placeholder's default bullet.
     /// When <paramref name="fontSizeOverride"/> is set, emits an explicit <c>sz</c> attribute
     /// on each run so the author-specified size takes precedence over the placeholder default.
+    /// When <paramref name="colorOverride"/> is set (six-character hex, no '#'), emits an
+    /// explicit <c>&lt;a:solidFill&gt;</c> on each run. This is used when the layout
+    /// placeholder's default text color has poor contrast with the slide background.
     /// </summary>
     private static A.Paragraph CreateTemplateParagraphFromSpans(
         IReadOnlyList<InlineSpan> spans,
@@ -1681,7 +1949,8 @@ public sealed class OpenXmlPptxRenderer
         bool forceBold,
         string language,
         int orderNumber = 1,
-        int? fontSizeOverride = null)
+        int? fontSizeOverride = null,
+        string? colorOverride = null)
     {
         var paragraph = new A.Paragraph();
         var paragraphProperties = new A.ParagraphProperties();
@@ -1711,6 +1980,10 @@ public sealed class OpenXmlPptxRenderer
             if (fontSizeOverride is { } sz)
             {
                 runProperties.FontSize = sz;
+            }
+            if (colorOverride is not null)
+            {
+                runProperties.Append(new A.SolidFill(new A.RgbColorModelHex { Val = colorOverride }));
             }
             if (span.Bold || forceBold)
             {
@@ -2508,13 +2781,17 @@ public sealed class OpenXmlPptxRenderer
 
     private static void AddCodeBlock(SlideRenderContext context, Rect frame, CodeBlockElement code, TextStyle style)
     {
+        // Scale code font size up to fill the available frame height, capped at a
+        // reasonable maximum so code stays readable without becoming oversized.
+        var effectiveStyle = ScaleCodeFontToFit(style, frame, code.Code);
+
         A.Paragraph[] paragraphs;
 
         if (SyntaxHighlighter.IsSupported(code.Language))
         {
             var tokenizedLines = SyntaxHighlighter.Tokenize(code.Language, code.Code);
             paragraphs = tokenizedLines
-                .Select(runs => CreateHighlightedParagraph(runs, style, context.Language))
+                .Select(runs => CreateHighlightedParagraph(runs, effectiveStyle, context.Language))
                 .ToArray();
         }
         else
@@ -2522,7 +2799,7 @@ public sealed class OpenXmlPptxRenderer
             paragraphs = code.Code
                 .Replace("\r\n", "\n", StringComparison.Ordinal)
                 .Split('\n', StringSplitOptions.None)
-                .Select(line => CreateParagraph(line, style, null, false, 1, context.Language))
+                .Select(line => CreateParagraph(line, effectiveStyle, null, false, 1, context.Language))
                 .ToArray();
         }
 
@@ -2532,8 +2809,39 @@ public sealed class OpenXmlPptxRenderer
             frame,
             paragraphs,
             noFill: false,
-            fillColor: NormalizeColor(style.BackgroundColor ?? "#0F172A"),
+            fillColor: NormalizeColor(effectiveStyle.BackgroundColor ?? "#0F172A"),
             lineColor: NormalizeColor(context.Theme.AccentColor)));
+    }
+
+    /// <summary>
+    /// Computes an optimal code font size that fills the available frame height
+    /// without exceeding it. The result is clamped between the theme's configured
+    /// code font size (floor) and <see cref="MaxCodeFontSize"/> (ceiling) so code
+    /// is never smaller than the theme default and never absurdly large.
+    /// </summary>
+    private const double MaxCodeFontSize = 32.0;
+
+    private static TextStyle ScaleCodeFontToFit(TextStyle style, Rect frame, string codeText)
+    {
+        var lineCount = codeText.Split('\n').Length;
+        if (lineCount <= 0) return style;
+
+        // Estimate how tall a single line is at a given font size, using a typical
+        // code line-height multiplier and vertical padding inside the shape.
+        var lineHeight = style.LineHeight ?? 1.45;
+        const double verticalPadding = 18.0; // top+bottom padding inside the code shape
+        var availableHeight = frame.Height - verticalPadding;
+        if (availableHeight <= 0) return style;
+
+        // Font size that would make lineCount lines exactly fill the frame.
+        var optimalSize = availableHeight / (lineCount * lineHeight);
+
+        // Clamp: never shrink below theme default, never exceed max.
+        var clampedSize = Math.Clamp(Math.Round(optimalSize, 1), style.FontSize, MaxCodeFontSize);
+
+        if (Math.Abs(clampedSize - style.FontSize) < 0.5) return style;
+
+        return style with { FontSize = clampedSize };
     }
 
     private static void AddDiagram(SlideRenderContext context, Rect frame, string source, string fenceName, ThemeDefinition effectiveTheme, TextStyle fallbackStyle)
