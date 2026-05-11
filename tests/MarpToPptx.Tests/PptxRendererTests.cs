@@ -1,9 +1,11 @@
 using DocumentFormat.OpenXml.Packaging;
 using MarpToPptx.Core;
+using MarpToPptx.Core.Layout;
 using MarpToPptx.Core.Themes;
 using MarpToPptx.Pptx.Rendering;
 using MarpToPptx.Pptx.Validation;
 using System.IO.Compression;
+using System.Reflection;
 using System.Xml.Linq;
 using A = DocumentFormat.OpenXml.Drawing;
 using P = DocumentFormat.OpenXml.Presentation;
@@ -255,6 +257,61 @@ public class PptxRendererTests
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
+    }
+
+    [Fact]
+    public void Renderer_PlaceholderMatches_RequiresMatchingIndex_WhenTypeAndIndexAreSet()
+    {
+        var placeholder = CreateTemplatePlaceholder(P.PlaceholderValues.Body, 1U);
+
+        var matchingShape = new P.PlaceholderShape { Type = P.PlaceholderValues.Body, Index = 1U };
+        var wrongIndexShape = new P.PlaceholderShape { Type = P.PlaceholderValues.Body, Index = 2U };
+
+        Assert.True(InvokeRendererPrivate<bool>("PlaceholderMatches", matchingShape, placeholder));
+        Assert.False(InvokeRendererPrivate<bool>("PlaceholderMatches", wrongIndexShape, placeholder));
+    }
+
+    [Fact]
+    public void Renderer_ScaleCodeFontToFit_LeavesOversizedConfiguredCodeFontUnchanged()
+    {
+        var style = new TextStyle(40, "#FFFFFF", "Consolas", false, "#0F172A", 1.45);
+
+        var scaled = InvokeRendererPrivate<TextStyle>(
+            "ScaleCodeFontToFit",
+            style,
+            new Rect(0, 0, 400, 120),
+            "line 1\nline 2\nline 3");
+
+        Assert.Equal(style, scaled);
+    }
+
+    [Fact]
+    public void Renderer_ScaleCodeStyleForTemplate_LeavesOversizedConfiguredCodeFontUnchanged()
+    {
+        using var workspace = TestWorkspace.Create();
+
+        var templatePath = workspace.GetPath("template.pptx");
+        CreateTemplateWithPlaceholderLayout(templatePath);
+
+        using (var templateDocument = PresentationDocument.Open(templatePath, true))
+        {
+            var slideMaster = templateDocument.PresentationPart!.SlideMasterParts.Single().SlideMaster!;
+            slideMaster.TextStyles = new P.TextStyles(
+                new P.TitleStyle(),
+                new P.BodyStyle(
+                    new A.Level1ParagraphProperties(
+                        new A.DefaultRunProperties { FontSize = 3200 })),
+                new P.OtherStyle());
+            slideMaster.Save();
+        }
+
+        using var readOnlyTemplateDocument = PresentationDocument.Open(templatePath, false);
+        var slideLayoutPart = readOnlyTemplateDocument.PresentationPart!.SlideMasterParts.Single().SlideLayoutParts.Single();
+        var style = new TextStyle(40, "#FFFFFF", "Consolas", false, "#0F172A", 1.45);
+
+        var scaled = InvokeRendererPrivate<TextStyle>("ScaleCodeStyleForTemplate", style, slideLayoutPart);
+
+        Assert.Equal(style, scaled);
     }
 
     [Fact]
@@ -2769,6 +2826,25 @@ public class PptxRendererTests
 
         var validationErrors = new OpenXmlPackageValidator().Validate(document);
         Assert.Empty(validationErrors);
+    }
+
+    private static T InvokeRendererPrivate<T>(string methodName, params object[] args)
+    {
+        var method = typeof(OpenXmlPptxRenderer).GetMethod(methodName, BindingFlags.NonPublic | BindingFlags.Static);
+        Assert.NotNull(method);
+
+        var result = method!.Invoke(null, args);
+        Assert.IsType<T>(result);
+        return (T)result!;
+    }
+
+    private static object CreateTemplatePlaceholder(P.PlaceholderValues? type, uint? index)
+    {
+        var placeholderType = typeof(OpenXmlPptxRenderer).Assembly
+            .GetType("MarpToPptx.Pptx.Rendering.TemplatePlaceholder", throwOnError: true);
+        Assert.NotNull(placeholderType);
+
+        return Activator.CreateInstance(placeholderType!, type, index)!;
     }
 
     /// <summary>

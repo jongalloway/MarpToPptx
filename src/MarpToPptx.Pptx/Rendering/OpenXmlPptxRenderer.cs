@@ -1018,6 +1018,7 @@ public sealed class OpenXmlPptxRenderer
         var bodyDefRPr = bodyLvl1?.GetFirstChild<A.DefaultRunProperties>();
         var bodySzAttr = bodyDefRPr?.FontSize?.Value;
         if (bodySzAttr is null or <= 0) return baseCode;
+        if (baseCode.FontSize >= MaxCodeFontSize) return baseCode;
 
         var bodyFontSizePt = bodySzAttr.Value / 100.0; // hundredths to points
         var scaledCodeSize = Math.Round(bodyFontSizePt * 0.75, 1);
@@ -1094,10 +1095,7 @@ public sealed class OpenXmlPptxRenderer
                 .GetFirstChild<P.PlaceholderShape>();
             if (ph is null) continue;
 
-            var matches = placeholder.Type is { } t
-                ? ph.Type?.Value == t
-                : ph.Index?.Value == placeholder.Index;
-            if (matches == true)
+            if (PlaceholderMatches(ph, placeholder))
             {
                 layoutShape = shape;
                 break;
@@ -1150,6 +1148,18 @@ public sealed class OpenXmlPptxRenderer
         return bgLum < 128
             ? NormalizeColor(GetColorSchemeHex(colorScheme2?.Light1Color) ?? "FFFFFF")
             : NormalizeColor(GetColorSchemeHex(colorScheme2?.Dark1Color) ?? "1F2937");
+    }
+
+    private static bool PlaceholderMatches(P.PlaceholderShape placeholderShape, TemplatePlaceholder placeholder)
+    {
+        if (placeholder.Index is not null && placeholderShape.Index?.Value != placeholder.Index)
+        {
+            return false;
+        }
+
+        return placeholder.Type is { } type
+            ? placeholderShape.Type?.Value == type
+            : placeholder.Index is not null && placeholderShape.Index?.Value == placeholder.Index;
     }
 
     /// <summary>
@@ -2825,6 +2835,7 @@ public sealed class OpenXmlPptxRenderer
     {
         var lineCount = codeText.Split('\n').Length;
         if (lineCount <= 0) return style;
+        if (style.FontSize >= MaxCodeFontSize) return style;
 
         // Estimate how tall a single line is at a given font size, using a typical
         // code line-height multiplier and vertical padding inside the shape.
