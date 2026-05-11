@@ -1152,14 +1152,14 @@ public sealed class OpenXmlPptxRenderer
 
     private static bool PlaceholderMatches(P.PlaceholderShape placeholderShape, TemplatePlaceholder placeholder)
     {
-        if (placeholder.Index is not null && placeholderShape.Index?.Value != placeholder.Index)
+        if (placeholder.Type is { } type)
         {
-            return false;
+            return placeholder.Index is null
+                ? placeholderShape.Type?.Value == type
+                : placeholderShape.Type?.Value == type && placeholderShape.Index?.Value == placeholder.Index;
         }
 
-        return placeholder.Type is { } type
-            ? placeholderShape.Type?.Value == type
-            : placeholder.Index is not null && placeholderShape.Index?.Value == placeholder.Index;
+        return placeholder.Index is not null && placeholderShape.Index?.Value == placeholder.Index;
     }
 
     /// <summary>
