@@ -101,6 +101,7 @@ public static class SyntaxHighlighter
             var lineResult = grammar.TokenizeLine(new LineText(line), ruleStack, TimeSpan.FromSeconds(5));
             if (lineResult is null)
             {
+                ruleStack = null;
                 result.Add([new TokenizedRun(line, null)]);
                 continue;
             }
