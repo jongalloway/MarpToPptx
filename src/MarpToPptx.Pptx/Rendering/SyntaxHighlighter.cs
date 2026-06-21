@@ -37,10 +37,11 @@ public static class SyntaxHighlighter
     // Lazy so the registry is only initialised when syntax highlighting is first needed.
     private static readonly Lazy<HighlightState?> _state = new(CreateState);
 
-    // TextMateSharp's Registry/SyncRegistry is not thread-safe: concurrent
-    // LoadGrammar calls for the same scope can race on Dictionary.Add and
-    // throw "An item with the same key has already been added". Serialize
-    // grammar loading through this lock.
+    // TextMateSharp's Registry/SyncRegistry and Grammar instances are not
+    // thread-safe. Concurrent LoadGrammar calls for the same scope can race
+    // on Dictionary.Add, and concurrent TokenizeLine calls on the same Grammar
+    // instance can corrupt its lazy-compiled pattern cache. Serialize all
+    // registry and grammar operations through this lock.
     private static readonly object _grammarLock = new();
 
     /// <summary>Returns <c>true</c> when <paramref name="language"/> has grammar support.</summary>
@@ -75,14 +76,13 @@ public static class SyntaxHighlighter
             var scopeName = state.Options.GetScopeByLanguageId(canonicalId);
             if (scopeName is not null)
             {
-                IGrammar? grammar;
                 lock (_grammarLock)
                 {
-                    grammar = state.Registry.LoadGrammar(scopeName);
-                }
-                if (grammar is not null)
-                {
-                    return TokenizeWithGrammar(code, grammar, state.Theme);
+                    var grammar = state.Registry.LoadGrammar(scopeName);
+                    if (grammar is not null)
+                    {
+                        return TokenizeWithGrammar(code, grammar, state.Theme);
+                    }
                 }
             }
         }
@@ -99,6 +99,12 @@ public static class SyntaxHighlighter
         foreach (var line in lines)
         {
             var lineResult = grammar.TokenizeLine(new LineText(line), ruleStack, TimeSpan.FromSeconds(5));
+            if (lineResult is null)
+            {
+                ruleStack = null;
+                result.Add([new TokenizedRun(line, null)]);
+                continue;
+            }
             ruleStack = lineResult.RuleStack;
             result.Add(BuildRuns(line, lineResult.Tokens, theme));
         }
